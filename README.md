@@ -1,73 +1,41 @@
-# React + TypeScript + Vite
+# Magic Monitor 🪄
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A smart mirror application designed for real-time feedback, featuring instant replay, AI-powered smart zoom, and flash detection.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Instant Replay**: Rewind and scrub through the last 60 seconds of video.
+- **Smart Zoom**: AI-powered hand tracking automatically zooms and pans to keep you in frame.
+- **Minimap**: Always-on context view showing your full field of view when zoomed in.
+- **Flash Detection**: Visual alert when the screen flashes (e.g., for testing light sensors).
+- **High Quality Mode**: Toggle between performance (LQ) and high-fidelity (HQ) replay buffers.
 
-## React Compiler
+## Deployment
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The application is deployed to Surge.sh.
 
-## Expanding the ESLint configuration
+**Live URL**: [https://magic-monitor.surge.sh](https://magic-monitor.surge.sh)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### How to Deploy
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+To deploy the latest version:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+just deploy
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+This command builds the project and pushes it to Surge.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Local Development
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1.  Install dependencies:
+    ```bash
+    npm install
+    ```
+
+2.  Start the development server:
+    ```bash
+    npm run dev
+    ```
+
+3.  Open [http://localhost:5173](http://localhost:5173) in your browser.
