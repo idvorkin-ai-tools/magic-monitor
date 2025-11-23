@@ -62,8 +62,10 @@ export function Minimap({ stream, zoom, pan, frame }: MinimapProps) {
     const leftPercent = 50 - (pan.x / videoWidth * 100) - (widthPercent / 2);
     const topPercent = 50 - (pan.y / videoHeight * 100) - (heightPercent / 2);
 
+
+
     return (
-        <div className="absolute top-4 right-4 z-50 w-48 aspect-video bg-black/80 border-2 border-white/20 rounded-lg overflow-hidden shadow-lg relative">
+        <div className="absolute top-4 right-4 z-50 w-48 aspect-video bg-black/80 border-2 border-white/20 rounded-lg overflow-hidden shadow-lg">
             {frame ? (
                 <canvas
                     ref={miniCanvasRef}
