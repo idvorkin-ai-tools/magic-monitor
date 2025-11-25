@@ -5,11 +5,13 @@ interface MinimapProps {
     zoom: number;
     pan: { x: number; y: number };
     frame?: ImageBitmap | null;
+    onPanTo?: (targetPan: { x: number; y: number }) => void;
 }
 
-export function Minimap({ stream, zoom, pan, frame }: MinimapProps) {
+export function Minimap({ stream, zoom, pan, frame, onPanTo }: MinimapProps) {
     const miniVideoRef = useRef<HTMLVideoElement>(null);
     const miniCanvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     // Sync the mini video with the main video stream
     useEffect(() => {
@@ -32,44 +34,55 @@ export function Minimap({ stream, zoom, pan, frame }: MinimapProps) {
 
     // if (zoom <= 1) return null; // Always show minimap
 
-    // Calculate viewport rectangle
-    // Assuming pan is in video pixels (unscaled)
-    // And the video is centered by default.
-    // If pan is (0,0), rect is centered.
-    // If pan is positive (video moved right), we are looking at the left side, so rect moves left.
-
-    // We'll use percentages for the overlay to be responsive
-    const widthPercent = 100 / zoom;
-    const heightPercent = 100 / zoom;
-
-    // Pan is the offset of the video center from the screen center.
-    // If pan.x = 100, the video is shifted 100px right.
-    // This means the viewport (screen) is effectively -100px relative to video center.
-    // We need to normalize pan to percentage of video size.
-    // But we don't know the exact video size in pixels here easily without querying the element.
-    // However, the pan logic in CameraStage divides by zoom, suggesting it tries to track "video pixels".
-    // Let's assume pan is in "video pixels".
-    // We need the video element width to normalize.
-
-    // Let's try to get video dimensions from the stream settings if possible, or default
     const videoWidth = frame ? frame.width : (stream?.getVideoTracks()[0]?.getSettings().width || 640);
     const videoHeight = frame ? frame.height : (stream?.getVideoTracks()[0]?.getSettings().height || 480);
 
+    // Calculate overlay size
+    const widthPercent = 100 / zoom;
+    const heightPercent = 100 / zoom;
+
     // Calculate position as percentage
-    // Center is 50%.
-    // Offset is -pan (because moving video right means looking left)
-    // Normalized offset = -pan / videoDimension * 100
     const leftPercent = 50 - (pan.x / videoWidth * 100) - (widthPercent / 2);
     const topPercent = 50 - (pan.y / videoHeight * 100) - (heightPercent / 2);
 
+    const handleClick = (e: React.MouseEvent) => {
+        if (!onPanTo || !containerRef.current) return;
 
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Normalized position (0 to 1)
+        const u = x / rect.width;
+        const v = y / rect.height;
+
+        // Calculate target pan to center on this point
+        // If u = 0.5 (center), targetPan = 0
+        // If u = 0 (left edge), we need to shift image RIGHT, so pan is positive?
+        // Wait, let's check coordinate system again.
+        // In CameraStage: transform: translate(pan.x, pan.y)
+        // If pan.x is positive, image moves RIGHT.
+        // If we want to see the LEFT edge (u=0), we need to move image RIGHT.
+        // Center is 0.5.
+        // Target shift = (0.5 - u) * videoWidth.
+        // Check: if u=0, shift = 0.5 * W. Image moves right by half width. Left edge is now at center. Correct.
+
+        const targetPanX = (0.5 - u) * videoWidth;
+        const targetPanY = (0.5 - v) * videoHeight;
+
+        onPanTo({ x: targetPanX, y: targetPanY });
+    };
 
     return (
-        <div className="absolute top-4 right-4 z-50 w-48 aspect-video bg-black/80 border-2 border-white/20 rounded-lg overflow-hidden shadow-lg">
+        <div
+            ref={containerRef}
+            onClick={handleClick}
+            className="absolute top-4 right-4 z-50 w-48 aspect-video bg-black/80 border-2 border-white/20 rounded-lg overflow-hidden shadow-lg cursor-pointer"
+        >
             {frame ? (
                 <canvas
                     ref={miniCanvasRef}
-                    className="w-full h-full object-contain opacity-50"
+                    className="w-full h-full object-contain opacity-50 pointer-events-none"
                 />
             ) : (
                 <video
@@ -77,13 +90,13 @@ export function Minimap({ stream, zoom, pan, frame }: MinimapProps) {
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-full object-contain opacity-50"
+                    className="w-full h-full object-contain opacity-50 pointer-events-none"
                 />
             )}
 
             {/* Viewport Rectangle */}
             <div
-                className="absolute border-2 border-yellow-400 bg-yellow-400/20 shadow-[0_0_10px_rgba(250,204,21,0.5)]"
+                className="absolute border-2 border-yellow-400 bg-yellow-400/20 shadow-[0_0_10px_rgba(250,204,21,0.5)] pointer-events-none transition-all duration-75"
                 style={{
                     width: `${widthPercent}%`,
                     height: `${heightPercent}%`,
