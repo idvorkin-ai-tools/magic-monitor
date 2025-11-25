@@ -25,6 +25,28 @@ export function CameraStage() {
     const [isHQ, setIsHQ] = useState(false);
     const [isSmartZoom, setIsSmartZoom] = useState(false);
 
+    // Helper to clamp pan values so video always fills viewport (if possible)
+    const clampPan = (p: { x: number, y: number }, z: number) => {
+        if (!videoRef.current || !containerRef.current) return p;
+
+        const videoW = videoRef.current.videoWidth || 1920;
+        const videoH = videoRef.current.videoHeight || 1080;
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const viewportW = rect.width;
+        const viewportH = rect.height;
+
+        // Max allowed pan magnitude
+        // The limit is when the edge of the scaled video hits the edge of the viewport
+        const limitX = Math.max(0, (videoW / 2) - (viewportW / (2 * z)));
+        const limitY = Math.max(0, (videoH / 2) - (viewportH / (2 * z)));
+
+        return {
+            x: Math.max(-limitX, Math.min(limitX, p.x)),
+            y: Math.max(-limitY, Math.min(limitY, p.y))
+        };
+    };
+
     // Smart Zoom
     const smartZoom = useSmartZoom({
         videoRef,
@@ -35,9 +57,9 @@ export function CameraStage() {
     // Effect to apply smart zoom values
     useEffect(() => {
         if (isSmartZoom) {
-            // eslint-disable-next-line
             setZoom(smartZoom.zoom);
-            setPan(smartZoom.pan);
+            // Apply clamping to smart zoom output too
+            setPan(clampPan(smartZoom.pan, smartZoom.zoom));
         }
     }, [isSmartZoom, smartZoom.zoom, smartZoom.pan]);
 
@@ -103,6 +125,9 @@ export function CameraStage() {
         e.preventDefault();
         const newZoom = Math.min(Math.max(zoom - e.deltaY * 0.001, 1), 5);
         setZoom(newZoom);
+
+        // Re-clamp pan with new zoom level
+        setPan(prev => clampPan(prev, newZoom));
     };
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -148,17 +173,22 @@ export function CameraStage() {
             const dx = e.clientX - lastMousePos.x;
             const dy = e.clientY - lastMousePos.y;
 
-            setPan(prev => ({
-                x: prev.x + dx / zoom,
-                y: prev.y + dy / zoom
-            }));
+            const proposedPan = {
+                x: pan.x + dx / zoom,
+                y: pan.y + dy / zoom
+            };
 
+            setPan(clampPan(proposedPan, zoom));
             setLastMousePos({ x: e.clientX, y: e.clientY });
         }
     };
 
     const handleMouseUp = () => {
         setIsDragging(false);
+    };
+
+    const handlePanTo = (target: { x: number, y: number }) => {
+        setPan(clampPan(target, zoom));
     };
 
     return (
@@ -200,6 +230,7 @@ export function CameraStage() {
                 zoom={zoom}
                 pan={pan}
                 frame={timeMachine.isReplaying ? timeMachine.frame : null}
+                onPanTo={handlePanTo}
             />
 
             {/* RAM Monitor */}
@@ -366,7 +397,11 @@ export function CameraStage() {
                         max="5"
                         step="0.1"
                         value={zoom}
-                        onChange={(e) => setZoom(parseFloat(e.target.value))}
+                        onChange={(e) => {
+                            const newZoom = parseFloat(e.target.value);
+                            setZoom(newZoom);
+                            setPan(prev => clampPan(prev, newZoom));
+                        }}
                         className="w-48 accent-blue-500"
                     />
                     <span className="text-white font-mono w-12 text-right">{zoom.toFixed(1)}x</span>
