@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useCamera } from "../hooks/useCamera";
 import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import { useTimeMachine } from "../hooks/useTimeMachine";
@@ -10,7 +11,6 @@ export function CameraStage() {
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const [error, setError] = useState<string | null>(null);
 
 	// Zoom/Pan State
 	const [zoom, setZoom] = useState(1);
@@ -30,10 +30,6 @@ export function CameraStage() {
 	const [isHQ, setIsHQ] = useState(false);
 	const [isSmartZoom, setIsSmartZoom] = useState(false);
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-	// Camera Selection State
-	const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
 	// Helper to clamp pan values
 	const clampPan = useCallback((p: { x: number; y: number }, z: number) => {
@@ -78,88 +74,16 @@ export function CameraStage() {
 		threshold,
 	});
 
-	const [stream, setStream] = useState<MediaStream | null>(null);
+	// Camera State via Humble Object Hook
+	const { stream, error, devices, selectedDeviceId, setSelectedDeviceId } =
+		useCamera();
 
-	// Enumerate devices
+	// Sync stream to video element
 	useEffect(() => {
-		async function getDevices() {
-			try {
-				const deviceList = await navigator.mediaDevices.enumerateDevices();
-				const videoDevices = deviceList.filter(
-					(device) => device.kind === "videoinput",
-				);
-				setDevices(videoDevices);
-
-				// If we have devices but none selected, pick the first one
-				if (videoDevices.length > 0 && !selectedDeviceId) {
-					setSelectedDeviceId(videoDevices[0].deviceId);
-				}
-			} catch (err) {
-				console.error("Error enumerating devices:", err);
-			}
+		if (videoRef.current) {
+			videoRef.current.srcObject = stream;
 		}
-		getDevices();
-	}, [selectedDeviceId]);
-
-	useEffect(() => {
-		async function setupCamera(deviceId?: string) {
-			try {
-				// Stop existing tracks
-				if (stream) {
-					stream.getTracks().forEach((track) => {
-						track.stop();
-					});
-				}
-
-				const constraints: MediaStreamConstraints = {
-					video: {
-						width: 1920,
-						height: 1080,
-						frameRate: 30,
-						deviceId: deviceId ? { exact: deviceId } : undefined,
-					},
-				};
-
-				const mediaStream =
-					await navigator.mediaDevices.getUserMedia(constraints);
-				setStream(mediaStream);
-				if (videoRef.current) {
-					videoRef.current.srcObject = mediaStream;
-				}
-
-				// Update selected device ID if not set (e.g. initial load)
-				if (!deviceId) {
-					const videoTrack = mediaStream.getVideoTracks()[0];
-					if (videoTrack) {
-						const settings = videoTrack.getSettings();
-						if (settings.deviceId) {
-							setSelectedDeviceId(settings.deviceId);
-						}
-					}
-				}
-			} catch (err) {
-				console.error("Error accessing camera:", err);
-				setError("Could not access camera. Please allow permissions.");
-			}
-		}
-
-		if (selectedDeviceId) {
-			setupCamera(selectedDeviceId);
-		} else {
-			// Initial setup without specific ID
-			setupCamera();
-		}
-
-		const videoEl = videoRef.current;
-		return () => {
-			if (videoEl?.srcObject) {
-				const stream = videoEl.srcObject as MediaStream;
-				stream.getTracks().forEach((track) => {
-					track.stop();
-				});
-			}
-		};
-	}, [selectedDeviceId, stream]);
+	}, [stream]);
 
 	// Render replay frame to canvas
 	useEffect(() => {

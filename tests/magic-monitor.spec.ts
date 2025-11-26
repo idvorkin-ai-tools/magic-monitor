@@ -68,6 +68,23 @@ async function injectMockCamera(page: Page) {
 			console.log("Mock getUserMedia called with:", constraints);
 			return stream;
 		};
+
+		navigator.mediaDevices.enumerateDevices = async () => {
+			return [
+				{
+					deviceId: "mock-camera-1",
+					kind: "videoinput",
+					label: "Mock Camera 1",
+					groupId: "group1",
+				},
+				{
+					deviceId: "mock-camera-2",
+					kind: "videoinput",
+					label: "Mock Camera 2",
+					groupId: "group1",
+				},
+			] as MediaDeviceInfo[];
+		};
 	});
 }
 
@@ -84,7 +101,13 @@ test.describe("Magic Monitor E2E", () => {
 		await expect(video).toBeVisible();
 
 		// Check if controls are visible
+		await page.getByTitle("Settings").click();
 		await expect(page.getByText("Pick Color")).toBeVisible();
+
+		// Check if camera selection has labels
+		const cameraSelect = page.locator("select#camera-source");
+		await expect(cameraSelect).toContainText("Mock Camera 1");
+		await expect(cameraSelect).toContainText("Mock Camera 2");
 	});
 
 	test("Flash Detection Logic", async ({ page }) => {
@@ -92,15 +115,17 @@ test.describe("Magic Monitor E2E", () => {
 		await page.evaluate(() => window.mockCamera.setColor("rgb(255, 0, 0)"));
 
 		// 2. Pick the color
+		await page.getByTitle("Settings").click();
 		await page.getByText("Pick Color").click();
 		// Click the video to pick the color (center of screen)
 		await page
 			.getByTestId("main-video")
-			.click({ position: { x: 400, y: 300 } });
+			.click({ position: { x: 100, y: 100 }, force: true });
 
 		// 3. Verify color picked (Warning border might flash briefly if threshold met, but we are solid red)
 		// The App automatically enables flash after picking.
 		// Check if "ARMED" button is present (it toggles from "OFF" to "ARMED" automatically)
+		await page.getByTitle("Settings").click();
 		await expect(page.getByText("ARMED")).toBeVisible();
 
 		// 4. Set Mock to BLUE (Should NOT trigger flash)
@@ -134,15 +159,36 @@ test.describe("Magic Monitor E2E", () => {
 		);
 
 		// Quality Toggle
-		const hqBtn = page.getByTitle("High Quality Mode");
-		await expect(hqBtn).toHaveText("LQ");
-		await hqBtn.click();
-		await expect(hqBtn).toHaveText("HQ");
+		await page.getByTitle("Settings").click();
+		// The HQ toggle is inside the settings modal
+		// We can find it by the text "High Quality Mode" or the button next to it
+		// The button has an onClick handler but no specific text/title.
+		// Let's look at the structure in SettingsModal.tsx:
+		// <div className="text-white font-medium">High Quality Mode</div>
+		// ... <button onClick={...}>
+
+		// We can find the button relative to the text, or just click the toggle button if we can identify it.
+		// The toggle button has classes: w-12 h-6 rounded-full ...
+		// Let's use a locator that finds the button associated with the text or just the button.
+		// Since there are multiple toggles, we need to be specific.
+		// The first toggle is HQ.
+		const hqToggle = page.locator("button.w-12.h-6").first();
+
+		// Initial state: LQ (isHQ false) -> bg-gray-700
+		await expect(hqToggle).toHaveClass(/bg-gray-700/);
+
+		await hqToggle.click();
+
+		// New state: HQ (isHQ true) -> bg-purple-600
+		await expect(hqToggle).toHaveClass(/bg-purple-600/);
 	});
 
 	test("Time Machine: Enter and Exit Replay", async ({ page }) => {
 		// Wait a bit for "buffer" to fill (simulated)
-		await page.waitForTimeout(1000);
+		// Wait for RAM usage to show something other than 0 MB
+		await expect(page.locator("text=/RAM: [1-9]/")).toBeVisible({
+			timeout: 10000,
+		});
 
 		// Enter Replay
 		await page.getByText("REWIND").click();
