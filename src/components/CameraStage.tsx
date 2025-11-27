@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useCamera } from "../hooks/useCamera";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useFlashDetector } from "../hooks/useFlashDetector";
+import { useMobileDetection } from "../hooks/useMobileDetection";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import { useTimeMachine } from "../hooks/useTimeMachine";
 import { Minimap } from "./Minimap";
@@ -20,6 +21,9 @@ export function CameraStage() {
 	const [isDragging, setIsDragging] = useState(false);
 	const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
+	// Mobile Detection
+	const { isMobile, isLowMemory } = useMobileDetection();
+
 	// Flash Detection State
 	const [flashEnabled, setFlashEnabled] = useState(false);
 	const [targetColor, setTargetColor] = useState<{
@@ -29,9 +33,31 @@ export function CameraStage() {
 	} | null>(null);
 	const [threshold, setThreshold] = useState(20);
 	const [isPickingColor, setIsPickingColor] = useState(false);
-	const [isHQ, setIsHQ] = useState(true);
+	const [isHQ, setIsHQ] = useState(false); // Default off, will enable on desktop after detection
+	const [hqInitialized, setHqInitialized] = useState(false);
 	const [isSmartZoom, setIsSmartZoom] = useState(true);
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+	// Initialize HQ based on device detection (once)
+	useEffect(() => {
+		if (!hqInitialized) {
+			setIsHQ(!isLowMemory);
+			setHqInitialized(true);
+		}
+	}, [hqInitialized, isLowMemory]);
+
+	// HQ toggle with mobile warning
+	const handleHQToggle = useCallback(() => {
+		if (!isHQ && isLowMemory) {
+			const proceed = window.confirm(
+				isMobile
+					? "High Quality mode uses ~3.5GB RAM and may crash your mobile device. Continue anyway?"
+					: "High Quality mode uses ~3.5GB RAM. Your device has limited memory. Continue anyway?",
+			);
+			if (!proceed) return;
+		}
+		setIsHQ(!isHQ);
+	}, [isHQ, isLowMemory, isMobile]);
 
 	// Helper to clamp pan values
 	const clampPan = useCallback((p: { x: number; y: number }, z: number) => {
@@ -231,6 +257,8 @@ export function CameraStage() {
 				onDeviceChange={setSelectedDeviceId}
 				isHQ={isHQ}
 				onHQChange={setIsHQ}
+				isLowMemory={isLowMemory}
+				isMobile={isMobile}
 				isSmartZoom={isSmartZoom}
 				isModelLoading={smartZoom.isModelLoading}
 				onSmartZoomChange={setIsSmartZoom}
@@ -399,47 +427,55 @@ export function CameraStage() {
 					</button>
 
 					<button
-						onClick={() => setIsHQ(!isHQ)}
+						onClick={handleHQToggle}
 						className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
 							isHQ
 								? "bg-purple-600 text-white"
-								: "bg-white/10 text-white/50 hover:bg-white/20 hover:text-white"
+								: isLowMemory
+									? "bg-orange-600/50 text-orange-200 hover:bg-orange-600/70"
+									: "bg-white/10 text-white/50 hover:bg-white/20 hover:text-white"
 						}`}
-						title="High Quality Mode (~3.5GB RAM)"
+						title={
+							isLowMemory
+								? "High Quality Mode (~3.5GB RAM) - Warning: May crash on this device"
+								: "High Quality Mode (~3.5GB RAM)"
+						}
 					>
-						HQ
+						{isLowMemory && !isHQ ? "⚠️ HQ" : "HQ"}
 					</button>
 
-					<div className="h-6 w-px bg-white/20" />
-
-					{/* Zoom Controls */}
-					<button
-						onClick={() => {
-							setZoom(1);
-							setPan({ x: 0, y: 0 });
-						}}
-						className="text-white font-bold px-3 py-1 rounded hover:bg-white/20 text-sm"
-					>
-						Reset
-					</button>
-					<input
-						type="range"
-						min="1"
-						max="5"
-						step="0.1"
-						value={zoom}
-						onChange={(e) => {
-							const newZoom = Number.parseFloat(e.target.value);
-							setZoom(newZoom);
-							setPan((prev) => clampPan(prev, newZoom));
-						}}
-						className="w-32 accent-blue-500"
-					/>
-					<span className="text-white font-mono w-12 text-right">
-						{zoom.toFixed(1)}x
-					</span>
-
-					<div className="h-6 w-px bg-white/20" />
+					{/* Zoom Controls - hidden on mobile (no mouse wheel) */}
+					{!isMobile && (
+						<>
+							<div className="h-6 w-px bg-white/20" />
+							<button
+								onClick={() => {
+									setZoom(1);
+									setPan({ x: 0, y: 0 });
+								}}
+								className="text-white font-bold px-3 py-1 rounded hover:bg-white/20 text-sm"
+							>
+								Reset
+							</button>
+							<input
+								type="range"
+								min="1"
+								max="5"
+								step="0.1"
+								value={zoom}
+								onChange={(e) => {
+									const newZoom = Number.parseFloat(e.target.value);
+									setZoom(newZoom);
+									setPan((prev) => clampPan(prev, newZoom));
+								}}
+								className="w-32 accent-blue-500"
+							/>
+							<span className="text-white font-mono w-12 text-right">
+								{zoom.toFixed(1)}x
+							</span>
+							<div className="h-6 w-px bg-white/20" />
+						</>
+					)}
 
 					{/* Settings */}
 					<button

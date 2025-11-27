@@ -10,6 +10,8 @@ interface SettingsModalProps {
 	// Performance
 	isHQ: boolean;
 	onHQChange: (isHQ: boolean) => void;
+	isLowMemory?: boolean;
+	isMobile?: boolean;
 
 	// Smart Zoom
 	isSmartZoom: boolean;
@@ -34,6 +36,8 @@ export function SettingsModal({
 	onDeviceChange,
 	isHQ,
 	onHQChange,
+	isLowMemory = false,
+	isMobile = false,
 	isSmartZoom,
 	isModelLoading,
 	onSmartZoomChange,
@@ -45,6 +49,17 @@ export function SettingsModal({
 	onPickColorClick,
 	targetColor,
 }: SettingsModalProps) {
+	const handleHQToggle = () => {
+		if (!isHQ && isLowMemory) {
+			const proceed = window.confirm(
+				isMobile
+					? "High Quality mode uses ~3.5GB RAM and may crash your mobile device. Continue anyway?"
+					: "High Quality mode uses ~3.5GB RAM. Your device has limited memory. Continue anyway?",
+			);
+			if (!proceed) return;
+		}
+		onHQChange(!isHQ);
+	};
 	if (!isOpen) return null;
 
 	return (
@@ -101,12 +116,21 @@ export function SettingsModal({
 					{/* Performance */}
 					<div className="flex items-center justify-between">
 						<div>
-							<div className="text-white font-medium">High Quality Mode</div>
-							<div className="text-xs text-gray-500">Uses ~3.5GB RAM</div>
+							<div className="text-white font-medium">
+								High Quality Mode {isLowMemory && !isHQ && "⚠️"}
+							</div>
+							<div className="text-xs text-gray-500">
+								Uses ~3.5GB RAM
+								{isLowMemory && (
+									<span className="text-orange-400 ml-1">
+										- May crash on this device
+									</span>
+								)}
+							</div>
 						</div>
 						<button
-							onClick={() => onHQChange(!isHQ)}
-							className={`w-12 h-6 rounded-full transition-colors relative ${isHQ ? "bg-purple-600" : "bg-gray-700"}`}
+							onClick={handleHQToggle}
+							className={`w-12 h-6 rounded-full transition-colors relative ${isHQ ? "bg-purple-600" : isLowMemory ? "bg-orange-600/50" : "bg-gray-700"}`}
 						>
 							<div
 								className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${isHQ ? "left-7" : "left-1"}`}
