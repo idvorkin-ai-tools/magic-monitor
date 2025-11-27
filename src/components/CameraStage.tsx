@@ -1,5 +1,7 @@
+import { Github, Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCamera } from "../hooks/useCamera";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import { useTimeMachine } from "../hooks/useTimeMachine";
@@ -27,8 +29,8 @@ export function CameraStage() {
 	} | null>(null);
 	const [threshold, setThreshold] = useState(20);
 	const [isPickingColor, setIsPickingColor] = useState(false);
-	const [isHQ, setIsHQ] = useState(false);
-	const [isSmartZoom, setIsSmartZoom] = useState(false);
+	const [isHQ, setIsHQ] = useState(true);
+	const [isSmartZoom, setIsSmartZoom] = useState(true);
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
 	// Helper to clamp pan values
@@ -96,6 +98,16 @@ export function CameraStage() {
 			}
 		}
 	}, [timeMachine.frame, timeMachine.isReplaying]);
+
+	// Escape key handler
+	useEscapeKey({
+		isSettingsOpen,
+		isPickingColor,
+		isReplaying: timeMachine.isReplaying,
+		onCloseSettings: () => setIsSettingsOpen(false),
+		onCancelColorPick: () => setIsPickingColor(false),
+		onExitReplay: timeMachine.exitReplay,
+	});
 
 	const handleWheel = (e: React.WheelEvent) => {
 		e.preventDefault();
@@ -208,46 +220,8 @@ export function CameraStage() {
 				className="absolute top-4 left-4 z-50 text-white/30 hover:text-white transition-colors"
 				title="View Source on GitHub"
 			>
-				<svg
-					viewBox="0 0 24 24"
-					width="24"
-					height="24"
-					stroke="currentColor"
-					strokeWidth="2"
-					fill="none"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-				>
-					<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-				</svg>
+				<Github size={24} />
 			</a>
-
-			{/* Settings Cog */}
-			<button
-				onClick={() => setIsSettingsOpen(true)}
-				className="absolute top-4 right-4 z-50 text-white/50 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10"
-				title="Settings"
-			>
-				<svg
-					className="w-8 h-8"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						strokeWidth={2}
-						d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-					/>
-					<path
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						strokeWidth={2}
-						d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-					/>
-				</svg>
-			</button>
 
 			<SettingsModal
 				isOpen={isSettingsOpen}
@@ -320,8 +294,8 @@ export function CameraStage() {
 
 			{/* Controls Overlay */}
 			<div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col gap-4 items-center z-50 w-full max-w-4xl px-4">
-				{/* Replay Controls */}
-				{timeMachine.isReplaying ? (
+				{/* Replay Controls (when replaying) */}
+				{timeMachine.isReplaying && (
 					<div className="flex flex-col gap-2 w-full items-center">
 						<div className="bg-blue-900/80 backdrop-blur-md p-4 rounded-2xl flex items-center gap-4 w-full justify-center border border-blue-400 shadow-lg shadow-blue-900/50">
 							<button
@@ -372,20 +346,68 @@ export function CameraStage() {
 							))}
 						</div>
 					</div>
-				) : (
-					/* Live Controls */
-					<div className="bg-black/60 backdrop-blur-md p-4 rounded-2xl flex items-center gap-4 w-full justify-center border border-white/10">
-						<button
-							onClick={timeMachine.enterReplay}
-							className="px-4 py-2 rounded-lg font-bold bg-blue-600 text-white hover:bg-blue-500 flex items-center gap-2"
-						>
-							<span>⏪</span> REWIND
-						</button>
-					</div>
 				)}
 
-				{/* Zoom Controls (Always Visible) */}
-				<div className="bg-black/50 backdrop-blur-md p-4 rounded-full flex items-center gap-4">
+				{/* Main Controls Bar (Always Visible) */}
+				<div className="bg-black/50 backdrop-blur-md p-3 rounded-2xl flex items-center gap-3">
+					{/* Rewind Button (only when not replaying) */}
+					{!timeMachine.isReplaying && (
+						<>
+							<button
+								onClick={timeMachine.enterReplay}
+								className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 flex items-center gap-1.5"
+							>
+								<span>⏪</span> Rewind
+							</button>
+							<div className="h-6 w-px bg-white/20" />
+						</>
+					)}
+
+					{/* Status Toggles */}
+					<button
+						onClick={() => setIsSmartZoom(!isSmartZoom)}
+						disabled={smartZoom.isModelLoading}
+						className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+							isSmartZoom
+								? "bg-green-600 text-white"
+								: "bg-white/10 text-white/50 hover:bg-white/20 hover:text-white"
+						} ${smartZoom.isModelLoading ? "opacity-50 cursor-wait" : ""}`}
+						title="Smart Zoom - Auto-follow movement"
+					>
+						{smartZoom.isModelLoading
+							? "Loading..."
+							: isSmartZoom
+								? "Smart ✓"
+								: "Smart"}
+					</button>
+
+					<button
+						onClick={() => setFlashEnabled(!flashEnabled)}
+						className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+							flashEnabled
+								? "bg-red-600 text-white"
+								: "bg-white/10 text-white/50 hover:bg-white/20 hover:text-white"
+						}`}
+						title="Flash Detection"
+					>
+						{flashEnabled ? "⚡ ARMED" : "⚡ Flash"}
+					</button>
+
+					<button
+						onClick={() => setIsHQ(!isHQ)}
+						className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+							isHQ
+								? "bg-purple-600 text-white"
+								: "bg-white/10 text-white/50 hover:bg-white/20 hover:text-white"
+						}`}
+						title="High Quality Mode (~3.5GB RAM)"
+					>
+						HQ
+					</button>
+
+					<div className="h-6 w-px bg-white/20" />
+
+					{/* Zoom Controls */}
 					<button
 						onClick={() => {
 							setZoom(1);
@@ -393,7 +415,7 @@ export function CameraStage() {
 						}}
 						className="text-white font-bold px-3 py-1 rounded hover:bg-white/20 text-sm"
 					>
-						Reset Zoom
+						Reset
 					</button>
 					<input
 						type="range"
@@ -406,11 +428,22 @@ export function CameraStage() {
 							setZoom(newZoom);
 							setPan((prev) => clampPan(prev, newZoom));
 						}}
-						className="w-48 accent-blue-500"
+						className="w-32 accent-blue-500"
 					/>
 					<span className="text-white font-mono w-12 text-right">
 						{zoom.toFixed(1)}x
 					</span>
+
+					<div className="h-6 w-px bg-white/20" />
+
+					{/* Settings */}
+					<button
+						onClick={() => setIsSettingsOpen(true)}
+						className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+						title="Settings"
+					>
+						<Settings size={18} />
+					</button>
 				</div>
 			</div>
 		</div>
