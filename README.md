@@ -69,7 +69,7 @@ graph TB
         C3[Hysteresis/deadband]
         C4[Smooth interpolation]
     end
-    click C1 "docs/SMART_ZOOM_SPEC.md" "Smart Zoom Specification"
+    click C1 href "docs/SMART_ZOOM_SPEC.md" "Smart Zoom Specification"
 
     subgraph useFlashDetector
         D1[Color sampling]
