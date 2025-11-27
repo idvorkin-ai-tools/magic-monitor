@@ -22,6 +22,22 @@ export const DeviceService = {
 		window.addEventListener("resize", callback);
 		return () => window.removeEventListener("resize", callback);
 	},
+
+	getStorageItem(key: string): string | null {
+		try {
+			return localStorage.getItem(key);
+		} catch {
+			return null;
+		}
+	},
+
+	setStorageItem(key: string, value: string): void {
+		try {
+			localStorage.setItem(key, value);
+		} catch {
+			// localStorage not available
+		}
+	},
 };
 
 export type DeviceServiceType = typeof DeviceService;

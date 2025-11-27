@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as CameraService from "../services/CameraService";
+import { DeviceService } from "../services/DeviceService";
+
+const STORAGE_KEY = "magic-monitor-camera-device-id";
 
 export function useCamera(initialDeviceId?: string) {
 	const [stream, setStream] = useState<MediaStream | null>(null);
@@ -7,7 +10,7 @@ export function useCamera(initialDeviceId?: string) {
 	const [error, setError] = useState<string | null>(null);
 	const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>(
-		initialDeviceId || "",
+		initialDeviceId || DeviceService.getStorageItem(STORAGE_KEY) || "",
 	);
 
 	const getDevices = useCallback(async () => {
@@ -71,6 +74,7 @@ export function useCamera(initialDeviceId?: string) {
 						const settings = videoTrack.getSettings();
 						if (settings.deviceId) {
 							setSelectedDeviceId(settings.deviceId);
+							DeviceService.setStorageItem(STORAGE_KEY, settings.deviceId);
 						}
 					}
 				}
@@ -94,11 +98,17 @@ export function useCamera(initialDeviceId?: string) {
 		};
 	}, [selectedDeviceId, getDevices]); // Re-run when selected device changes
 
+	// Wrap setter to persist selection
+	const handleSetSelectedDeviceId = useCallback((deviceId: string) => {
+		setSelectedDeviceId(deviceId);
+		DeviceService.setStorageItem(STORAGE_KEY, deviceId);
+	}, []);
+
 	return {
 		stream,
 		error,
 		devices,
 		selectedDeviceId,
-		setSelectedDeviceId,
+		setSelectedDeviceId: handleSetSelectedDeviceId,
 	};
 }

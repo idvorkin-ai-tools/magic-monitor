@@ -79,6 +79,12 @@ React 19 + TypeScript + Vite + Tailwind CSS application for real-time camera mir
 - `getVideoDevices()`, `start(deviceId)`, `stop(stream)`
 - Isolates navigator.mediaDevices calls for testability
 
+**DeviceService** - Humble Object pattern for browser/device APIs
+
+- Screen dimensions, device memory, touch detection
+- localStorage access (`getStorageItem`, `setStorageItem`)
+- Isolates window/navigator/localStorage calls for testability
+
 ## Development Conventions
 
 ### Clean Code Principles
@@ -88,7 +94,7 @@ React 19 + TypeScript + Vite + Tailwind CSS application for real-time camera mir
 - Return early from functions when possible
 - Use `const` whenever possible
 - Use TypeScript types
-- Use Humble Objects (services) when interacting with external systems for testability
+- Use Humble Objects (services) when interacting with external systems for testability (browser APIs, localStorage, network, etc.)
 - When finding bugs, add failing tests first, then fix
 
 ### Clean Commits

@@ -77,13 +77,13 @@ export function CameraStage() {
 	});
 
 	// Effect to apply smart zoom values
+	// Note: SmartZoom already clamps pan correctly via clampPanToViewport - don't re-clamp
 	useEffect(() => {
 		if (isSmartZoom) {
 			setZoom(smartZoom.zoom);
-			// Apply clamping to smart zoom output too
-			setPan(clampPan(smartZoom.pan, smartZoom.zoom));
+			setPan(smartZoom.pan);
 		}
-	}, [isSmartZoom, smartZoom.zoom, smartZoom.pan, clampPan]);
+	}, [isSmartZoom, smartZoom.zoom, smartZoom.pan]);
 
 	// Time Machine State
 	// We always enable recording in the background for "Instant Replay" capability
@@ -204,6 +204,22 @@ export function CameraStage() {
 	const handlePanTo = (target: { x: number; y: number }) => {
 		setPan(clampPan(target, zoom));
 	};
+
+	// Download SmartZoom debug trace as JSON
+	const handleDownloadDebugTrace = useCallback(() => {
+		const trace = smartZoom.getDebugTrace();
+		const blob = new Blob([JSON.stringify(trace, null, 2)], {
+			type: "application/json",
+		});
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `smartzoom-debug-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+	}, [smartZoom]);
 
 	return (
 		<div
@@ -336,6 +352,14 @@ export function CameraStage() {
 								className="px-4 py-1 rounded font-bold bg-white/20 text-white hover:bg-white/30"
 							>
 								EXIT REPLAY
+							</button>
+
+							<button
+								onClick={handleDownloadDebugTrace}
+								className="px-3 py-1 rounded font-bold bg-yellow-600/80 text-white hover:bg-yellow-500 text-xs"
+								title="Download SmartZoom debug trace"
+							>
+								Debug Log
 							</button>
 
 							<div className="h-8 w-px bg-white/20 mx-2" />

@@ -11,6 +11,8 @@ function createMockService(
 		getDeviceMemoryGB: () => null,
 		isTouchDevice: () => false,
 		addResizeListener: () => () => {},
+		getStorageItem: () => null,
+		setStorageItem: () => {},
 		...overrides,
 	};
 }

@@ -1,5 +1,5 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // Clamped edges indicator for debug overlay (see docs/SMART_ZOOM_SPEC.md)
 export interface ClampedEdges {
@@ -8,6 +8,34 @@ export interface ClampedEdges {
 	top: boolean;
 	bottom: boolean;
 }
+
+// Debug trace entry for diagnostics
+export interface DebugTraceEntry {
+	timestamp: number;
+	frame: number;
+	// Detection
+	handsDetected: number;
+	boundingBox: {
+		minX: number;
+		maxX: number;
+		minY: number;
+		maxY: number;
+	} | null;
+	// Calculated values
+	targetZoom: number;
+	targetPan: { x: number; y: number };
+	// After hysteresis
+	committedZoom: number;
+	committedPan: { x: number; y: number };
+	// After lerp + clamp
+	currentZoom: number;
+	currentPan: { x: number; y: number };
+	clampedEdges: ClampedEdges;
+	// Context
+	videoSize: { width: number; height: number };
+}
+
+const DEBUG_TRACE_MAX_ENTRIES = 900; // ~30 seconds at 30fps
 
 // Pure function: Clamp pan to viewport bounds (see docs/SMART_ZOOM_SPEC.md)
 export function clampPanToViewport(
@@ -76,6 +104,10 @@ export function useSmartZoom({
 	const landmarkerRef = useRef<HandLandmarker | null>(null);
 	const requestRef = useRef<number>(0);
 	const lastVideoTimeRef = useRef<number>(-1);
+
+	// Debug trace buffer (circular)
+	const debugTraceRef = useRef<DebugTraceEntry[]>([]);
+	const frameCountRef = useRef(0);
 
 	useEffect(() => {
 		async function loadModel() {
@@ -224,6 +256,27 @@ export function useSmartZoom({
 					);
 					currentPanRef.current = clampedPan;
 
+					// Record debug trace entry
+					frameCountRef.current++;
+					const traceEntry: DebugTraceEntry = {
+						timestamp: performance.now(),
+						frame: frameCountRef.current,
+						handsDetected: result.landmarks.length,
+						boundingBox: { minX, maxX, minY, maxY },
+						targetZoom,
+						targetPan: { x: targetPanX, y: targetPanY },
+						committedZoom: committedTargetRef.current.zoom,
+						committedPan: { ...committedTargetRef.current.pan },
+						currentZoom: currentZoomRef.current,
+						currentPan: { ...currentPanRef.current },
+						clampedEdges: edges,
+						videoSize: { width: video.videoWidth, height: video.videoHeight },
+					};
+					debugTraceRef.current.push(traceEntry);
+					if (debugTraceRef.current.length > DEBUG_TRACE_MAX_ENTRIES) {
+						debugTraceRef.current.shift();
+					}
+
 					setZoom(currentZoomRef.current);
 					setPan({ ...currentPanRef.current });
 					setClampedEdges(edges);
@@ -251,6 +304,27 @@ export function useSmartZoom({
 					);
 					currentPanRef.current = clampedPan;
 
+					// Record debug trace entry (no hands)
+					frameCountRef.current++;
+					const traceEntry: DebugTraceEntry = {
+						timestamp: performance.now(),
+						frame: frameCountRef.current,
+						handsDetected: 0,
+						boundingBox: null,
+						targetZoom: 1,
+						targetPan: { x: 0, y: 0 },
+						committedZoom: 1,
+						committedPan: { x: 0, y: 0 },
+						currentZoom: currentZoomRef.current,
+						currentPan: { ...currentPanRef.current },
+						clampedEdges: edges,
+						videoSize: { width: video.videoWidth, height: video.videoHeight },
+					};
+					debugTraceRef.current.push(traceEntry);
+					if (debugTraceRef.current.length > DEBUG_TRACE_MAX_ENTRIES) {
+						debugTraceRef.current.shift();
+					}
+
 					setZoom(currentZoomRef.current);
 					setPan({ ...currentPanRef.current });
 					setClampedEdges(edges);
@@ -268,11 +342,28 @@ export function useSmartZoom({
 		};
 	}, [enabled, videoRef, padding, smoothFactor, isModelLoading]);
 
+	// Get debug trace as JSON for download
+	const getDebugTrace = useCallback(() => {
+		return {
+			exportedAt: new Date().toISOString(),
+			config: {
+				padding,
+				smoothFactor,
+				minZoom: 1,
+				maxZoom: 3,
+				zoomThreshold: 0.1,
+				panThreshold: 50,
+			},
+			entries: [...debugTraceRef.current],
+		};
+	}, [padding, smoothFactor]);
+
 	return {
 		isModelLoading,
 		zoom,
 		pan,
 		clampedEdges,
 		debugLandmarks,
+		getDebugTrace,
 	};
 }
