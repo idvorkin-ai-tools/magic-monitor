@@ -9,6 +9,7 @@ import { useTimeMachine } from "../hooks/useTimeMachine";
 import { useVersionCheck } from "../hooks/useVersionCheck";
 import { DeviceService } from "../services/DeviceService";
 import type { SmoothingPreset } from "../smoothing";
+import { HandSkeleton } from "./HandSkeleton";
 import { Minimap } from "./Minimap";
 import { SettingsModal } from "./SettingsModal";
 import { Thumbnail } from "./Thumbnail";
@@ -17,6 +18,7 @@ import { Thumbnail } from "./Thumbnail";
 const SMOOTHING_PRESET_STORAGE_KEY = "magic-monitor-smoothing-preset";
 const HQ_STORAGE_KEY = "magic-monitor-hq";
 const SMART_ZOOM_STORAGE_KEY = "magic-monitor-smart-zoom";
+const SHOW_HAND_SKELETON_STORAGE_KEY = "magic-monitor-show-hand-skeleton";
 const FLASH_ENABLED_STORAGE_KEY = "magic-monitor-flash-enabled";
 const FLASH_THRESHOLD_STORAGE_KEY = "magic-monitor-flash-threshold";
 const FLASH_TARGET_COLOR_STORAGE_KEY = "magic-monitor-flash-target-color";
@@ -81,6 +83,11 @@ export function CameraStage() {
 		if (stored !== null) return stored === "true";
 		return true; // Default on
 	});
+	const [showHandSkeleton, setShowHandSkeletonInternal] = useState(() => {
+		return (
+			DeviceService.getStorageItem(SHOW_HAND_SKELETON_STORAGE_KEY) === "true"
+		);
+	});
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
 	// Smoothing preset state (persisted to localStorage)
@@ -111,6 +118,11 @@ export function CameraStage() {
 	const setIsSmartZoom = useCallback((value: boolean) => {
 		setIsSmartZoomInternal(value);
 		DeviceService.setStorageItem(SMART_ZOOM_STORAGE_KEY, String(value));
+	}, []);
+
+	const setShowHandSkeleton = useCallback((value: boolean) => {
+		setShowHandSkeletonInternal(value);
+		DeviceService.setStorageItem(SHOW_HAND_SKELETON_STORAGE_KEY, String(value));
 	}, []);
 
 	const setFlashEnabled = useCallback((value: boolean) => {
@@ -400,6 +412,8 @@ export function CameraStage() {
 				onSmartZoomChange={setIsSmartZoom}
 				smoothingPreset={smoothingPreset}
 				onSmoothingPresetChange={setSmoothingPreset}
+				showHandSkeleton={showHandSkeleton}
+				onShowHandSkeletonChange={setShowHandSkeleton}
 				flashEnabled={flashEnabled}
 				onFlashEnabledChange={setFlashEnabled}
 				threshold={threshold}
@@ -461,6 +475,14 @@ export function CameraStage() {
 					transform: `scale(${zoom}) translate(${(pan.x * 100).toFixed(2)}%, ${(pan.y * 100).toFixed(2)}%)`,
 				}}
 			/>
+
+			{/* Hand Skeleton Debug Overlay */}
+			{showHandSkeleton && isSmartZoom && !timeMachine.isReplaying && (
+				<HandSkeleton
+					landmarks={smartZoom.debugLandmarks}
+					videoRef={videoRef}
+				/>
+			)}
 
 			{/* Replay Canvas */}
 			<canvas
