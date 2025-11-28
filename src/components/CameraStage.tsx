@@ -6,9 +6,13 @@ import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import { useTimeMachine } from "../hooks/useTimeMachine";
+import { DeviceService } from "../services/DeviceService";
+import type { SmoothingPreset } from "../smoothing";
 import { Minimap } from "./Minimap";
 import { SettingsModal } from "./SettingsModal";
 import { Thumbnail } from "./Thumbnail";
+
+const SMOOTHING_PRESET_STORAGE_KEY = "magic-monitor-smoothing-preset";
 
 export function CameraStage() {
 	const videoRef = useRef<HTMLVideoElement>(null);
@@ -37,6 +41,26 @@ export function CameraStage() {
 	const [hqInitialized, setHqInitialized] = useState(false);
 	const [isSmartZoom, setIsSmartZoom] = useState(true);
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+	// Smoothing preset state (persisted to localStorage)
+	const [smoothingPreset, setSmoothingPresetInternal] =
+		useState<SmoothingPreset>(() => {
+			const stored = DeviceService.getStorageItem(SMOOTHING_PRESET_STORAGE_KEY);
+			if (
+				stored === "ema" ||
+				stored === "kalmanFast" ||
+				stored === "kalmanSmooth"
+			) {
+				return stored;
+			}
+			return "ema";
+		});
+
+	// Wrapped setter that persists to localStorage
+	const setSmoothingPreset = useCallback((preset: SmoothingPreset) => {
+		setSmoothingPresetInternal(preset);
+		DeviceService.setStorageItem(SMOOTHING_PRESET_STORAGE_KEY, preset);
+	}, []);
 
 	// Initialize HQ based on device detection (once)
 	useEffect(() => {
@@ -73,7 +97,7 @@ export function CameraStage() {
 	const smartZoom = useSmartZoom({
 		videoRef,
 		enabled: isSmartZoom,
-		smoothFactor: 0.05,
+		smoothingPreset,
 	});
 
 	// Effect to apply smart zoom values
@@ -289,6 +313,8 @@ export function CameraStage() {
 				isSmartZoom={isSmartZoom}
 				isModelLoading={smartZoom.isModelLoading}
 				onSmartZoomChange={setIsSmartZoom}
+				smoothingPreset={smoothingPreset}
+				onSmoothingPresetChange={setSmoothingPreset}
 				flashEnabled={flashEnabled}
 				onFlashEnabledChange={setFlashEnabled}
 				threshold={threshold}

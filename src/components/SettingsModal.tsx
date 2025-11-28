@@ -1,3 +1,9 @@
+import {
+	SMOOTHING_PRESET_DESCRIPTIONS,
+	SMOOTHING_PRESET_LABELS,
+	type SmoothingPreset,
+} from "../smoothing";
+
 interface SettingsModalProps {
 	isOpen: boolean;
 	onClose: () => void;
@@ -17,6 +23,8 @@ interface SettingsModalProps {
 	isSmartZoom: boolean;
 	isModelLoading: boolean;
 	onSmartZoomChange: (enabled: boolean) => void;
+	smoothingPreset: SmoothingPreset;
+	onSmoothingPresetChange: (preset: SmoothingPreset) => void;
 
 	// Flash
 	flashEnabled: boolean;
@@ -41,6 +49,8 @@ export function SettingsModal({
 	isSmartZoom,
 	isModelLoading,
 	onSmartZoomChange,
+	smoothingPreset,
+	onSmoothingPresetChange,
 	flashEnabled,
 	onFlashEnabledChange,
 	threshold,
@@ -154,6 +164,38 @@ export function SettingsModal({
 							/>
 						</button>
 					</div>
+
+					{/* Smoothing Algorithm (shown when Smart Zoom enabled) */}
+					{isSmartZoom && (
+						<div className="space-y-2 ml-4 border-l-2 border-green-600/30 pl-4">
+							<label
+								htmlFor="smoothing-preset"
+								className="text-sm font-medium text-gray-400"
+							>
+								Smoothing Algorithm
+							</label>
+							<select
+								id="smoothing-preset"
+								value={smoothingPreset}
+								onChange={(e) =>
+									onSmoothingPresetChange(e.target.value as SmoothingPreset)
+								}
+								disabled={isModelLoading}
+								className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-500 text-sm disabled:opacity-50"
+							>
+								{(["ema", "kalmanFast", "kalmanSmooth"] as const).map(
+									(preset) => (
+										<option key={preset} value={preset}>
+											{SMOOTHING_PRESET_LABELS[preset]}
+										</option>
+									),
+								)}
+							</select>
+							<div className="text-xs text-gray-500">
+								{SMOOTHING_PRESET_DESCRIPTIONS[smoothingPreset]}
+							</div>
+						</div>
+					)}
 
 					<div className="h-px bg-white/10 my-4" />
 

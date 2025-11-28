@@ -1,5 +1,12 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	clampSpeed,
+	createSmoother,
+	DEFAULT_SPEED_CLAMP,
+	type Smoother,
+	type SmoothingPreset,
+} from "../smoothing";
 
 // Clamped edges indicator for debug overlay (see docs/SMART_ZOOM_SPEC.md)
 export interface ClampedEdges {
@@ -94,25 +101,33 @@ export function clampPanToViewport(
 interface SmartZoomConfig {
 	videoRef: React.RefObject<HTMLVideoElement | null>;
 	enabled: boolean;
-	padding?: number; // Extra space around hands (default 1.5x)
-	smoothFactor?: number; // 0-1, lower is smoother (default 0.1)
+	padding?: number; // Extra space around hands (default 2.0)
+	smoothingPreset?: SmoothingPreset; // Smoothing algorithm preset (default "ema")
 }
 
 export function useSmartZoom({
 	videoRef,
 	enabled,
 	padding = 2.0,
-	smoothFactor = 0.05, // Slower default for stability
+	smoothingPreset = "ema",
 }: SmartZoomConfig) {
 	const [isModelLoading, setIsModelLoading] = useState(true);
 	const [debugLandmarks, setDebugLandmarks] = useState<any[]>([]);
 
-	// Current state (for smoothing)
-	const currentZoomRef = useRef(1);
-	const currentPanRef = useRef({ x: 0, y: 0 });
+	// Smoother instance (recreated when preset changes)
+	const smootherRef = useRef<Smoother>(createSmoother(smoothingPreset));
+
+	// Track previous position for speed clamping
+	const prevPositionRef = useRef({ x: 0, y: 0, zoom: 1 });
 
 	// Committed target state (for hysteresis/deadband)
 	const committedTargetRef = useRef({ zoom: 1, pan: { x: 0, y: 0 } });
+
+	// Recreate smoother when preset changes
+	useEffect(() => {
+		smootherRef.current = createSmoother(smoothingPreset);
+		smootherRef.current.reset();
+	}, [smoothingPreset]);
 
 	// Constants (see docs/SMART_ZOOM_SPEC.md)
 	const MIN_ZOOM = 1;
@@ -242,26 +257,33 @@ export function useSmartZoom({
 						};
 					}
 
-					// Smooth Interpolation (Lerp) towards COMMITTED target
-					currentZoomRef.current =
-						currentZoomRef.current +
-						(committedTargetRef.current.zoom - currentZoomRef.current) *
-							smoothFactor;
-					currentPanRef.current.x =
-						currentPanRef.current.x +
-						(committedTargetRef.current.pan.x - currentPanRef.current.x) *
-							smoothFactor;
-					currentPanRef.current.y =
-						currentPanRef.current.y +
-						(committedTargetRef.current.pan.y - currentPanRef.current.y) *
-							smoothFactor;
+					// Smooth using the selected smoother (EMA or Kalman)
+					const smoothed = smootherRef.current.update({
+						x: committedTargetRef.current.pan.x,
+						y: committedTargetRef.current.pan.y,
+						zoom: committedTargetRef.current.zoom,
+					});
+
+					// Apply speed clamping to prevent jarring movements
+					const speedClamped = clampSpeed(
+						prevPositionRef.current,
+						smoothed,
+						DEFAULT_SPEED_CLAMP.maxPanSpeed,
+						DEFAULT_SPEED_CLAMP.maxZoomSpeed,
+					);
 
 					// Clamp pan to viewport bounds (using normalized coordinates)
 					const { pan: clampedPan, clampedEdges: edges } = clampNormalizedPan(
-						currentPanRef.current,
-						currentZoomRef.current,
+						{ x: speedClamped.x, y: speedClamped.y },
+						speedClamped.zoom,
 					);
-					currentPanRef.current = clampedPan;
+
+					// Update refs for next frame
+					prevPositionRef.current = {
+						x: clampedPan.x,
+						y: clampedPan.y,
+						zoom: speedClamped.zoom,
+					};
 
 					// Record debug trace entry (pan values are now normalized)
 					frameCountRef.current++;
@@ -274,8 +296,11 @@ export function useSmartZoom({
 						targetPan: { x: targetPanX, y: targetPanY },
 						committedZoom: committedTargetRef.current.zoom,
 						committedPan: { ...committedTargetRef.current.pan },
-						currentZoom: currentZoomRef.current,
-						currentPan: { ...currentPanRef.current },
+						currentZoom: prevPositionRef.current.zoom,
+						currentPan: {
+							x: prevPositionRef.current.x,
+							y: prevPositionRef.current.y,
+						},
 						clampedEdges: edges,
 						videoSize: { width: video.videoWidth, height: video.videoHeight },
 					};
@@ -284,8 +309,11 @@ export function useSmartZoom({
 						debugTraceRef.current.shift();
 					}
 
-					setZoom(currentZoomRef.current);
-					setPan({ ...currentPanRef.current });
+					setZoom(prevPositionRef.current.zoom);
+					setPan({
+						x: prevPositionRef.current.x,
+						y: prevPositionRef.current.y,
+					});
 					setClampedEdges(edges);
 					setDebugLandmarks(result.landmarks);
 				} else {
@@ -293,22 +321,33 @@ export function useSmartZoom({
 					// For zoom out, we can bypass hysteresis or set target to 1
 					committedTargetRef.current = { zoom: 1, pan: { x: 0, y: 0 } };
 
-					currentZoomRef.current =
-						currentZoomRef.current +
-						(1 - currentZoomRef.current) * (smoothFactor * 0.5);
-					currentPanRef.current.x =
-						currentPanRef.current.x +
-						(0 - currentPanRef.current.x) * (smoothFactor * 0.5);
-					currentPanRef.current.y =
-						currentPanRef.current.y +
-						(0 - currentPanRef.current.y) * (smoothFactor * 0.5);
+					// Smooth using the selected smoother (target is default position)
+					const smoothed = smootherRef.current.update({
+						x: 0,
+						y: 0,
+						zoom: 1,
+					});
+
+					// Apply speed clamping (use slower speed when no hands for gentler return)
+					const speedClamped = clampSpeed(
+						prevPositionRef.current,
+						smoothed,
+						DEFAULT_SPEED_CLAMP.maxPanSpeed * 0.5, // Half speed when no hands
+						DEFAULT_SPEED_CLAMP.maxZoomSpeed * 0.5,
+					);
 
 					// Clamp pan to viewport bounds (using normalized coordinates)
 					const { pan: clampedPan, clampedEdges: edges } = clampNormalizedPan(
-						currentPanRef.current,
-						currentZoomRef.current,
+						{ x: speedClamped.x, y: speedClamped.y },
+						speedClamped.zoom,
 					);
-					currentPanRef.current = clampedPan;
+
+					// Update refs for next frame
+					prevPositionRef.current = {
+						x: clampedPan.x,
+						y: clampedPan.y,
+						zoom: speedClamped.zoom,
+					};
 
 					// Record debug trace entry (no hands, pan values are normalized)
 					frameCountRef.current++;
@@ -321,8 +360,11 @@ export function useSmartZoom({
 						targetPan: { x: 0, y: 0 },
 						committedZoom: 1,
 						committedPan: { x: 0, y: 0 },
-						currentZoom: currentZoomRef.current,
-						currentPan: { ...currentPanRef.current },
+						currentZoom: prevPositionRef.current.zoom,
+						currentPan: {
+							x: prevPositionRef.current.x,
+							y: prevPositionRef.current.y,
+						},
 						clampedEdges: edges,
 						videoSize: { width: video.videoWidth, height: video.videoHeight },
 					};
@@ -331,8 +373,11 @@ export function useSmartZoom({
 						debugTraceRef.current.shift();
 					}
 
-					setZoom(currentZoomRef.current);
-					setPan({ ...currentPanRef.current });
+					setZoom(prevPositionRef.current.zoom);
+					setPan({
+						x: prevPositionRef.current.x,
+						y: prevPositionRef.current.y,
+					});
 					setClampedEdges(edges);
 					setDebugLandmarks([]);
 				}
@@ -346,7 +391,7 @@ export function useSmartZoom({
 		return () => {
 			if (requestRef.current) cancelAnimationFrame(requestRef.current);
 		};
-	}, [enabled, videoRef, padding, smoothFactor, isModelLoading]);
+	}, [enabled, videoRef, padding, smoothingPreset, isModelLoading]);
 
 	// Get debug trace as JSON for download
 	const getDebugTrace = useCallback(() => {
@@ -354,15 +399,15 @@ export function useSmartZoom({
 			exportedAt: new Date().toISOString(),
 			config: {
 				padding,
-				smoothFactor,
+				smoothingPreset,
 				minZoom: 1,
 				maxZoom: 3,
 				zoomThreshold: 0.1,
-				panThreshold: 50,
+				panThreshold: 0.025,
 			},
 			entries: [...debugTraceRef.current],
 		};
-	}, [padding, smoothFactor]);
+	}, [padding, smoothingPreset]);
 
 	return {
 		isModelLoading,
