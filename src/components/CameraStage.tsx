@@ -6,6 +6,7 @@ import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import { useTimeMachine } from "../hooks/useTimeMachine";
+import { useVersionCheck } from "../hooks/useVersionCheck";
 import { DeviceService } from "../services/DeviceService";
 import type { SmoothingPreset } from "../smoothing";
 import { Minimap } from "./Minimap";
@@ -205,6 +206,15 @@ export function CameraStage() {
 	const { stream, error, devices, selectedDeviceId, setSelectedDeviceId } =
 		useCamera();
 
+	// Version check for updates
+	const {
+		updateAvailable,
+		reload: reloadForUpdate,
+		checkForUpdate,
+		isChecking: isCheckingUpdate,
+		lastCheckTime,
+	} = useVersionCheck();
+
 	// Sync stream to video element
 	useEffect(() => {
 		if (videoRef.current) {
@@ -397,6 +407,11 @@ export function CameraStage() {
 				isPickingColor={isPickingColor}
 				onPickColorClick={() => setIsPickingColor(true)}
 				targetColor={targetColor}
+				updateAvailable={updateAvailable}
+				isCheckingUpdate={isCheckingUpdate}
+				lastCheckTime={lastCheckTime}
+				onCheckForUpdate={checkForUpdate}
+				onReloadForUpdate={reloadForUpdate}
 			/>
 
 			{/* Delay Indicator Overlay */}

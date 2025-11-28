@@ -34,6 +34,13 @@ interface SettingsModalProps {
 	isPickingColor: boolean;
 	onPickColorClick: () => void;
 	targetColor: { r: number; g: number; b: number } | null;
+
+	// Updates
+	updateAvailable?: boolean;
+	isCheckingUpdate?: boolean;
+	lastCheckTime?: Date | null;
+	onCheckForUpdate?: () => void;
+	onReloadForUpdate?: () => void;
 }
 
 export function SettingsModal({
@@ -58,6 +65,11 @@ export function SettingsModal({
 	isPickingColor,
 	onPickColorClick,
 	targetColor,
+	updateAvailable,
+	isCheckingUpdate,
+	lastCheckTime,
+	onCheckForUpdate,
+	onReloadForUpdate,
 }: SettingsModalProps) {
 	const handleHQToggle = () => {
 		if (!isHQ && isLowMemory) {
@@ -249,6 +261,55 @@ export function SettingsModal({
 									Pick Color
 								</button>
 							</div>
+						</div>
+					</div>
+
+					<div className="h-px bg-white/10 my-4" />
+
+					{/* Updates */}
+					<div className="space-y-3">
+						<div className="text-white font-medium">Updates</div>
+
+						{updateAvailable && (
+							<div className="flex items-center gap-2 p-2 bg-blue-600/20 border border-blue-500/30 rounded-lg">
+								<span className="text-blue-400">🚀</span>
+								<span className="text-blue-200 text-sm flex-1">
+									New version available!
+								</span>
+								<button
+									onClick={onReloadForUpdate}
+									className="px-3 py-1 rounded text-xs font-bold bg-blue-600 text-white hover:bg-blue-500"
+								>
+									Update Now
+								</button>
+							</div>
+						)}
+
+						<div className="flex items-center justify-between">
+							<div className="text-sm text-gray-400">
+								{lastCheckTime ? (
+									<>
+										Last checked:{" "}
+										{lastCheckTime.toLocaleTimeString([], {
+											hour: "2-digit",
+											minute: "2-digit",
+										})}
+									</>
+								) : (
+									"Never checked"
+								)}
+							</div>
+							<button
+								onClick={onCheckForUpdate}
+								disabled={isCheckingUpdate}
+								className={`px-3 py-1 rounded text-xs font-bold transition-colors ${
+									isCheckingUpdate
+										? "bg-gray-700 text-gray-400 cursor-wait"
+										: "bg-white/10 text-white hover:bg-white/20"
+								}`}
+							>
+								{isCheckingUpdate ? "Checking..." : "Check for Update"}
+							</button>
 						</div>
 					</div>
 				</div>
