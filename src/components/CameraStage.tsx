@@ -499,6 +499,7 @@ export function CameraStage() {
 				<HandSkeleton
 					landmarks={smartZoom.debugLandmarks}
 					videoRef={videoRef}
+					isMirror={isMirror}
 				/>
 			)}
 

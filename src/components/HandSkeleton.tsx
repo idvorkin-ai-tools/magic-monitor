@@ -35,6 +35,7 @@ const HAND_CONNECTIONS: [number, number][] = [
 interface HandSkeletonProps {
 	landmarks: Array<Array<{ x: number; y: number; z: number }>>;
 	videoRef: React.RefObject<HTMLVideoElement | null>;
+	isMirror?: boolean;
 }
 
 interface VideoRect {
@@ -44,7 +45,7 @@ interface VideoRect {
 	height: number;
 }
 
-export function HandSkeleton({ landmarks, videoRef }: HandSkeletonProps) {
+export function HandSkeleton({ landmarks, videoRef, isMirror = false }: HandSkeletonProps) {
 	const [videoRect, setVideoRect] = useState<VideoRect | null>(null);
 
 	// Update video rect via effect (not during render)
@@ -93,8 +94,10 @@ export function HandSkeleton({ landmarks, videoRef }: HandSkeletonProps) {
 				const color = handColors[handIndex % handColors.length];
 
 				// Convert normalized coordinates (0-1) to screen coordinates
+				// When mirrored, flip the X coordinate (1 - x) to match the mirrored video display
 				const toScreenCoords = (point: { x: number; y: number }) => {
-					const x = videoRect.left + point.x * videoRect.width;
+					const normalizedX = isMirror ? 1 - point.x : point.x;
+					const x = videoRect.left + normalizedX * videoRect.width;
 					const y = videoRect.top + point.y * videoRect.height;
 					return { x, y };
 				};
