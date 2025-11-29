@@ -23,12 +23,24 @@ Video Stream → MediaRecorder (5s chunks) → IndexedDB
               Playback via <video> element (not canvas)
 ```
 
-## Memory Improvement
+## Memory & Quality Improvement
 
-| Mode | 60 seconds buffer | RAM Usage |
-|------|------------------|-----------|
-| Current (memory) | 1200 frames @ ImageBitmap | ~1GB |
-| Disk-based | 12 chunks @ ~2MB each | ~5-15MB |
+| Mode | 60 seconds buffer | RAM Usage | Resolution |
+|------|------------------|-----------|------------|
+| Current (memory) | 1200 frames @ ImageBitmap | ~1GB | 35-50% downscaled |
+| Disk-based | 12 chunks @ ~2MB each | ~5-15MB | **Full resolution** |
+
+### Why Full Resolution Works
+
+Memory mode stores raw RGBA pixels - must downsample to fit in RAM:
+```typescript
+quality: isHQ ? 0.5 : 0.35  // 35-50% of original size
+```
+
+Disk mode uses MediaRecorder with hardware-accelerated video compression (VP9/VP8):
+- 1080p @ 5 seconds ≈ 1-3MB per chunk (vs ~600MB raw)
+- Full resolution preserved
+- Better visual quality than downsampled raw frames
 
 ## Files Created (Partial Implementation)
 
