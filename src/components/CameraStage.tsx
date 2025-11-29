@@ -22,6 +22,7 @@ const SHOW_HAND_SKELETON_STORAGE_KEY = "magic-monitor-show-hand-skeleton";
 const FLASH_ENABLED_STORAGE_KEY = "magic-monitor-flash-enabled";
 const FLASH_THRESHOLD_STORAGE_KEY = "magic-monitor-flash-threshold";
 const FLASH_TARGET_COLOR_STORAGE_KEY = "magic-monitor-flash-target-color";
+const MIRROR_STORAGE_KEY = "magic-monitor-mirror";
 
 export function CameraStage() {
 	const videoRef = useRef<HTMLVideoElement>(null);
@@ -93,6 +94,11 @@ export function CameraStage() {
 	});
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+	// Mirror state (persisted to localStorage)
+	const [isMirror, setIsMirrorInternal] = useState(() => {
+		return DeviceService.getStorageItem(MIRROR_STORAGE_KEY) === "true";
+	});
+
 	// Smoothing preset state (persisted to localStorage)
 	const [smoothingPreset, setSmoothingPresetInternal] =
 		useState<SmoothingPreset>(() => {
@@ -153,6 +159,11 @@ export function CameraStage() {
 		[],
 	);
 
+	const setIsMirror = useCallback((value: boolean) => {
+		setIsMirrorInternal(value);
+		DeviceService.setStorageItem(MIRROR_STORAGE_KEY, String(value));
+	}, []);
+
 	// Initialize HQ based on device detection (once, only if no stored preference)
 	useEffect(() => {
 		if (!hqInitialized) {
@@ -183,6 +194,13 @@ export function CameraStage() {
 			y: Math.max(-maxPan, Math.min(maxPan, p.y)),
 		};
 	}, []);
+
+	// Helper to build video/canvas transform string
+	// Combines mirror, zoom, and pan transforms
+	const getVideoTransform = useCallback(() => {
+		const mirrorTransform = isMirror ? "scaleX(-1) " : "";
+		return `${mirrorTransform}scale(${zoom}) translate(${(pan.x * 100).toFixed(2)}%, ${(pan.y * 100).toFixed(2)}%)`;
+	}, [isMirror, zoom, pan]);
 
 	// Smart Zoom
 	const smartZoom = useSmartZoom({
@@ -406,6 +424,8 @@ export function CameraStage() {
 				devices={devices}
 				selectedDeviceId={selectedDeviceId}
 				onDeviceChange={setSelectedDeviceId}
+				isMirror={isMirror}
+				onMirrorChange={setIsMirror}
 				isHQ={isHQ}
 				onHQChange={setIsHQ}
 				isLowMemory={isLowMemory}
@@ -472,10 +492,8 @@ export function CameraStage() {
 				muted
 				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${timeMachine.isReplaying ? "hidden" : "block"}`}
 				style={{
-					// Pan is NORMALIZED (0-1 range), multiply by 100 to get CSS percentage
-					// scale(Z) translate(X%, Y%) - translate happens first, then scaled
-					// See docs/SMART_ZOOM_SPEC.md for details
-					transform: `scale(${zoom}) translate(${(pan.x * 100).toFixed(2)}%, ${(pan.y * 100).toFixed(2)}%)`,
+					// See docs/SMART_ZOOM_SPEC.md for transform details
+					transform: getVideoTransform(),
 				}}
 			/>
 
@@ -484,6 +502,7 @@ export function CameraStage() {
 				<HandSkeleton
 					landmarks={smartZoom.debugLandmarks}
 					videoRef={videoRef}
+					isMirror={isMirror}
 				/>
 			)}
 
@@ -492,14 +511,13 @@ export function CameraStage() {
 				ref={canvasRef}
 				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${timeMachine.isReplaying ? "block" : "hidden"}`}
 				style={{
-					// Pan is NORMALIZED (0-1 range), multiply by 100 to get CSS percentage
-					transform: `scale(${zoom}) translate(${(pan.x * 100).toFixed(2)}%, ${(pan.y * 100).toFixed(2)}%)`,
+					transform: getVideoTransform(),
 				}}
 			/>
 
 			{/* Controls Overlay */}
 			<div
-				className={`absolute left-1/2 -translate-x-1/2 flex flex-col gap-4 items-center z-50 w-full max-w-4xl ${isMobile ? "bottom-0 px-0" : "bottom-8 px-4"}`}
+				className={`absolute left-1/2 -translate-x-1/2 flex flex-col gap-4 items-center z-50 w-full max-w-4xl ${isMobile ? "bottom-3 px-0" : "bottom-12 px-4"}`}
 			>
 				{/* Replay Controls (when replaying) */}
 				{timeMachine.isReplaying && (
