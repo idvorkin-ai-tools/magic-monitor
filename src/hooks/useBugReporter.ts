@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { DeviceService } from "../services/DeviceService";
-import type { BugReportData, LatestCommit } from "../types/bugReport";
+import type { BugReportData } from "../types/bugReport";
 import {
 	buildDefaultDescription,
 	buildDefaultTitle,
@@ -18,11 +18,6 @@ export type { BugReportData } from "../types/bugReport";
 export function useBugReporter() {
 	const [isOpen, setIsOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [latestCommit, setLatestCommit] = useState<LatestCommit | null>(null);
-
-	useEffect(() => {
-		DeviceService.fetchLatestCommit(GITHUB_REPO_URL).then(setLatestCommit);
-	}, []);
 
 	const [shakeEnabled, setShakeEnabledState] = useState(() => {
 		return DeviceService.getStorageItem(STORAGE_KEY_SHAKE_ENABLED) === "true";
@@ -48,10 +43,10 @@ export function useBugReporter() {
 	const getDefaultData = useCallback((): BugReportData => {
 		return {
 			title: buildDefaultTitle(),
-			description: buildDefaultDescription(latestCommit, GITHUB_REPO_URL),
+			description: buildDefaultDescription(),
 			includeMetadata: true,
 		};
-	}, [latestCommit]);
+	}, []);
 
 	const submit = useCallback(async (data: BugReportData) => {
 		setIsSubmitting(true);

@@ -7,9 +7,9 @@ default:
 dev:
     npm run dev
 
-# Build the project
+# Build the project (generates version info first)
 build:
-    npm run build
+    bash scripts/generate-version.sh && npm run build
 
 # Run unit tests
 test:

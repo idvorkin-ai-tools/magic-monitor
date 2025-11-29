@@ -5,6 +5,7 @@
 .aider*
 .claude/
 .cursorindexingignore
+src/generated_version.ts
 
 # ==============================================================================
 # SECURITY & CREDENTIALS

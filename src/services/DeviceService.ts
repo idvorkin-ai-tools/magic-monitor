@@ -118,35 +118,6 @@ export const DeviceService = {
 		return window.location.pathname;
 	},
 
-	async fetchLatestCommit(
-		repoUrl: string,
-	): Promise<{ sha: string; message: string; url: string } | null> {
-		try {
-			// Extract owner/repo from URL like https://github.com/owner/repo
-			const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
-			if (!match) return null;
-			const [, owner, repo] = match;
-
-			const response = await fetch(
-				`https://api.github.com/repos/${owner}/${repo}/commits?per_page=1`,
-				{ headers: { Accept: "application/vnd.github.v3+json" } },
-			);
-			if (!response.ok) return null;
-
-			const commits = await response.json();
-			if (!commits.length) return null;
-
-			const commit = commits[0];
-			return {
-				sha: commit.sha.substring(0, 7),
-				message: commit.commit.message.split("\n")[0],
-				url: commit.html_url,
-			};
-		} catch {
-			return null;
-		}
-	},
-
 	async captureScreenshot(): Promise<string | null> {
 		try {
 			const stream = await navigator.mediaDevices.getDisplayMedia({

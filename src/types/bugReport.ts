@@ -11,9 +11,3 @@ export interface BugReportMetadata {
 	timestamp: string;
 	appVersion: string;
 }
-
-export interface LatestCommit {
-	sha: string;
-	message: string;
-	url: string;
-}

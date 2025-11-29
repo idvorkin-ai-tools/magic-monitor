@@ -1,8 +1,5 @@
-import type {
-	BugReportData,
-	BugReportMetadata,
-	LatestCommit,
-} from "../types/bugReport";
+import type { BugReportData, BugReportMetadata } from "../types/bugReport";
+import { GIT_COMMIT_URL, GIT_SHA_SHORT } from "../version";
 
 export function formatDate(date: Date = new Date()): string {
 	return date.toLocaleDateString("en-US", {
@@ -17,18 +14,13 @@ export function buildDefaultTitle(): string {
 }
 
 export function buildDefaultDescription(
-	latestCommit: LatestCommit | null,
-	githubRepoUrl: string,
 	currentDate: Date = new Date(),
 ): string {
 	const date = formatDate(currentDate);
-	const versionLine = latestCommit
-		? `**Latest version:** [${latestCommit.sha}](${latestCommit.url}) - ${latestCommit.message}`
-		: `**Latest version:** [${githubRepoUrl}](${githubRepoUrl})`;
 
 	return `**Date:** ${date}
 
-${versionLine}
+**Build:** [${GIT_SHA_SHORT}](${GIT_COMMIT_URL})
 
 **What were you trying to do?**
 
@@ -95,6 +87,6 @@ export function getMetadata(
 		route: getCurrentRoute(),
 		userAgent: getUserAgent(),
 		timestamp: currentDate.toISOString(),
-		appVersion: "0.0.0",
+		appVersion: GIT_SHA_SHORT,
 	};
 }

@@ -27,33 +27,22 @@ describe("buildDefaultTitle", () => {
 });
 
 describe("buildDefaultDescription", () => {
-	const repoUrl = "https://github.com/test/repo";
 	const testDate = new Date("2025-11-29T12:00:00Z");
 
 	it("includes date in description", () => {
-		const result = buildDefaultDescription(null, repoUrl, testDate);
+		const result = buildDefaultDescription(testDate);
 		expect(result).toContain("**Date:** Nov 29, 2025");
 	});
 
-	it("includes repo link when no commit provided", () => {
-		const result = buildDefaultDescription(null, repoUrl, testDate);
-		expect(result).toContain(`**Latest version:** [${repoUrl}](${repoUrl})`);
-	});
-
-	it("includes commit info when provided", () => {
-		const commit = {
-			sha: "abc1234",
-			message: "Fix a bug",
-			url: "https://github.com/test/repo/commit/abc1234",
-		};
-		const result = buildDefaultDescription(commit, repoUrl, testDate);
-		expect(result).toContain(
-			"**Latest version:** [abc1234](https://github.com/test/repo/commit/abc1234) - Fix a bug",
-		);
+	it("includes build info with linked commit", () => {
+		const result = buildDefaultDescription(testDate);
+		// Build info should always be a linked commit SHA
+		expect(result).toContain("**Build:** [");
+		expect(result).toContain("](");
 	});
 
 	it("includes prompts for user input", () => {
-		const result = buildDefaultDescription(null, repoUrl, testDate);
+		const result = buildDefaultDescription(testDate);
 		expect(result).toContain("**What were you trying to do?**");
 		expect(result).toContain("**What happened instead?**");
 		expect(result).toContain("**Steps to reproduce:**");
@@ -161,12 +150,12 @@ describe("getMetadata", () => {
 			testDate,
 		);
 
-		expect(result).toEqual({
-			route: "/test-route",
-			userAgent: "TestAgent/1.0",
-			timestamp: "2025-11-29T12:00:00.000Z",
-			appVersion: "0.0.0",
-		});
+		expect(result.route).toBe("/test-route");
+		expect(result.userAgent).toBe("TestAgent/1.0");
+		expect(result.timestamp).toBe("2025-11-29T12:00:00.000Z");
+		// appVersion is now the build-time SHA (or "dev" in dev mode)
+		expect(typeof result.appVersion).toBe("string");
+		expect(result.appVersion.length).toBeGreaterThan(0);
 	});
 
 	it("uses provided getters", () => {

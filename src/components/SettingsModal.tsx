@@ -1,4 +1,4 @@
-import { Bug, ExternalLink, Github, Smartphone } from "lucide-react";
+import { ExternalLink, Github, Smartphone } from "lucide-react";
 import {
 	SMOOTHING_PRESET_DESCRIPTIONS,
 	SMOOTHING_PRESET_LABELS,
@@ -50,13 +50,13 @@ interface SettingsModalProps {
 	onCheckForUpdate?: () => void;
 	onReloadForUpdate?: () => void;
 
-	// Bug Reporting
-	onReportBug: () => void;
+	// Shake to Report (mobile)
 	shakeEnabled: boolean;
 	onShakeEnabledChange: (enabled: boolean) => void;
 	isShakeSupported: boolean;
-	githubRepoUrl: string;
-	bugReportShortcut: string; // e.g., "⌘I" or "Ctrl+I"
+
+	// About
+	onOpenAbout: () => void;
 }
 
 export function SettingsModal({
@@ -90,12 +90,10 @@ export function SettingsModal({
 	lastCheckTime,
 	onCheckForUpdate,
 	onReloadForUpdate,
-	onReportBug,
 	shakeEnabled,
 	onShakeEnabledChange,
 	isShakeSupported,
-	githubRepoUrl,
-	bugReportShortcut,
+	onOpenAbout,
 }: SettingsModalProps) {
 	const handleHQToggle = () => {
 		if (!isHQ && isLowMemory) {
@@ -367,19 +365,17 @@ export function SettingsModal({
 						</div>
 					</div>
 
-					<div className="h-px bg-white/10 my-4" />
-
-					{/* Bug Reporting */}
-					<div className="space-y-3">
-						<div className="text-white font-medium">Bug Reporting</div>
-
-						{/* Shake to Report (mobile only) */}
-						{isShakeSupported && (
+					{/* Shake to Report (mobile only) */}
+					{isShakeSupported && (
+						<>
+							<div className="h-px bg-white/10 my-4" />
 							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-2">
 									<Smartphone className="w-4 h-4 text-gray-400" />
 									<div>
-										<div className="text-white text-sm">Shake to Report</div>
+										<div className="text-white text-sm">
+											Shake to Report Bug
+										</div>
 										<div className="text-xs text-gray-500">
 											Shake device to report a bug
 										</div>
@@ -391,22 +387,8 @@ export function SettingsModal({
 									color="orange"
 								/>
 							</div>
-						)}
-
-						<button
-							onClick={() => {
-								onReportBug();
-								onClose();
-							}}
-							className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600/20 border border-red-500/30 rounded-lg text-red-300 hover:bg-red-600/30 transition-colors"
-						>
-							<Bug className="w-4 h-4" />
-							Report a Bug
-							<kbd className="ml-2 px-1.5 py-0.5 bg-white/10 rounded text-xs text-red-400">
-								{bugReportShortcut}
-							</kbd>
-						</button>
-					</div>
+						</>
+					)}
 
 					<div className="h-px bg-white/10 my-4" />
 
@@ -414,23 +396,24 @@ export function SettingsModal({
 					<div className="space-y-3">
 						<div className="text-white font-medium">About</div>
 
-						<a
-							href={githubRepoUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors"
+						<button
+							onClick={() => {
+								onClose();
+								onOpenAbout();
+							}}
+							className="w-full flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors text-left"
 						>
 							<Github className="w-5 h-5 text-white" />
 							<div className="flex-1">
 								<div className="text-white text-sm font-medium">
-									View on GitHub
+									About Magic Monitor
 								</div>
 								<div className="text-xs text-gray-500">
-									{githubRepoUrl.replace("https://", "")}
+									Version info and links
 								</div>
 							</div>
 							<ExternalLink className="w-4 h-4 text-gray-500" />
-						</a>
+						</button>
 					</div>
 				</div>
 			</div>

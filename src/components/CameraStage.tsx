@@ -1,5 +1,4 @@
 import { Settings } from "lucide-react";
-import { StatusButton } from "./StatusButton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBugReporter } from "../hooks/useBugReporter";
 import { useCamera } from "../hooks/useCamera";
@@ -12,10 +11,12 @@ import { useTimeMachine } from "../hooks/useTimeMachine";
 import { useVersionCheck } from "../hooks/useVersionCheck";
 import { DeviceService } from "../services/DeviceService";
 import type { SmoothingPreset } from "../smoothing";
+import { AboutModal } from "./AboutModal";
 import { BugReportModal } from "./BugReportModal";
 import { HandSkeleton } from "./HandSkeleton";
 import { Minimap } from "./Minimap";
 import { SettingsModal } from "./SettingsModal";
+import { StatusButton } from "./StatusButton";
 import { Thumbnail } from "./Thumbnail";
 
 // Storage keys for persisted settings
@@ -97,6 +98,7 @@ export function CameraStage() {
 		);
 	});
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+	const [isAboutOpen, setIsAboutOpen] = useState(false);
 
 	// Mirror state (persisted to localStorage)
 	const [isMirror, setIsMirrorInternal] = useState(() => {
@@ -487,11 +489,17 @@ export function CameraStage() {
 				lastCheckTime={lastCheckTime}
 				onCheckForUpdate={checkForUpdate}
 				onReloadForUpdate={reloadForUpdate}
-				onReportBug={bugReporter.open}
 				shakeEnabled={bugReporter.shakeEnabled}
 				onShakeEnabledChange={bugReporter.setShakeEnabled}
 				isShakeSupported={isShakeSupported}
+				onOpenAbout={() => setIsAboutOpen(true)}
+			/>
+
+			<AboutModal
+				isOpen={isAboutOpen}
+				onClose={() => setIsAboutOpen(false)}
 				githubRepoUrl={bugReporter.githubRepoUrl}
+				onReportBug={bugReporter.open}
 				bugReportShortcut={bugReportShortcut}
 			/>
 

@@ -22,7 +22,6 @@ function createMockService(
 		getCurrentRoute: () => "/",
 		captureScreenshot: async () => null,
 		copyImageToClipboard: async () => false,
-		fetchLatestCommit: async () => null,
 		downloadDataUrl: () => {},
 		isMobileDevice: () => false,
 		...overrides,
