@@ -170,10 +170,10 @@ export function SettingsModal({
 							</div>
 						</div>
 						<ToggleSwitch
-						checked={isMirror}
-						onChange={onMirrorChange}
-						color="blue"
-					/>
+							checked={isMirror}
+							onChange={onMirrorChange}
+							color="blue"
+						/>
 					</div>
 
 					{/* Performance */}
@@ -192,10 +192,10 @@ export function SettingsModal({
 							</div>
 						</div>
 						<ToggleSwitch
-						checked={isHQ}
-						onChange={() => handleHQToggle()}
-						color={isHQ ? "purple" : isLowMemory ? "orange" : "blue"}
-					/>
+							checked={isHQ}
+							onChange={() => handleHQToggle()}
+							color={isHQ ? "purple" : isLowMemory ? "orange" : "blue"}
+						/>
 					</div>
 
 					{/* Smart Zoom */}
@@ -205,11 +205,11 @@ export function SettingsModal({
 							<div className="text-xs text-gray-500">Auto-follow movement</div>
 						</div>
 						<ToggleSwitch
-						checked={isSmartZoom}
-						onChange={onSmartZoomChange}
-						disabled={isModelLoading}
-						color="green"
-					/>
+							checked={isSmartZoom}
+							onChange={onSmartZoomChange}
+							disabled={isModelLoading}
+							color="green"
+						/>
 					</div>
 
 					{/* Smoothing Algorithm (shown when Smart Zoom enabled) */}
@@ -253,12 +253,12 @@ export function SettingsModal({
 									</div>
 								</div>
 								<ToggleSwitch
-								checked={showHandSkeleton}
-								onChange={onShowHandSkeletonChange}
-								disabled={isModelLoading}
-								color="yellow"
-								size="sm"
-							/>
+									checked={showHandSkeleton}
+									onChange={onShowHandSkeletonChange}
+									disabled={isModelLoading}
+									color="yellow"
+									size="sm"
+								/>
 							</div>
 						</div>
 					)}
@@ -386,10 +386,10 @@ export function SettingsModal({
 									</div>
 								</div>
 								<ToggleSwitch
-								checked={shakeEnabled}
-								onChange={onShakeEnabledChange}
-								color="orange"
-							/>
+									checked={shakeEnabled}
+									onChange={onShakeEnabledChange}
+									color="orange"
+								/>
 							</div>
 						)}
 

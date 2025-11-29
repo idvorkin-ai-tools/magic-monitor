@@ -31,6 +31,7 @@ export function StatusButton({
 }: StatusButtonProps) {
 	return (
 		<button
+			type="button"
 			onClick={onClick}
 			disabled={disabled}
 			title={title}

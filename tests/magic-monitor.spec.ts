@@ -160,19 +160,9 @@ test.describe("Magic Monitor E2E", () => {
 
 		// Quality Toggle
 		await page.getByTitle("Settings").click();
-		// The HQ toggle is inside the settings modal
-		// We can find it by the text "High Quality Mode" or the button next to it
-		// The button has an onClick handler but no specific text/title.
-		// Let's look at the structure in SettingsModal.tsx:
-		// <div className="text-white font-medium">High Quality Mode</div>
-		// ... <button onClick={...}>
-
-		// We can find the button relative to the text, or just click the toggle button if we can identify it.
-		// The toggle button has classes: w-12 h-6 rounded-full ...
-		// Let's use a locator that finds the button associated with the text or just the button.
-		// Since there are multiple toggles, we need to be specific.
-		// The first toggle is HQ.
-		const hqToggle = page.locator("button.w-12.h-6").first();
+		// Find the HQ toggle by locating the text then finding the adjacent toggle button
+		const hqSection = page.locator("text=High Quality Mode").locator("..");
+		const hqToggle = hqSection.locator('button[role="switch"]');
 
 		// Initial state: LQ (isHQ false) -> bg-gray-700
 		await expect(hqToggle).toHaveClass(/bg-gray-700/);
