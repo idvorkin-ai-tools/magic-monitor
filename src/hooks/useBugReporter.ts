@@ -92,7 +92,7 @@ function buildIssueBody(
 		const isMobile = DeviceService.isMobileDevice();
 		body += `
 **Screenshot**
-_(Screenshot ${isMobile ? "was saved to your device - attach it here" : "is on your clipboard - paste it here with Ctrl+V / Cmd+V"})_
+_(Screenshot ${isMobile ? "was saved to your Photos - attach it here" : "is on your clipboard - paste it here with Ctrl+V / Cmd+V"})_
 `;
 	}
 
@@ -158,10 +158,15 @@ export function useBugReporter() {
 
 			if (data.screenshot) {
 				if (isMobile) {
-					// Mobile: save to disk since clipboard image copy often fails
-					const filename = `bug-screenshot-${Date.now()}.png`;
-					DeviceService.downloadDataUrl(data.screenshot, filename);
-					screenshotSavedToDisk = true;
+					// Mobile: prompt user to save screenshot to Photos
+					const shouldSave = window.confirm(
+						"Save screenshot to your Photos?\n\nYou can then attach it to the GitHub issue.",
+					);
+					if (shouldSave) {
+						const filename = `bug-screenshot-${Date.now()}.png`;
+						DeviceService.downloadDataUrl(data.screenshot, filename);
+						screenshotSavedToDisk = true;
+					}
 				} else {
 					// Desktop: copy to clipboard
 					hasScreenshotOnClipboard = await DeviceService.copyImageToClipboard(

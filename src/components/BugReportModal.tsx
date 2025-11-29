@@ -189,7 +189,7 @@ export function BugReportModal({
 						) : screenshotSavedToDisk ? (
 							<div className="text-gray-400 text-sm mb-6">
 								<strong className="text-yellow-400">
-									Screenshot saved to your device!
+									Screenshot saved to your Photos!
 								</strong>
 								<br />
 								Attach it to the GitHub issue using the file picker.
