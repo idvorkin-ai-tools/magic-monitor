@@ -45,6 +45,7 @@ export function BugReportModal({
 	const [submitted, setSubmitted] = useState(false);
 	const [hasScreenshotOnClipboard, setHasScreenshotOnClipboard] =
 		useState(false);
+	const [screenshotSavedToDisk, setScreenshotSavedToDisk] = useState(false);
 	const [showShakePrompt, setShowShakePrompt] = useState(false);
 	const [wasOpen, setWasOpen] = useState(false);
 	const isCapturingRef = useRef(false);
@@ -85,6 +86,9 @@ export function BugReportModal({
 			setHasScreenshotOnClipboard(
 				"hasScreenshotOnClipboard" in result &&
 					!!result.hasScreenshotOnClipboard,
+			);
+			setScreenshotSavedToDisk(
+				"screenshotSavedToDisk" in result && !!result.screenshotSavedToDisk,
 			);
 		}
 	}, [title, description, includeMetadata, screenshot, onSubmit]);
@@ -181,6 +185,14 @@ export function BugReportModal({
 								Paste it in the GitHub issue with{" "}
 								<kbd className="px-1.5 py-0.5 bg-white/10 rounded">Ctrl+V</kbd>{" "}
 								/ <kbd className="px-1.5 py-0.5 bg-white/10 rounded">Cmd+V</kbd>
+							</div>
+						) : screenshotSavedToDisk ? (
+							<div className="text-gray-400 text-sm mb-6">
+								<strong className="text-yellow-400">
+									Screenshot saved to your device!
+								</strong>
+								<br />
+								Attach it to the GitHub issue using the file picker.
 							</div>
 						) : (
 							<div className="text-gray-400 text-sm mb-6">

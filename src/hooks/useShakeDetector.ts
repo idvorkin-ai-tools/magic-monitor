@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { DeviceService } from "../services/DeviceService";
 
-const DEFAULT_THRESHOLD = 15; // m/s²
-const DEFAULT_COOLDOWN_MS = 3000;
+const DEFAULT_THRESHOLD = 25; // Total acceleration magnitude threshold
+const DEFAULT_COOLDOWN_MS = 2000;
 
 interface UseShakeDetectorOptions {
 	enabled: boolean;
@@ -22,15 +22,17 @@ export function useShakeDetector({
 
 	const handleMotion = useCallback(
 		(event: DeviceMotionEvent) => {
-			const { x, y, z } = event.accelerationIncludingGravity || {};
+			// Prefer acceleration (without gravity) for cleaner shake detection
+			const accel = event.acceleration ?? event.accelerationIncludingGravity;
+			const { x, y, z } = accel || {};
 			if (x == null || y == null || z == null) return;
 
 			const magnitude = Math.sqrt(x * x + y * y + z * z);
 
-			// Subtract gravity (~9.8) to detect actual shake acceleration
-			const shakeAcceleration = Math.abs(magnitude - 9.8);
-
-			if (shakeAcceleration > threshold) {
+			// When using accelerationIncludingGravity, magnitude at rest is ~9.8
+			// When using acceleration (preferred), magnitude at rest is ~0
+			// A good shake produces magnitudes of 20-40+ m/s²
+			if (magnitude > threshold) {
 				const now = Date.now();
 				if (now - lastShakeRef.current > cooldownMs) {
 					lastShakeRef.current = now;

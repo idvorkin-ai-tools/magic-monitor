@@ -90,6 +90,21 @@ export const DeviceService = {
 		window.open(url, "_blank", "noopener,noreferrer");
 	},
 
+	downloadDataUrl(dataUrl: string, filename: string): void {
+		const link = document.createElement("a");
+		link.href = dataUrl;
+		link.download = filename;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+	},
+
+	isMobileDevice(): boolean {
+		return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+			navigator.userAgent,
+		);
+	},
+
 	getUserAgent(): string {
 		return navigator.userAgent;
 	},

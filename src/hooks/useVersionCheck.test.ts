@@ -33,6 +33,8 @@ function createMockService(
 		captureScreenshot: async () => null,
 		copyImageToClipboard: async () => false,
 		fetchLatestCommit: async () => null,
+		downloadDataUrl: () => {},
+		isMobileDevice: () => false,
 		...overrides,
 	};
 }
