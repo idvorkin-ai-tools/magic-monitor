@@ -1,114 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
 import { DeviceService } from "../services/DeviceService";
+import type { BugReportData, LatestCommit } from "../types/bugReport";
+import {
+	buildDefaultDescription,
+	buildDefaultTitle,
+	buildGitHubIssueUrl,
+	buildIssueBody,
+	getMetadata,
+} from "../utils/bugReportFormatters";
 
 const GITHUB_REPO_URL = "https://github.com/idvorkin/magic-monitor";
 const STORAGE_KEY_SHAKE_ENABLED = "bug-report-shake-enabled";
 const STORAGE_KEY_FIRST_TIME = "bug-report-first-time-shown";
 
-export interface BugReportData {
-	title: string;
-	description: string;
-	includeMetadata: boolean;
-	screenshot?: string; // base64 data URL
-}
-
-export interface BugReportMetadata {
-	route: string;
-	userAgent: string;
-	timestamp: string;
-	appVersion: string;
-}
-
-interface LatestCommit {
-	sha: string;
-	message: string;
-	url: string;
-}
-
-function getMetadata(): BugReportMetadata {
-	return {
-		route: DeviceService.getCurrentRoute(),
-		userAgent: DeviceService.getUserAgent(),
-		timestamp: new Date().toISOString(),
-		appVersion: "0.0.0", // Could be injected at build time
-	};
-}
-
-function formatDate(): string {
-	return new Date().toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		year: "numeric",
-	});
-}
-
-function buildDefaultTitle(): string {
-	return "Bug";
-}
-
-function buildDefaultDescription(latestCommit: LatestCommit | null): string {
-	const date = formatDate();
-	const versionLine = latestCommit
-		? `**Latest version:** [${latestCommit.sha}](${latestCommit.url}) - ${latestCommit.message}`
-		: `**Latest version:** [${GITHUB_REPO_URL}](${GITHUB_REPO_URL})`;
-
-	return `**Date:** ${date}
-
-${versionLine}
-
-**What were you trying to do?**
-
-
-**What happened instead?**
-
-
-**Steps to reproduce:**
-1.
-`;
-}
-
-function buildIssueBody(
-	data: BugReportData,
-	metadata: BugReportMetadata,
-): string {
-	let body = data.description;
-
-	if (data.includeMetadata) {
-		body += `
-
----
-
-**App Metadata**
-| Field | Value |
-|-------|-------|
-| Route | \`${metadata.route}\` |
-| App Version | \`${metadata.appVersion}\` |
-| Browser | \`${metadata.userAgent}\` |
-| Timestamp | \`${metadata.timestamp}\` |
-`;
-	}
-
-	if (data.screenshot && !DeviceService.isMobileDevice()) {
-		body += `
-**Screenshot**
-_(Screenshot is on your clipboard - paste it here with Ctrl+V / Cmd+V)_
-`;
-	}
-
-	return body;
-}
+export type { BugReportData } from "../types/bugReport";
 
 export function useBugReporter() {
 	const [isOpen, setIsOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [latestCommit, setLatestCommit] = useState<LatestCommit | null>(null);
 
-	// Fetch latest commit on mount
 	useEffect(() => {
 		DeviceService.fetchLatestCommit(GITHUB_REPO_URL).then(setLatestCommit);
 	}, []);
 
-	// Shake detection preference
 	const [shakeEnabled, setShakeEnabledState] = useState(() => {
 		return DeviceService.getStorageItem(STORAGE_KEY_SHAKE_ENABLED) === "true";
 	});
@@ -133,7 +48,7 @@ export function useBugReporter() {
 	const getDefaultData = useCallback((): BugReportData => {
 		return {
 			title: buildDefaultTitle(),
-			description: buildDefaultDescription(latestCommit),
+			description: buildDefaultDescription(latestCommit, GITHUB_REPO_URL),
 			includeMetadata: true,
 		};
 	}, [latestCommit]);
@@ -141,18 +56,21 @@ export function useBugReporter() {
 	const submit = useCallback(async (data: BugReportData) => {
 		setIsSubmitting(true);
 		try {
-			const metadata = getMetadata();
-			const body = buildIssueBody(data, metadata);
+			const isMobile = DeviceService.isMobileDevice();
+			const metadata = getMetadata(
+				() => DeviceService.getCurrentRoute(),
+				() => DeviceService.getUserAgent(),
+			);
+			const body = buildIssueBody(data, metadata, {
+				isMobile,
+				hasScreenshot: !!data.screenshot,
+			});
 
-			// Build the issue URL with pre-filled data
-			const issueUrl = new URL(`${GITHUB_REPO_URL}/issues/new`);
-			issueUrl.searchParams.set("title", data.title);
-			issueUrl.searchParams.set("body", body);
-			issueUrl.searchParams.set("labels", "bug,from-app");
+			const issueUrl = buildGitHubIssueUrl(GITHUB_REPO_URL, data.title, body);
 
 			// Desktop: copy screenshot to clipboard if available
 			let hasScreenshotOnClipboard = false;
-			if (data.screenshot && !DeviceService.isMobileDevice()) {
+			if (data.screenshot && !isMobile) {
 				hasScreenshotOnClipboard = await DeviceService.copyImageToClipboard(
 					data.screenshot,
 				);
@@ -164,8 +82,7 @@ export function useBugReporter() {
 				await DeviceService.copyToClipboard(clipboardText);
 			}
 
-			// Open GitHub in new tab
-			DeviceService.openInNewTab(issueUrl.toString());
+			DeviceService.openInNewTab(issueUrl);
 
 			return { success: true, hasScreenshotOnClipboard };
 		} catch (error) {

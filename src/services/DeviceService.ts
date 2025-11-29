@@ -68,8 +68,13 @@ export const DeviceService = {
 		return () => window.removeEventListener("devicemotion", callback);
 	},
 
-	copyToClipboard(text: string): Promise<void> {
-		return navigator.clipboard.writeText(text);
+	async copyToClipboard(text: string): Promise<boolean> {
+		try {
+			await navigator.clipboard.writeText(text);
+			return true;
+		} catch {
+			return false;
+		}
 	},
 
 	async copyImageToClipboard(dataUrl: string): Promise<boolean> {

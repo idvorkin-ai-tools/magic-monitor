@@ -16,7 +16,7 @@ function createMockService(
 		hasDeviceMotion: () => false,
 		requestDeviceMotionPermission: async () => "denied",
 		addDeviceMotionListener: () => () => {},
-		copyToClipboard: async () => {},
+		copyToClipboard: async () => true,
 		openInNewTab: () => {},
 		getUserAgent: () => "test-agent",
 		getCurrentRoute: () => "/",

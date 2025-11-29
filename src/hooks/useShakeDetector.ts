@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef } from "react";
 import { DeviceService } from "../services/DeviceService";
+import {
+	calculateMagnitude,
+	extractAcceleration,
+	isShakeDetected,
+} from "../utils/shakeDetection";
 
-const DEFAULT_THRESHOLD = 25; // Total acceleration magnitude threshold
-const DEFAULT_COOLDOWN_MS = 2000;
+export const DEFAULT_SHAKE_THRESHOLD = 25;
+export const DEFAULT_SHAKE_COOLDOWN_MS = 2000;
 
 interface UseShakeDetectorOptions {
 	enabled: boolean;
@@ -13,8 +18,8 @@ interface UseShakeDetectorOptions {
 
 export function useShakeDetector({
 	enabled,
-	threshold = DEFAULT_THRESHOLD,
-	cooldownMs = DEFAULT_COOLDOWN_MS,
+	threshold = DEFAULT_SHAKE_THRESHOLD,
+	cooldownMs = DEFAULT_SHAKE_COOLDOWN_MS,
 	onShake,
 }: UseShakeDetectorOptions) {
 	const lastShakeRef = useRef<number>(0);
@@ -22,22 +27,23 @@ export function useShakeDetector({
 
 	const handleMotion = useCallback(
 		(event: DeviceMotionEvent) => {
-			// Prefer acceleration (without gravity) for cleaner shake detection
-			const accel = event.acceleration ?? event.accelerationIncludingGravity;
-			const { x, y, z } = accel || {};
-			if (x == null || y == null || z == null) return;
+			const accel = extractAcceleration(event);
+			if (!accel) return;
 
-			const magnitude = Math.sqrt(x * x + y * y + z * z);
+			const magnitude = calculateMagnitude(accel);
+			const now = Date.now();
 
-			// When using accelerationIncludingGravity, magnitude at rest is ~9.8
-			// When using acceleration (preferred), magnitude at rest is ~0
-			// A good shake produces magnitudes of 20-40+ m/s²
-			if (magnitude > threshold) {
-				const now = Date.now();
-				if (now - lastShakeRef.current > cooldownMs) {
-					lastShakeRef.current = now;
-					onShake();
-				}
+			if (
+				isShakeDetected(
+					magnitude,
+					threshold,
+					now,
+					lastShakeRef.current,
+					cooldownMs,
+				)
+			) {
+				lastShakeRef.current = now;
+				onShake();
 			}
 		},
 		[threshold, cooldownMs, onShake],
@@ -57,7 +63,6 @@ export function useShakeDetector({
 			return;
 		}
 
-		// Request permission on iOS if not already granted
 		if (!permissionGrantedRef.current) {
 			DeviceService.requestDeviceMotionPermission().then((result) => {
 				permissionGrantedRef.current = result === "granted";
