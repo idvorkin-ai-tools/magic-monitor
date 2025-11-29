@@ -622,18 +622,6 @@ export function CameraStage() {
 					</button>
 
 					<button
-						onClick={() => setIsMirror(!isMirror)}
-						className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-							isMirror
-								? "bg-blue-600 text-white"
-								: "bg-white/10 text-white/50 hover:bg-white/20 hover:text-white"
-						}`}
-						title="Mirror video horizontally"
-					>
-						{isMirror ? "🪞 Mirror ✓" : "🪞 Mirror"}
-					</button>
-
-					<button
 						onClick={handleHQToggle}
 						className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
 							isHQ
