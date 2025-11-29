@@ -1,7 +1,8 @@
-import { Settings } from "lucide-react";
+import { Download, Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBugReporter } from "../hooks/useBugReporter";
 import { useCamera } from "../hooks/useCamera";
+import { useDiskTimeMachine } from "../hooks/useDiskTimeMachine";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
@@ -28,11 +29,14 @@ const FLASH_ENABLED_STORAGE_KEY = "magic-monitor-flash-enabled";
 const FLASH_THRESHOLD_STORAGE_KEY = "magic-monitor-flash-threshold";
 const FLASH_TARGET_COLOR_STORAGE_KEY = "magic-monitor-flash-target-color";
 const MIRROR_STORAGE_KEY = "magic-monitor-mirror";
+const DISK_REWIND_STORAGE_KEY = "magic-monitor-disk-rewind";
 
 export function CameraStage() {
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const replayVideoRef = useRef<HTMLVideoElement>(null);
+	const streamRef = useRef<MediaStream | null>(null);
 
 	// Zoom/Pan State
 	const [zoom, setZoom] = useState(1);
@@ -105,6 +109,13 @@ export function CameraStage() {
 		return DeviceService.getStorageItem(MIRROR_STORAGE_KEY) === "true";
 	});
 
+	// Disk-based rewind state (persisted to localStorage, default true for low memory)
+	const [useDiskRewind, setUseDiskRewindInternal] = useState(() => {
+		const stored = DeviceService.getStorageItem(DISK_REWIND_STORAGE_KEY);
+		if (stored !== null) return stored === "true";
+		return true; // Default to disk mode
+	});
+
 	// Smoothing preset state (persisted to localStorage)
 	const [smoothingPreset, setSmoothingPresetInternal] =
 		useState<SmoothingPreset>(() => {
@@ -170,6 +181,11 @@ export function CameraStage() {
 		DeviceService.setStorageItem(MIRROR_STORAGE_KEY, String(value));
 	}, []);
 
+	const setUseDiskRewind = useCallback((value: boolean) => {
+		setUseDiskRewindInternal(value);
+		DeviceService.setStorageItem(DISK_REWIND_STORAGE_KEY, String(value));
+	}, []);
+
 	// Initialize HQ based on device detection (once, only if no stored preference)
 	useEffect(() => {
 		if (!hqInitialized) {
@@ -226,13 +242,58 @@ export function CameraStage() {
 
 	// Time Machine State
 	// We always enable recording in the background for "Instant Replay" capability
-	const timeMachine = useTimeMachine({
+	// Memory-based (for when disk mode is off)
+	const memoryTimeMachine = useTimeMachine({
 		videoRef,
-		enabled: true,
+		enabled: !useDiskRewind,
 		bufferSeconds: 60,
 		fps: isHQ ? 30 : 15,
 		quality: isHQ ? 0.5 : 0.35,
 	});
+
+	// Disk-based time machine (lower memory, uses IndexedDB)
+	const diskTimeMachine = useDiskTimeMachine({
+		streamRef,
+		enabled: useDiskRewind,
+		chunkDurationMs: 5000, // 5 second chunks
+		maxChunks: 12, // 60 seconds total
+	});
+
+	// Unified time machine interface
+	const timeMachine = useDiskRewind
+		? {
+				isReplaying: diskTimeMachine.isReplaying,
+				isPlaying: diskTimeMachine.isPlaying,
+				frame: null as ImageBitmap | null, // Disk mode uses video element
+				currentTime: diskTimeMachine.currentTime / 1000, // Convert ms to seconds
+				totalTime: diskTimeMachine.totalDuration / 1000,
+				memoryUsageMB: 0, // Disk-based, minimal memory
+				enterReplay: diskTimeMachine.enterReplay,
+				exitReplay: diskTimeMachine.exitReplay,
+				play: diskTimeMachine.play,
+				pause: diskTimeMachine.pause,
+				seek: (time: number) => diskTimeMachine.seek(time * 1000), // Convert seconds to ms
+				getThumbnails: (count: number) =>
+					diskTimeMachine.previews.slice(0, count).map((p, i) => ({
+						time: i * 5, // 5 seconds per chunk
+						frame: null as ImageBitmap | null,
+						imageUrl: p.imageUrl,
+					})),
+				// Disk-specific
+				videoSrc: diskTimeMachine.videoSrc,
+				previews: diskTimeMachine.previews,
+				saveVideo: diskTimeMachine.saveVideo,
+				chunkCount: diskTimeMachine.chunkCount,
+				isRecording: diskTimeMachine.isRecording,
+			}
+		: {
+				...memoryTimeMachine,
+				videoSrc: null as string | null,
+				previews: [] as { id: number; timestamp: number; imageUrl: string }[],
+				saveVideo: async () => {},
+				chunkCount: 0,
+				isRecording: false,
+			};
 
 	const isFlashing = useFlashDetector({
 		videoRef,
@@ -282,14 +343,15 @@ export function CameraStage() {
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [bugReporter]);
 
-	// Sync stream to video element
+	// Sync stream to video element and streamRef
 	useEffect(() => {
 		if (videoRef.current) {
 			videoRef.current.srcObject = stream;
 		}
+		streamRef.current = stream;
 	}, [stream]);
 
-	// Render replay frame to canvas
+	// Render replay frame to canvas (memory mode)
 	useEffect(() => {
 		if (timeMachine.isReplaying && timeMachine.frame && canvasRef.current) {
 			const ctx = canvasRef.current.getContext("2d");
@@ -300,6 +362,27 @@ export function CameraStage() {
 			}
 		}
 	}, [timeMachine.frame, timeMachine.isReplaying]);
+
+	// Handle disk replay video source
+	useEffect(() => {
+		if (useDiskRewind && replayVideoRef.current && timeMachine.videoSrc) {
+			replayVideoRef.current.src = timeMachine.videoSrc;
+			if (timeMachine.isPlaying) {
+				replayVideoRef.current.play().catch(console.error);
+			}
+		}
+	}, [useDiskRewind, timeMachine.videoSrc, timeMachine.isPlaying]);
+
+	// Sync disk replay video play/pause state
+	useEffect(() => {
+		if (!useDiskRewind || !replayVideoRef.current || !timeMachine.isReplaying)
+			return;
+		if (timeMachine.isPlaying) {
+			replayVideoRef.current.play().catch(console.error);
+		} else {
+			replayVideoRef.current.pause();
+		}
+	}, [useDiskRewind, timeMachine.isPlaying, timeMachine.isReplaying]);
 
 	// Escape key handler
 	useEscapeKey({
@@ -558,10 +641,21 @@ export function CameraStage() {
 				/>
 			)}
 
-			{/* Replay Canvas */}
+			{/* Replay Canvas (memory mode) */}
 			<canvas
 				ref={canvasRef}
-				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${timeMachine.isReplaying ? "block" : "hidden"}`}
+				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${timeMachine.isReplaying && !useDiskRewind ? "block" : "hidden"}`}
+				style={{
+					transform: getVideoTransform(),
+				}}
+			/>
+
+			{/* Replay Video (disk mode) */}
+			<video
+				ref={replayVideoRef}
+				playsInline
+				muted
+				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${timeMachine.isReplaying && useDiskRewind ? "block" : "hidden"}`}
 				style={{
 					transform: getVideoTransform(),
 				}}
