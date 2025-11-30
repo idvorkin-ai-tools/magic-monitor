@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as CameraService from "../services/CameraService";
+import { InsecureContextError } from "../services/CameraService";
 import { DeviceService } from "../services/DeviceService";
 
 const STORAGE_KEY = "magic-monitor-camera-device-id";
@@ -26,6 +27,11 @@ export function useCamera(initialDeviceId?: string) {
 	// Handle device changes
 	useEffect(() => {
 		getDevices();
+
+		// Skip event listener if mediaDevices unavailable (insecure context)
+		if (!navigator.mediaDevices) {
+			return;
+		}
 
 		const handleDeviceChange = () => {
 			getDevices();
@@ -81,7 +87,11 @@ export function useCamera(initialDeviceId?: string) {
 			} catch (err) {
 				if (isActive) {
 					console.error("Error accessing camera:", err);
-					setError("Could not access camera. Please allow permissions.");
+					if (err instanceof InsecureContextError) {
+						setError(err.message);
+					} else {
+						setError("Could not access camera. Please allow permissions.");
+					}
 					setStream(null);
 				}
 			}
