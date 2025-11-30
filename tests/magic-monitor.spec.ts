@@ -270,27 +270,7 @@ test.describe("Magic Monitor E2E", () => {
 		await expect(page.getByText("REPLAY MODE")).toBeHidden({ timeout: 5000 });
 	});
 
-	test("Time Machine: FFmpeg export produces valid WebM", async ({ page }) => {
-		// Replace FFmpegService module with a mock that just concatenates blobs
-		// This avoids loading the 2MB+ WASM from CDN during tests
-		await page.route(/FFmpegService/, async (route) => {
-			const mockModule = `
-				export const FFmpegService = {
-					isLoaded: () => true,
-					preload: async () => {},
-					onLoadingProgress: () => () => {},
-					mergeWebmBlobs: async (blobs) => {
-						return new Blob(blobs, { type: "video/webm" });
-					},
-				};
-			`;
-			await route.fulfill({
-				status: 200,
-				contentType: "application/javascript",
-				body: mockModule,
-			});
-		});
-
+	test("Time Machine: Export video downloads file", async ({ page }) => {
 		// Seed with 3 chunks for faster test
 		await seedRewindBuffer(page, 3);
 		await page.reload();
@@ -311,7 +291,7 @@ test.describe("Magic Monitor E2E", () => {
 		const saveButton = page.locator("button", { hasText: /Save/ });
 		await saveButton.click();
 
-		// Wait for download to complete (with mock, should be fast)
+		// Wait for download to complete
 		const download = await downloadPromise;
 
 		// Verify download filename pattern

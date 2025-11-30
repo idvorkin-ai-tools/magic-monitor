@@ -34,7 +34,6 @@ export interface DiskTimeMachineControls {
 	recordingError: string | null; // Error message if recording failed
 	isExporting: boolean; // True while export is in progress
 	exportProgress: number; // Export progress 0-1
-	isFFmpegReady: boolean; // True when FFmpeg.wasm is loaded
 
 	// Controls
 	enterReplay: () => void;
@@ -126,7 +125,6 @@ export function useDiskTimeMachine({
 	// Export state
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportProgress, setExportProgress] = useState(0);
-	const [isFFmpegReady, setIsFFmpegReady] = useState(false);
 
 	// Refs
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -138,25 +136,6 @@ export function useDiskTimeMachine({
 	useEffect(() => {
 		diskBufferService.init().catch(console.error);
 	}, [diskBufferService]);
-
-	// Preload FFmpeg in background (for faster first export)
-	useEffect(() => {
-		// Lazy import and preload after a short delay to not block initial render
-		const timer = setTimeout(async () => {
-			const { FFmpegService } = await import("../services/FFmpegService");
-			// Check if already loaded (from previous session/cache)
-			if (FFmpegService.isLoaded()) {
-				setIsFFmpegReady(true);
-				return;
-			}
-			FFmpegService.preload()
-				.then(() => setIsFFmpegReady(true))
-				.catch(() => {
-					// Silently ignore preload failures - will show error on actual export
-				});
-		}, 3000);
-		return () => clearTimeout(timer);
-	}, []);
 
 	// Load existing chunks on mount
 	useEffect(() => {
@@ -485,7 +464,6 @@ export function useDiskTimeMachine({
 		recordingError,
 		isExporting,
 		exportProgress,
-		isFFmpegReady,
 
 		// Controls
 		enterReplay,

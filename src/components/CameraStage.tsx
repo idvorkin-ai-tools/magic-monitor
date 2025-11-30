@@ -670,19 +670,11 @@ export function CameraStage() {
 											? "bg-yellow-600/80 cursor-wait"
 											: "bg-green-600/80 hover:bg-green-500"
 									}`}
-									title={
-										timeMachine.isExporting
-											? "Exporting video..."
-											: timeMachine.isFFmpegReady
-												? "Download replay video"
-												: "Download replay (first save downloads ~2MB encoder)"
-									}
+									title="Download replay video (may need VLC to play)"
 								>
 									{timeMachine.isExporting
 										? `⏳ ${Math.round(timeMachine.exportProgress * 100)}%`
-										: timeMachine.isFFmpegReady
-											? "💾 Save"
-											: "💾 Save*"}
+										: "💾 Save"}
 								</button>
 							)}
 

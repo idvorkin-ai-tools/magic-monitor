@@ -192,7 +192,8 @@ export const DiskBufferService = {
 
 	/**
 	 * Concatenate all chunks into a single video blob for export/download.
-	 * Uses FFmpeg.wasm for proper WebM merging.
+	 * Note: Simple blob concatenation - video may not be fully seekable.
+	 * For proper merging, use ffmpeg on the command line after download.
 	 *
 	 * @param onProgress - Optional progress callback (0-1)
 	 */
@@ -202,10 +203,12 @@ export const DiskBufferService = {
 			return new Blob([], { type: "video/webm" });
 		}
 
-		// Use FFmpeg for proper WebM concatenation
-		const { FFmpegService } = await import("./FFmpegService");
+		// Simple blob concatenation - fast but may have playback issues
 		const blobs = chunks.map((chunk) => chunk.blob);
-		return FFmpegService.mergeWebmBlobs(blobs, onProgress);
+		onProgress?.(0.5);
+		const result = new Blob(blobs, { type: "video/webm" });
+		onProgress?.(1);
+		return result;
 	},
 
 	/**

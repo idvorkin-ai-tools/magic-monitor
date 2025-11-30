@@ -1,16 +1,6 @@
 import "fake-indexeddb/auto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DiskBufferService, type VideoChunk } from "./DiskBufferService";
-
-// Mock FFmpegService since it won't work in Node environment
-vi.mock("./FFmpegService", () => ({
-	FFmpegService: {
-		mergeWebmBlobs: vi.fn(async (blobs: Blob[]) => {
-			// Simple concatenation for testing (just like old behavior)
-			return new Blob(blobs, { type: "video/webm" });
-		}),
-	},
-}));
 
 // Helper to create a test chunk
 function createTestChunk(
