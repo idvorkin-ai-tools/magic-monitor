@@ -269,4 +269,66 @@ test.describe("Magic Monitor E2E", () => {
 		await page.locator("button", { hasText: "✕" }).click();
 		await expect(page.getByText("REPLAY MODE")).toBeHidden({ timeout: 5000 });
 	});
+
+	test("Time Machine: FFmpeg export produces valid WebM", async ({ page }) => {
+		// Replace FFmpegService module with a mock that just concatenates blobs
+		// This avoids loading the 2MB+ WASM from CDN during tests
+		await page.route(/FFmpegService/, async (route) => {
+			const mockModule = `
+				export const FFmpegService = {
+					isLoaded: () => true,
+					preload: async () => {},
+					onLoadingProgress: () => () => {},
+					mergeWebmBlobs: async (blobs) => {
+						return new Blob(blobs, { type: "video/webm" });
+					},
+				};
+			`;
+			await route.fulfill({
+				status: 200,
+				contentType: "application/javascript",
+				body: mockModule,
+			});
+		});
+
+		// Seed with 3 chunks for faster test
+		await seedRewindBuffer(page, 3);
+		await page.reload();
+
+		// Wait for chunks to load
+		await expect(page.getByText(/\d+\/30 chunks/)).toBeVisible({
+			timeout: 15000,
+		});
+
+		// Enter replay mode
+		await page.getByText("Rewind").click();
+		await expect(page.getByText("REPLAY MODE")).toBeVisible();
+
+		// Set up download listener before clicking save
+		const downloadPromise = page.waitForEvent("download", { timeout: 30000 });
+
+		// Click save button
+		const saveButton = page.locator("button", { hasText: /Save/ });
+		await saveButton.click();
+
+		// Wait for download to complete (with mock, should be fast)
+		const download = await downloadPromise;
+
+		// Verify download filename pattern
+		expect(download.suggestedFilename()).toMatch(
+			/^magic-monitor-replay-.*\.webm$/,
+		);
+
+		// Save to temp location and verify we got something
+		const path = await download.path();
+		expect(path).toBeTruthy();
+
+		// The file should have content (at least the 3 chunks concatenated)
+		const fs = await import("node:fs/promises");
+		const stats = await fs.stat(path!);
+		expect(stats.size).toBeGreaterThan(0);
+
+		// Exit replay
+		await page.locator("button", { hasText: "✕" }).click();
+	});
 });
