@@ -128,6 +128,7 @@ className={clsx("px-3 py-1.5", isActive ? "bg-green-600" : "bg-gray-700", isDisa
 
 ### Clean Commits
 
+- **Never push directly to main** - always create a branch and open a PR
 - Run `git status` before committing to review staged files
 - Keep distinct changes in distinct commits
 - Avoid mixing linting/formatting changes with feature changes
