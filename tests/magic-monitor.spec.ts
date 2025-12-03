@@ -400,6 +400,81 @@ test.describe("Magic Monitor E2E", () => {
 	});
 });
 
+test.describe("Bug Report", () => {
+	test.beforeEach(async ({ page }) => {
+		await injectMockCamera(page);
+		await page.addInitScript(() => {
+			localStorage.clear();
+		});
+		await page.goto("/");
+	});
+
+	test("Bug report includes device details in metadata", async ({
+		page,
+		context,
+	}) => {
+		// Open bug report via keyboard shortcut (Ctrl+I or Cmd+I)
+		await page.keyboard.press("Control+i");
+
+		// Wait for bug report modal (use heading to be specific)
+		await expect(
+			page.getByRole("heading", { name: "Report a Bug" }),
+		).toBeVisible();
+
+		// Verify "Include technical details" checkbox is checked by default
+		const metadataCheckbox = page.locator('input[type="checkbox"]');
+		await expect(metadataCheckbox).toBeChecked();
+
+		// Fill in a title (required for submit)
+		await page.locator("#bug-title").fill("Test Bug Report");
+
+		// Listen for popup (GitHub issue page)
+		const popupPromise = context.waitForEvent("page");
+
+		// Submit the bug report
+		await page.getByText("Copy & Open GitHub").click();
+
+		// Wait for the popup and get its URL
+		const popup = await popupPromise;
+		const popupUrl = popup.url();
+
+		// Close the popup
+		await popup.close();
+
+		// Verify the URL is from GitHub
+		expect(popupUrl).toContain("github.com");
+
+		// GitHub may redirect to login page with return_to parameter
+		// Extract the actual issue URL from return_to if redirected
+		const url = new URL(popupUrl);
+		let issueUrl: URL;
+		const returnTo = url.searchParams.get("return_to");
+		if (returnTo) {
+			// Redirected to login - extract the original issue URL
+			issueUrl = new URL(decodeURIComponent(returnTo));
+		} else {
+			issueUrl = url;
+		}
+
+		// Verify it's the issues/new endpoint
+		expect(issueUrl.pathname).toContain("issues/new");
+
+		// Decode the body parameter to check for device details
+		const body = decodeURIComponent(issueUrl.searchParams.get("body") || "");
+
+		// Verify device details are present in the body
+		expect(body).toContain("App Metadata");
+		expect(body).toContain("Screen");
+		expect(body).toContain("Device Memory");
+		expect(body).toContain("CPU Cores");
+		expect(body).toContain("Online");
+		expect(body).toContain("Connection");
+		expect(body).toContain("Display Mode");
+		expect(body).toContain("Touch Device");
+		expect(body).toContain("Mobile");
+	});
+});
+
 test.describe("Error States", () => {
 	test("Shows error when camera permission denied", async ({ page }) => {
 		// Mock camera permission denied

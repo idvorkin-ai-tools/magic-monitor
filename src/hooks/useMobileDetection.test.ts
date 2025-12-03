@@ -8,7 +8,13 @@ function createMockService(
 ): DeviceServiceType {
 	return {
 		getScreenWidth: () => 1920,
+		getScreenHeight: () => 1080,
+		getDevicePixelRatio: () => 2,
 		getDeviceMemoryGB: () => null,
+		getHardwareConcurrency: () => 8,
+		isOnline: () => true,
+		getConnectionType: () => "4g",
+		getDisplayMode: () => "browser",
 		isTouchDevice: () => false,
 		addResizeListener: () => () => {},
 		getStorageItem: () => null,

@@ -7,11 +7,49 @@ export const DeviceService = {
 		return window.innerWidth;
 	},
 
+	getScreenHeight(): number {
+		return window.innerHeight;
+	},
+
+	getDevicePixelRatio(): number {
+		return window.devicePixelRatio;
+	},
+
 	getDeviceMemoryGB(): number | null {
 		if ("deviceMemory" in navigator) {
 			return (navigator as { deviceMemory?: number }).deviceMemory ?? null;
 		}
 		return null;
+	},
+
+	getHardwareConcurrency(): number | null {
+		return navigator.hardwareConcurrency ?? null;
+	},
+
+	isOnline(): boolean {
+		return navigator.onLine;
+	},
+
+	getConnectionType(): string | null {
+		const connection = (
+			navigator as {
+				connection?: { effectiveType?: string };
+			}
+		).connection;
+		return connection?.effectiveType ?? null;
+	},
+
+	getDisplayMode(): string {
+		if (window.matchMedia("(display-mode: standalone)").matches) {
+			return "standalone";
+		}
+		if (window.matchMedia("(display-mode: fullscreen)").matches) {
+			return "fullscreen";
+		}
+		if (window.matchMedia("(display-mode: minimal-ui)").matches) {
+			return "minimal-ui";
+		}
+		return "browser";
 	},
 
 	isTouchDevice(): boolean {

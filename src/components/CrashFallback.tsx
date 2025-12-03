@@ -11,6 +11,38 @@ export function CrashFallback({ error }: { error: Error }) {
 	const metadata = getMetadata(
 		() => window.location.pathname,
 		() => navigator.userAgent,
+		{
+			getScreenWidth: () => window.innerWidth,
+			getScreenHeight: () => window.innerHeight,
+			getDevicePixelRatio: () => window.devicePixelRatio,
+			getDeviceMemoryGB: () =>
+				"deviceMemory" in navigator
+					? (navigator as { deviceMemory?: number }).deviceMemory ?? null
+					: null,
+			getHardwareConcurrency: () => navigator.hardwareConcurrency ?? null,
+			isOnline: () => navigator.onLine,
+			getConnectionType: () => {
+				const connection = (
+					navigator as { connection?: { effectiveType?: string } }
+				).connection;
+				return connection?.effectiveType ?? null;
+			},
+			getDisplayMode: () => {
+				if (window.matchMedia("(display-mode: standalone)").matches)
+					return "standalone";
+				if (window.matchMedia("(display-mode: fullscreen)").matches)
+					return "fullscreen";
+				if (window.matchMedia("(display-mode: minimal-ui)").matches)
+					return "minimal-ui";
+				return "browser";
+			},
+			isTouchDevice: () =>
+				"ontouchstart" in window || navigator.maxTouchPoints > 0,
+			isMobileDevice: () =>
+				/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+					navigator.userAgent,
+				),
+		},
 	);
 	const reportUrl = buildGitHubIssueUrl(
 		GITHUB_REPO_URL,

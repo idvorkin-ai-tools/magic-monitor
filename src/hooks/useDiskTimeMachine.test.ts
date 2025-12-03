@@ -29,7 +29,13 @@ beforeAll(() => {
 const mockDeviceService = {
 	downloadDataUrl: vi.fn(),
 	getScreenWidth: () => 1920,
+	getScreenHeight: () => 1080,
+	getDevicePixelRatio: () => 2,
 	getDeviceMemoryGB: () => 8,
+	getHardwareConcurrency: () => 8,
+	isOnline: () => true,
+	getConnectionType: () => "4g",
+	getDisplayMode: () => "browser",
 	isTouchDevice: () => false,
 	addResizeListener: () => () => {},
 	getStorageItem: () => null,

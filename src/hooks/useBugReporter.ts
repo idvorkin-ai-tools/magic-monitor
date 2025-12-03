@@ -55,6 +55,18 @@ export function useBugReporter() {
 			const metadata = getMetadata(
 				() => DeviceService.getCurrentRoute(),
 				() => DeviceService.getUserAgent(),
+				{
+					getScreenWidth: () => DeviceService.getScreenWidth(),
+					getScreenHeight: () => DeviceService.getScreenHeight(),
+					getDevicePixelRatio: () => DeviceService.getDevicePixelRatio(),
+					getDeviceMemoryGB: () => DeviceService.getDeviceMemoryGB(),
+					getHardwareConcurrency: () => DeviceService.getHardwareConcurrency(),
+					isOnline: () => DeviceService.isOnline(),
+					getConnectionType: () => DeviceService.getConnectionType(),
+					getDisplayMode: () => DeviceService.getDisplayMode(),
+					isTouchDevice: () => DeviceService.isTouchDevice(),
+					isMobileDevice: () => DeviceService.isMobileDevice(),
+				},
 			);
 			const body = buildIssueBody(data, metadata, {
 				isMobile,

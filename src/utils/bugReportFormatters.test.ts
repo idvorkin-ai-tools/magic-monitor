@@ -61,6 +61,16 @@ describe("buildIssueBody", () => {
 		userAgent: "TestBrowser/1.0",
 		timestamp: "2025-11-29T12:00:00.000Z",
 		appVersion: "1.0.0",
+		screenWidth: 1920,
+		screenHeight: 1080,
+		devicePixelRatio: 2,
+		deviceMemoryGB: 8,
+		hardwareConcurrency: 8,
+		isOnline: true,
+		connectionType: "4g",
+		displayMode: "browser",
+		isTouchDevice: false,
+		isMobile: false,
 	};
 
 	it("includes description", () => {
@@ -79,6 +89,48 @@ describe("buildIssueBody", () => {
 		expect(result).toContain("**App Metadata**");
 		expect(result).toContain("| Route | `/test` |");
 		expect(result).toContain("| Browser | `TestBrowser/1.0` |");
+	});
+
+	it("includes device info in metadata table", () => {
+		const result = buildIssueBody(data, metadata, {
+			isMobile: false,
+			hasScreenshot: false,
+		});
+		expect(result).toContain("| Screen | `1920x1080 @2x` |");
+		expect(result).toContain("| Device Memory | `8 GB` |");
+		expect(result).toContain("| CPU Cores | `8 cores` |");
+		expect(result).toContain("| Online | `true` |");
+		expect(result).toContain("| Connection | `4g` |");
+		expect(result).toContain("| Display Mode | `browser` |");
+		expect(result).toContain("| Touch Device | `false` |");
+		expect(result).toContain("| Mobile | `false` |");
+	});
+
+	it("displays Unknown for null device memory", () => {
+		const metadataWithNullMemory = { ...metadata, deviceMemoryGB: null };
+		const result = buildIssueBody(data, metadataWithNullMemory, {
+			isMobile: false,
+			hasScreenshot: false,
+		});
+		expect(result).toContain("| Device Memory | `Unknown` |");
+	});
+
+	it("displays Unknown for null hardware concurrency", () => {
+		const metadataWithNullCores = { ...metadata, hardwareConcurrency: null };
+		const result = buildIssueBody(data, metadataWithNullCores, {
+			isMobile: false,
+			hasScreenshot: false,
+		});
+		expect(result).toContain("| CPU Cores | `Unknown` |");
+	});
+
+	it("displays Unknown for null connection type", () => {
+		const metadataWithNullConnection = { ...metadata, connectionType: null };
+		const result = buildIssueBody(data, metadataWithNullConnection, {
+			isMobile: false,
+			hasScreenshot: false,
+		});
+		expect(result).toContain("| Connection | `Unknown` |");
 	});
 
 	it("excludes metadata when disabled", () => {
@@ -143,10 +195,24 @@ describe("buildGitHubIssueUrl", () => {
 describe("getMetadata", () => {
 	const testDate = new Date("2025-11-29T12:00:00.000Z");
 
-	it("returns metadata object with route and user agent", () => {
+	const mockDeviceInfo = {
+		getScreenWidth: () => 1920,
+		getScreenHeight: () => 1080,
+		getDevicePixelRatio: () => 2,
+		getDeviceMemoryGB: () => 8,
+		getHardwareConcurrency: () => 8,
+		isOnline: () => true,
+		getConnectionType: () => "4g",
+		getDisplayMode: () => "browser",
+		isTouchDevice: () => false,
+		isMobileDevice: () => false,
+	};
+
+	it("returns metadata object with route, user agent, and device info", () => {
 		const result = getMetadata(
 			() => "/test-route",
 			() => "TestAgent/1.0",
+			mockDeviceInfo,
 			testDate,
 		);
 
@@ -156,6 +222,17 @@ describe("getMetadata", () => {
 		// appVersion is now the build-time SHA (or "dev" in dev mode)
 		expect(typeof result.appVersion).toBe("string");
 		expect(result.appVersion.length).toBeGreaterThan(0);
+		// Device info
+		expect(result.screenWidth).toBe(1920);
+		expect(result.screenHeight).toBe(1080);
+		expect(result.devicePixelRatio).toBe(2);
+		expect(result.deviceMemoryGB).toBe(8);
+		expect(result.hardwareConcurrency).toBe(8);
+		expect(result.isOnline).toBe(true);
+		expect(result.connectionType).toBe("4g");
+		expect(result.displayMode).toBe("browser");
+		expect(result.isTouchDevice).toBe(false);
+		expect(result.isMobile).toBe(false);
 	});
 
 	it("uses provided getters", () => {
@@ -171,6 +248,7 @@ describe("getMetadata", () => {
 				agentCalled = true;
 				return "Agent";
 			},
+			mockDeviceInfo,
 			testDate,
 		);
 

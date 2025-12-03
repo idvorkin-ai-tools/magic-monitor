@@ -45,6 +45,15 @@ export function buildIssueBody(
 	let body = data.description;
 
 	if (data.includeMetadata) {
+		const memoryDisplay =
+			metadata.deviceMemoryGB !== null
+				? `${metadata.deviceMemoryGB} GB`
+				: "Unknown";
+		const cpuDisplay =
+			metadata.hardwareConcurrency !== null
+				? `${metadata.hardwareConcurrency} cores`
+				: "Unknown";
+		const connectionDisplay = metadata.connectionType ?? "Unknown";
 		body += `
 
 ---
@@ -56,6 +65,14 @@ export function buildIssueBody(
 | App Version | \`${metadata.appVersion}\` |
 | Browser | \`${metadata.userAgent}\` |
 | Timestamp | \`${metadata.timestamp}\` |
+| Screen | \`${metadata.screenWidth}x${metadata.screenHeight} @${metadata.devicePixelRatio}x\` |
+| Device Memory | \`${memoryDisplay}\` |
+| CPU Cores | \`${cpuDisplay}\` |
+| Online | \`${metadata.isOnline}\` |
+| Connection | \`${connectionDisplay}\` |
+| Display Mode | \`${metadata.displayMode}\` |
+| Touch Device | \`${metadata.isTouchDevice}\` |
+| Mobile | \`${metadata.isMobile}\` |
 `;
 	}
 
@@ -82,9 +99,23 @@ export function buildGitHubIssueUrl(
 	return issueUrl.toString();
 }
 
+export interface DeviceInfoGetters {
+	getScreenWidth: () => number;
+	getScreenHeight: () => number;
+	getDevicePixelRatio: () => number;
+	getDeviceMemoryGB: () => number | null;
+	getHardwareConcurrency: () => number | null;
+	isOnline: () => boolean;
+	getConnectionType: () => string | null;
+	getDisplayMode: () => string;
+	isTouchDevice: () => boolean;
+	isMobileDevice: () => boolean;
+}
+
 export function getMetadata(
 	getCurrentRoute: () => string,
 	getUserAgent: () => string,
+	deviceInfo: DeviceInfoGetters,
 	currentDate: Date = new Date(),
 ): BugReportMetadata {
 	return {
@@ -92,6 +123,16 @@ export function getMetadata(
 		userAgent: getUserAgent(),
 		timestamp: currentDate.toISOString(),
 		appVersion: GIT_SHA_SHORT,
+		screenWidth: deviceInfo.getScreenWidth(),
+		screenHeight: deviceInfo.getScreenHeight(),
+		devicePixelRatio: deviceInfo.getDevicePixelRatio(),
+		deviceMemoryGB: deviceInfo.getDeviceMemoryGB(),
+		hardwareConcurrency: deviceInfo.getHardwareConcurrency(),
+		isOnline: deviceInfo.isOnline(),
+		connectionType: deviceInfo.getConnectionType(),
+		displayMode: deviceInfo.getDisplayMode(),
+		isTouchDevice: deviceInfo.isTouchDevice(),
+		isMobile: deviceInfo.isMobileDevice(),
 	};
 }
 
@@ -99,6 +140,15 @@ export function buildCrashReportBody(
 	error: Error,
 	metadata: BugReportMetadata,
 ): string {
+	const memoryDisplay =
+		metadata.deviceMemoryGB !== null
+			? `${metadata.deviceMemoryGB} GB`
+			: "Unknown";
+	const cpuDisplay =
+		metadata.hardwareConcurrency !== null
+			? `${metadata.hardwareConcurrency} cores`
+			: "Unknown";
+	const connectionDisplay = metadata.connectionType ?? "Unknown";
 	return `**Error:** ${error.message}
 
 **Build:** ${formatBuildLink()}
@@ -117,5 +167,13 @@ ${error.stack || "No stack trace available"}
 | App Version | ${formatBuildLink()} |
 | Browser | \`${metadata.userAgent}\` |
 | Timestamp | \`${metadata.timestamp}\` |
+| Screen | \`${metadata.screenWidth}x${metadata.screenHeight} @${metadata.devicePixelRatio}x\` |
+| Device Memory | \`${memoryDisplay}\` |
+| CPU Cores | \`${cpuDisplay}\` |
+| Online | \`${metadata.isOnline}\` |
+| Connection | \`${connectionDisplay}\` |
+| Display Mode | \`${metadata.displayMode}\` |
+| Touch Device | \`${metadata.isTouchDevice}\` |
+| Mobile | \`${metadata.isMobile}\` |
 `;
 }
