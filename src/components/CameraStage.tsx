@@ -205,7 +205,7 @@ export function CameraStage() {
 	});
 
 	// Camera State via Humble Object Hook
-	const { stream, error, devices, selectedDeviceId, setSelectedDeviceId } =
+	const { stream, error, devices, selectedDeviceId, setSelectedDeviceId, retry } =
 		useCamera();
 
 	// Version check for updates
@@ -504,8 +504,24 @@ export function CameraStage() {
 			</div>
 
 			{error && (
-				<div className="absolute inset-0 flex items-center justify-center z-50 bg-black/80 text-red-500">
-					<p className="text-xl font-bold">{error}</p>
+				<div className="absolute inset-0 flex items-center justify-center z-50 bg-black/80">
+					<div className="flex flex-col items-center gap-4 max-w-md mx-4 text-center">
+						<p className="text-xl font-bold text-red-500">{error}</p>
+						<button
+							onClick={retry}
+							className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-lg transition-colors"
+						>
+							Try Again
+						</button>
+						<p className="text-white/60 text-sm">
+							If camera access was denied, you may need to enable it in your browser settings:
+						</p>
+						<ul className="text-white/50 text-xs text-left list-disc pl-4 space-y-1">
+							<li><strong>iOS Safari:</strong> Settings → Safari → Camera → Allow</li>
+							<li><strong>Chrome/Edge:</strong> Click the lock icon in the address bar → Camera → Allow</li>
+							<li><strong>Firefox:</strong> Click the lock icon → Connection secure → More information → Permissions</li>
+						</ul>
+					</div>
 				</div>
 			)}
 
