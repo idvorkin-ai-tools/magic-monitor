@@ -25,8 +25,9 @@ export function useCamera(initialDeviceId?: string) {
 		}
 	}, [selectedDeviceId]);
 
-	// Handle device changes
+	// Handle device changes - syncs with external device enumeration
 	useEffect(() => {
+		// eslint-disable-next-line react-hooks/set-state-in-effect -- Syncing with external device list
 		getDevices();
 
 		// Skip event listener if mediaDevices unavailable (insecure context)

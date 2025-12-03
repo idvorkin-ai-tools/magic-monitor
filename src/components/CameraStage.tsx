@@ -162,13 +162,6 @@ export function CameraStage() {
 		};
 	}, []);
 
-	// Helper to build video/canvas transform string
-	// Combines mirror, zoom, and pan transforms
-	const getVideoTransform = useCallback(() => {
-		const mirrorTransform = isMirror ? "scaleX(-1) " : "";
-		return `${mirrorTransform}scale(${zoom}) translate(${(pan.x * 100).toFixed(2)}%, ${(pan.y * 100).toFixed(2)}%)`;
-	}, [isMirror, zoom, pan]);
-
 	// Smart Zoom
 	const smartZoom = useSmartZoom({
 		videoRef,
@@ -176,14 +169,16 @@ export function CameraStage() {
 		smoothingPreset,
 	});
 
-	// Effect to apply smart zoom values
-	// Note: SmartZoom already clamps pan correctly via clampPanToViewport - don't re-clamp
-	useEffect(() => {
-		if (isSmartZoom) {
-			setZoom(smartZoom.zoom);
-			setPan(smartZoom.pan);
-		}
-	}, [isSmartZoom, smartZoom.zoom, smartZoom.pan]);
+	// Compute effective zoom/pan: use smartZoom values when enabled, else local state
+	const effectiveZoom = isSmartZoom ? smartZoom.zoom : zoom;
+	const effectivePan = isSmartZoom ? smartZoom.pan : pan;
+
+	// Helper to build video/canvas transform string
+	// Combines mirror, zoom, and pan transforms
+	const getVideoTransform = useCallback(() => {
+		const mirrorTransform = isMirror ? "scaleX(-1) " : "";
+		return `${mirrorTransform}scale(${effectiveZoom}) translate(${(effectivePan.x * 100).toFixed(2)}%, ${(effectivePan.y * 100).toFixed(2)}%)`;
+	}, [isMirror, effectiveZoom, effectivePan]);
 
 	// Time Machine State (Disk-based for mobile support and full resolution)
 	// 2-second chunks, 30 chunks max = 60 seconds buffer
@@ -284,6 +279,8 @@ export function CameraStage() {
 
 	const handleWheel = (e: React.WheelEvent) => {
 		e.preventDefault();
+		// Manual zoom takes control from smart zoom
+		if (isSmartZoom) setIsSmartZoom(false);
 		const newZoom = Math.min(Math.max(zoom - e.deltaY * 0.001, 1), 5);
 		setZoom(newZoom);
 
@@ -480,8 +477,8 @@ export function CameraStage() {
 			{/* Minimap (Only when zoomed) */}
 			<Minimap
 				stream={stream}
-				zoom={zoom}
-				pan={pan}
+				zoom={effectiveZoom}
+				pan={effectivePan}
 				frame={null}
 				onPanTo={handlePanTo}
 			/>
@@ -827,6 +824,8 @@ export function CameraStage() {
 								<div className="h-6 w-px bg-white/20" />
 								<button
 									onClick={() => {
+										// Manual reset takes control from smart zoom
+										if (isSmartZoom) setIsSmartZoom(false);
 										setZoom(1);
 										setPan({ x: 0, y: 0 });
 									}}
@@ -839,16 +838,18 @@ export function CameraStage() {
 									min="1"
 									max="5"
 									step="0.1"
-									value={zoom}
+									value={effectiveZoom}
 									onChange={(e) => {
 										const newZoom = Number.parseFloat(e.target.value);
+										// Manual zoom takes control from smart zoom
+										if (isSmartZoom) setIsSmartZoom(false);
 										setZoom(newZoom);
 										setPan((prev) => clampPan(prev, newZoom));
 									}}
 									className="w-32 accent-blue-500"
 								/>
 								<span className="text-white font-mono w-12 text-right">
-									{zoom.toFixed(1)}x
+									{effectiveZoom.toFixed(1)}x
 								</span>
 								<div className="h-6 w-px bg-white/20" />
 							</>
