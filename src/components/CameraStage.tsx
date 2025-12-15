@@ -1,23 +1,27 @@
+import clsx from "clsx";
 import { Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBugReporter } from "../hooks/useBugReporter";
 import { useCamera } from "../hooks/useCamera";
-import { useDiskTimeMachine } from "../hooks/useDiskTimeMachine";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
+import { useReplayPlayer } from "../hooks/useReplayPlayer";
+import { useSessionRecorder } from "../hooks/useSessionRecorder";
 import { useShakeDetector } from "../hooks/useShakeDetector";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import { useVersionCheck } from "../hooks/useVersionCheck";
 import { DeviceService } from "../services/DeviceService";
 import type { SmoothingPreset } from "../smoothing";
+import type { AppState } from "../types/sessions";
 import { AboutModal } from "./AboutModal";
 import { BugReportModal } from "./BugReportModal";
 import { HandSkeleton } from "./HandSkeleton";
 import { Minimap } from "./Minimap";
+import { ReplayView } from "./ReplayView";
+import { SessionPicker } from "./SessionPicker";
 import { SettingsModal } from "./SettingsModal";
 import { StatusButton } from "./StatusButton";
-import { Thumbnail } from "./Thumbnail";
 
 // Storage keys for persisted settings
 const SMOOTHING_PRESET_STORAGE_KEY = "magic-monitor-smoothing-preset";
@@ -41,8 +45,11 @@ export function CameraStage() {
 	// Mobile Detection
 	const { isMobile } = useMobileDetection();
 
-	// Filmstrip expand/collapse state (collapsed by default on mobile)
-	const [expandFilmstrip, setExpandFilmstrip] = useState(false);
+	// App state: live (recording), picker (viewing sessions), replay (playing back)
+	const [appState, setAppState] = useState<AppState>("live");
+
+	// Recording pause state
+	const [isRecordingPaused, setIsRecordingPaused] = useState(false);
 
 	// Flash Detection State (persisted to localStorage)
 	const [flashEnabled, setFlashEnabledInternal] = useState(() => {
@@ -180,17 +187,14 @@ export function CameraStage() {
 		return `${mirrorTransform}scale(${effectiveZoom}) translate(${(effectivePan.x * 100).toFixed(2)}%, ${(effectivePan.y * 100).toFixed(2)}%)`;
 	}, [isMirror, effectiveZoom, effectivePan]);
 
-	// Time Machine State (Disk-based for mobile support and full resolution)
-	// 2-second chunks, 30 chunks max = 60 seconds buffer
-	const timeMachine = useDiskTimeMachine({
+	// Session Recording (5-minute blocks with thumbnails)
+	const sessionRecorder = useSessionRecorder({
 		videoRef,
-		enabled: true,
-		chunkDurationMs: 2000,
-		maxChunks: 30,
+		enabled: appState === "live" && !isRecordingPaused,
 	});
 
-	// Ref for the replay video element (disk-based playback)
-	const replayVideoRef = useRef<HTMLVideoElement>(null);
+	// Replay Player
+	const replayPlayer = useReplayPlayer();
 
 	const isFlashing = useFlashDetector({
 		videoRef,
@@ -247,34 +251,49 @@ export function CameraStage() {
 		}
 	}, [stream]);
 
-	// Sync replay video from disk time machine
-	useEffect(() => {
-		if (timeMachine.isReplaying && replayVideoRef.current) {
-			// Get the playback video from the hook
-			const playbackVideo = timeMachine.getPlaybackVideo();
-			if (playbackVideo?.src) {
-				// Copy the src to our visible replay video element
-				if (replayVideoRef.current.src !== playbackVideo.src) {
-					replayVideoRef.current.src = playbackVideo.src;
-				}
-				// Sync play/pause state
-				if (timeMachine.isPlaying && replayVideoRef.current.paused) {
-					replayVideoRef.current.play().catch(console.error);
-				} else if (!timeMachine.isPlaying && !replayVideoRef.current.paused) {
-					replayVideoRef.current.pause();
-				}
-			}
+	// App state transitions
+	const handleOpenPicker = useCallback(() => {
+		setAppState("picker");
+	}, []);
+
+	const handleClosePicker = useCallback(() => {
+		// If we have an active session, return to replay; otherwise go to live
+		if (replayPlayer.session) {
+			setAppState("replay");
+		} else {
+			setAppState("live");
 		}
-	}, [timeMachine.isReplaying, timeMachine.isPlaying, timeMachine]);
+	}, [replayPlayer.session]);
+
+	const handleSelectSession = useCallback(
+		async (sessionId: string, startTime?: number) => {
+			await replayPlayer.loadSession(sessionId);
+			if (startTime !== undefined) {
+				replayPlayer.seek(startTime);
+			}
+			setAppState("replay");
+		},
+		[replayPlayer],
+	);
+
+	const handleExitReplay = useCallback(() => {
+		replayPlayer.unloadSession();
+		setAppState("live");
+	}, [replayPlayer]);
+
+	const handleSessionsFromReplay = useCallback(() => {
+		// Go to picker without unloading the session (so it shows as active)
+		setAppState("picker");
+	}, []);
 
 	// Escape key handler
 	useEscapeKey({
 		isSettingsOpen,
 		isPickingColor,
-		isReplaying: timeMachine.isReplaying,
+		isReplaying: appState === "replay",
 		onCloseSettings: () => setIsSettingsOpen(false),
 		onCancelColorPick: () => setIsPickingColor(false),
-		onExitReplay: timeMachine.exitReplay,
+		onExitReplay: handleExitReplay,
 	});
 
 	const handleWheel = (e: React.WheelEvent) => {
@@ -359,22 +378,6 @@ export function CameraStage() {
 	const handlePanTo = (target: { x: number; y: number }) => {
 		setPan(clampPan(target, zoom));
 	};
-
-	// Download SmartZoom debug trace as JSON
-	const handleDownloadDebugTrace = useCallback(() => {
-		const trace = smartZoom.getDebugTrace();
-		const blob = new Blob([JSON.stringify(trace, null, 2)], {
-			type: "application/json",
-		});
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = `smartzoom-debug-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-		document.body.appendChild(a);
-		a.click();
-		document.body.removeChild(a);
-		URL.revokeObjectURL(url);
-	}, [smartZoom]);
 
 	return (
 		<div
@@ -467,12 +470,19 @@ export function CameraStage() {
 				bugReportShortcut={bugReportShortcut}
 			/>
 
-			{/* Delay Indicator Overlay */}
-			{timeMachine.isReplaying && (
-				<div className="absolute top-8 right-8 z-40 bg-blue-600/80 backdrop-blur text-white px-4 py-2 rounded-lg font-mono text-xl font-bold animate-pulse border border-blue-400">
-					REPLAY MODE
-				</div>
-			)}
+			{/* Session Picker Modal */}
+			<SessionPicker
+				isOpen={appState === "picker"}
+				onClose={handleClosePicker}
+				onSelectSession={handleSelectSession}
+				recentSessions={sessionRecorder.recentSessions}
+				savedSessions={sessionRecorder.savedSessions}
+				currentRecordingThumbnail={sessionRecorder.currentThumbnails[0]?.dataUrl}
+				currentRecordingDuration={sessionRecorder.currentBlockDuration}
+				isRecording={sessionRecorder.isRecording}
+				onRefresh={sessionRecorder.refreshSessions}
+				activeSessionId={replayPlayer.session?.id}
+			/>
 
 			{/* Minimap (Only when zoomed) */}
 			<Minimap
@@ -490,14 +500,19 @@ export function CameraStage() {
 						Loading AI model...
 					</span>
 				)}
-				{timeMachine.recordingError ? (
-					<span className="text-red-400">{timeMachine.recordingError}</span>
-				) : (
+				{sessionRecorder.error ? (
+					<span className="text-red-400">{sessionRecorder.error}</span>
+				) : appState === "live" ? (
 					<span>
-						{timeMachine.isRecording ? "REC" : ""} {timeMachine.chunkCount}{" "}
-						chunks ({timeMachine.totalDuration.toFixed(0)}s)
+						{isRecordingPaused ? (
+							<span className="text-yellow-400 mr-2">⏸ PAUSED</span>
+						) : sessionRecorder.isRecording ? (
+							<span className="text-red-400 mr-2">● REC</span>
+						) : null}
+						{Math.floor(sessionRecorder.currentBlockDuration)}s |{" "}
+						{sessionRecorder.recentSessions.length + sessionRecorder.savedSessions.length} sessions
 					</span>
-				)}
+				) : null}
 			</div>
 
 			{error && (
@@ -529,7 +544,7 @@ export function CameraStage() {
 				autoPlay
 				playsInline
 				muted
-				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${timeMachine.isReplaying ? "hidden" : "block"}`}
+				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${appState === "replay" ? "hidden" : "block"}`}
 				style={{
 					// See docs/SMART_ZOOM_SPEC.md for transform details
 					transform: getVideoTransform(),
@@ -537,7 +552,7 @@ export function CameraStage() {
 			/>
 
 			{/* Hand Skeleton Debug Overlay */}
-			{showHandSkeleton && isSmartZoom && !timeMachine.isReplaying && (
+			{showHandSkeleton && isSmartZoom && appState === "live" && (
 				<HandSkeleton
 					landmarks={smartZoom.debugLandmarks}
 					videoRef={videoRef}
@@ -545,253 +560,53 @@ export function CameraStage() {
 				/>
 			)}
 
-			{/* Replay Video (disk-based playback) */}
-			<video
-				ref={replayVideoRef}
-				muted
-				playsInline
-				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${timeMachine.isReplaying ? "block" : "hidden"}`}
-				style={{
-					transform: getVideoTransform(),
-				}}
-			/>
+			{/* Replay View */}
+			{appState === "replay" && (
+				<ReplayView
+					player={replayPlayer}
+					onExit={handleExitReplay}
+					onSessionsClick={handleSessionsFromReplay}
+					isMobile={isMobile}
+					videoTransform={getVideoTransform()}
+				/>
+			)}
 
-			{/* Controls Overlay */}
-			<div
-				className={`absolute left-1/2 -translate-x-1/2 flex flex-col gap-4 items-center z-50 w-full max-w-4xl ${isMobile ? "bottom-3 px-0" : "bottom-12 px-4"}`}
-			>
-				{/* Replay Controls (when replaying) */}
-				{timeMachine.isReplaying && (
-					<div className="flex flex-col gap-2 w-full items-center">
-						{/* Control bar - ultra compact on mobile */}
-						<div
-							className={`bg-blue-900/90 backdrop-blur-sm flex items-center justify-center ${isMobile ? "px-3 py-1 rounded-none gap-2 w-full" : "p-4 rounded-2xl gap-4"}`}
-						>
-							<button
-								onClick={timeMachine.exitReplay}
-								className={`rounded font-bold bg-white/20 text-white hover:bg-white/30 ${isMobile ? "px-2 py-0.5 text-[10px]" : "px-4 py-1 text-sm"}`}
-							>
-								✕
-							</button>
-
-							{/* Debug button - hidden on mobile */}
-							{!isMobile && (
-								<button
-									onClick={handleDownloadDebugTrace}
-									className="px-3 py-1 rounded font-bold bg-yellow-600/80 text-white hover:bg-yellow-500 text-xs"
-									title="Download SmartZoom debug trace"
-								>
-									Debug Log
-								</button>
-							)}
-
-							{!isMobile && <div className="h-8 w-px bg-white/20 mx-2" />}
-
-							<button
-								onClick={
-									timeMachine.isPlaying ? timeMachine.pause : timeMachine.play
-								}
-								className={`flex items-center justify-center rounded-full hover:bg-white/10 flex-shrink-0 ${isMobile ? "text-base w-6 h-6" : "text-2xl w-10 h-10"}`}
-							>
-								{timeMachine.isPlaying ? "⏸️" : "▶️"}
-							</button>
-
-							{/* Prev/Next chunk buttons for coarse navigation */}
-							<button
-								onClick={timeMachine.prevChunk}
-								className={`hover:bg-white/10 rounded ${isMobile ? "text-sm px-1" : "text-lg px-2"}`}
-								title="Previous chunk"
-							>
-								⏮
-							</button>
-
-							<input
-								type="range"
-								min="0"
-								max={Math.max(timeMachine.chunkCount - 1, 0)}
-								step="1"
-								value={timeMachine.currentChunkIndex}
-								onChange={(e) =>
-									timeMachine.seekToChunk(Number.parseInt(e.target.value, 10))
-								}
-								className={`flex-1 min-w-[50px] accent-blue-400 rounded-full bg-blue-950 ${isMobile ? "h-1.5" : "h-2"}`}
-							/>
-
-							<button
-								onClick={timeMachine.nextChunk}
-								className={`hover:bg-white/10 rounded ${isMobile ? "text-sm px-1" : "text-lg px-2"}`}
-								title="Next chunk"
-							>
-								⏭
-							</button>
-
-							<span
-								className={`text-right font-mono flex-shrink-0 ${isMobile ? "w-8 text-[10px]" : "w-16 text-sm"}`}
-							>
-								{timeMachine.currentTime.toFixed(0)}s
-							</span>
-
-							{/* Save video button */}
-							{!isMobile && (
-								<button
-									onClick={timeMachine.saveVideo}
-									disabled={timeMachine.isExporting}
-									className={`px-3 py-1 rounded font-bold text-white text-xs ${
-										timeMachine.isExporting
-											? "bg-yellow-600/80 cursor-wait"
-											: "bg-green-600/80 hover:bg-green-500"
-									}`}
-									title="Download replay video (may need VLC to play)"
-								>
-									{timeMachine.isExporting
-										? `⏳ ${Math.round(timeMachine.exportProgress * 100)}%`
-										: "💾 Save"}
-								</button>
-							)}
-
-							{/* Filmstrip toggle button */}
-							<button
-								onClick={() => setExpandFilmstrip(!expandFilmstrip)}
-								className={`flex-shrink-0 hover:text-blue-300 transition-colors ${isMobile ? "text-sm" : "text-xl"}`}
-								title={expandFilmstrip ? "Hide timeline" : "Show timeline"}
-							>
-								{expandFilmstrip ? "▼" : "▲"}
-							</button>
-						</div>
-
-						{/* Collapsible Filmstrip - Cinematic Timeline */}
-						<div
-							className={`transition-all duration-500 ease-out overflow-hidden w-full ${
-								expandFilmstrip ? "opacity-100" : "max-h-0 opacity-0"
-							}`}
-							style={{
-								maxHeight: expandFilmstrip ? (isMobile ? "28vh" : "35vh") : "0",
-								paddingBottom: isMobile ? "max(env(safe-area-inset-bottom), 20px)" : "0",
-							}}
-						>
-							<div
-								className="relative flex gap-4 overflow-x-auto w-full py-4 px-4 snap-x snap-mandatory h-full"
-								style={{
-									background:
-										"linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.98) 100%)",
-									boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-								}}
-							>
-								{/* Film grain texture overlay */}
-								<div
-									className="absolute inset-0 pointer-events-none opacity-20"
-									style={{
-										backgroundImage:
-											"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E\")",
-										backgroundSize: "200px 200px",
-									}}
-								/>
-
-								{timeMachine.previews
-									.filter((_, index) => index % 4 === 0)
-									.slice(0, 8)
-									.map((preview, displayIndex) => {
-										const actualIndex = displayIndex * 4;
-										const isActive =
-											timeMachine.currentChunkIndex === actualIndex;
-										return (
-											<div
-												key={preview.id}
-												className="flex-shrink-0 snap-center relative group"
-												style={{
-													animationDelay: `${displayIndex * 50}ms`,
-													animation: expandFilmstrip
-														? "slideInUp 0.4s ease-out forwards"
-														: "none",
-													opacity: expandFilmstrip ? 1 : 0,
-													minWidth: isMobile ? "100px" : "160px",
-												}}
-											>
-												{/* Timestamp badge */}
-												<div
-													className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-xs font-mono tracking-wider z-10 whitespace-nowrap"
-													style={{
-														background: isActive
-															? "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
-															: "rgba(0,0,0,0.8)",
-														color: isActive ? "#fff" : "#94a3b8",
-														border: isActive
-															? "1px solid rgba(59, 130, 246, 0.5)"
-															: "1px solid rgba(148, 163, 184, 0.2)",
-														fontSize: isMobile ? "10px" : "11px",
-														fontWeight: isActive ? "600" : "400",
-														textShadow: isActive
-															? "0 0 8px rgba(59, 130, 246, 0.5)"
-															: "none",
-													}}
-												>
-													{`${(actualIndex * 2).toFixed(0)}s`}
-												</div>
-
-												{/* Thumbnail with cinematic treatment */}
-												<div
-													className={`relative cursor-pointer transition-all duration-300 ${
-														isActive ? "scale-105" : "scale-100"
-													} hover:scale-105`}
-													onClick={() => timeMachine.seekToChunk(actualIndex)}
-													style={{
-														width: isMobile ? "100px" : "160px",
-														height: isMobile ? "56px" : "90px",
-														filter: isActive
-															? "brightness(1.1) contrast(1.05)"
-															: "brightness(0.85) contrast(0.95)",
-														boxShadow: isActive
-															? "0 0 0 2px #3b82f6, 0 0 20px rgba(59, 130, 246, 0.6), 0 8px 16px rgba(0,0,0,0.4)"
-															: "0 2px 8px rgba(0,0,0,0.3)",
-													}}
-												>
-													<Thumbnail
-														imageUrl={preview.preview}
-														onClick={() => {}}
-														isActive={false}
-													/>
-
-													{/* Active indicator overlay */}
-													{isActive && (
-														<div
-															className="absolute inset-0 pointer-events-none"
-															style={{
-																background:
-																	"linear-gradient(180deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.15) 100%)",
-																border: "2px solid rgba(59, 130, 246, 0.8)",
-																borderRadius: "0.375rem",
-															}}
-														/>
-													)}
-												</div>
-
-												{/* Hover state glow */}
-												<div
-													className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-													style={{
-														background:
-															"radial-gradient(circle at center, rgba(59, 130, 246, 0.2) 0%, transparent 70%)",
-														filter: "blur(8px)",
-													}}
-												/>
-											</div>
-										);
-									})}
-							</div>
-						</div>
-					</div>
-				)}
-
-				{/* Main Controls Bar (Hidden during replay) */}
-				{!timeMachine.isReplaying && (
+			{/* Controls Overlay (shown only in live mode) */}
+			{appState === "live" && (
+				<div
+					className={`absolute left-1/2 -translate-x-1/2 flex flex-col gap-4 items-center z-50 w-full max-w-4xl ${isMobile ? "bottom-3 px-0" : "bottom-12 px-4"}`}
+				>
 					<div className="bg-black/50 backdrop-blur-md p-3 rounded-2xl flex items-center gap-3">
-						{/* Rewind Button */}
+						{/* Sessions Button */}
 						<button
-							onClick={timeMachine.enterReplay}
+							onClick={handleOpenPicker}
 							className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-500 flex items-center gap-1.5"
 						>
-							<span>⏪</span> Rewind
+							<span>📹</span> Sessions
 						</button>
+
+						{/* Pause/Resume Recording Button */}
+						<button
+							onClick={() => setIsRecordingPaused(!isRecordingPaused)}
+							className={clsx(
+								"px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5",
+								isRecordingPaused
+									? "bg-yellow-600 text-white hover:bg-yellow-500"
+									: "bg-gray-700 text-white hover:bg-gray-600",
+							)}
+							title={isRecordingPaused ? "Resume recording" : "Pause recording"}
+						>
+							{isRecordingPaused ? (
+								<>
+									<span>▶</span> Resume
+								</>
+							) : (
+								<>
+									<span>⏸</span> Pause
+								</>
+							)}
+						</button>
+
 						<div className="h-6 w-px bg-white/20" />
 
 						{/* Status Toggles */}
@@ -864,8 +679,8 @@ export function CameraStage() {
 							<Settings size={18} />
 						</button>
 					</div>
-				)}
-			</div>
+				</div>
+			)}
 		</div>
 	);
 }

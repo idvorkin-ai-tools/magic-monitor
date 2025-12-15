@@ -32,7 +32,7 @@ export function Minimap({ stream, zoom, pan, frame, onPanTo }: MinimapProps) {
 		}
 	}, [frame]);
 
-	// if (zoom <= 1) return null; // Always show minimap
+	if (zoom <= 1) return null;
 
 	// Calculate overlay size
 	const widthPercent = 100 / zoom;

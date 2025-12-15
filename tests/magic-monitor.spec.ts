@@ -1,5 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
-import { seedRewindBuffer } from "./helpers/seedRewindBuffer";
+import {
+	seedSessionBuffer,
+	waitForSessionsLoaded,
+} from "./helpers/seedSessionBuffer";
 
 // Declare the mock helper types for TypeScript
 declare global {
@@ -8,43 +11,6 @@ declare global {
 			setColor: (color: string) => void;
 		};
 	}
-}
-
-// Wait for IndexedDB to have the expected number of chunks
-async function waitForChunksLoaded(page: Page, expectedCount: number) {
-	await page.waitForFunction(
-		async (count) => {
-			try {
-				const db = await new Promise<IDBDatabase | null>(
-					(resolve, reject) => {
-						const request = indexedDB.open("magic-monitor-rewind");
-						request.onerror = () => reject(request.error);
-						request.onsuccess = () => resolve(request.result);
-						request.onupgradeneeded = () => {
-							// DB doesn't exist yet
-							request.result.close();
-							resolve(null);
-						};
-					},
-				);
-				if (!db) return false;
-
-				const tx = db.transaction("chunks", "readonly");
-				const store = tx.objectStore("chunks");
-				const actualCount = await new Promise<number>((resolve, reject) => {
-					const request = store.count();
-					request.onsuccess = () => resolve(request.result);
-					request.onerror = () => reject(request.error);
-				});
-				db.close();
-				return actualCount >= count;
-			} catch {
-				return false;
-			}
-		},
-		expectedCount,
-		{ timeout: 15000 },
-	);
 }
 
 // Helper to locate a settings toggle by its label
@@ -230,20 +196,44 @@ test.describe("Magic Monitor E2E", () => {
 		);
 	});
 
-	test("Time Machine: Enter and Exit Replay (Disk Mode)", async ({ page }) => {
-		// Seed the IndexedDB with test chunks
-		await seedRewindBuffer(page, 5);
+	test("Sessions: Enter and Exit Replay via Session Picker", async ({
+		page,
+	}) => {
+		// Seed the IndexedDB with test sessions
+		await seedSessionBuffer(page, 3);
 
 		// Reload to pick up the seeded data
 		await page.reload();
 
 		// Wait for seeded data to be loaded from IndexedDB
-		await waitForChunksLoaded(page, 5);
+		await waitForSessionsLoaded(page, 3);
 
-		// Enter Replay (button text is "Rewind" with emoji)
-		await page.getByText("Rewind").click();
+		// Open Sessions picker (button text is "Sessions" with emoji)
+		await page.getByText("Sessions").click();
 
-		// Verify Replay UI
+		// Verify Session Picker modal is visible
+		await expect(
+			page.getByRole("heading", { name: "Sessions" }),
+		).toBeVisible();
+
+		// Check that recent sessions section is displayed (use heading role to be specific)
+		await expect(
+			page.getByRole("heading", { name: "Recent" }),
+		).toBeVisible();
+
+		// Click first session thumbnail to enter timeline view
+		const sessionThumbnails = page.locator(
+			'[data-testid="session-thumbnail"]',
+		);
+		await sessionThumbnails.first().click();
+
+		// Timeline view should show "Play from Start" button
+		await expect(page.getByText("Play from Start")).toBeVisible();
+
+		// Click "Play from Start" to enter replay mode
+		await page.getByText("Play from Start").click();
+
+		// Verify Replay UI is shown
 		await expect(page.getByText("REPLAY MODE")).toBeVisible();
 
 		// Video should be hidden, replay video visible
@@ -254,77 +244,93 @@ test.describe("Magic Monitor E2E", () => {
 
 		// Wait for replay mode to exit - the main controls bar should reappear
 		await expect(page.getByText("REPLAY MODE")).toBeHidden({ timeout: 5000 });
-		await expect(page.getByText("Rewind")).toBeVisible({ timeout: 5000 });
+		await expect(page.getByText("Sessions")).toBeVisible({ timeout: 5000 });
 		await expect(page.getByTestId("main-video")).toBeVisible();
 	});
 
-	test("Time Machine: Thumbnails appear in replay", async ({ page }) => {
-		// Seed with 5 chunks
-		await seedRewindBuffer(page, 5);
+	test("Sessions: Thumbnails appear in session timeline", async ({ page }) => {
+		// Seed with 3 sessions
+		await seedSessionBuffer(page, 3);
 		await page.reload();
 
 		// Wait for seeded data to be loaded from IndexedDB
-		await waitForChunksLoaded(page, 5);
+		await waitForSessionsLoaded(page, 3);
 
-		// Enter replay
-		await page.getByText("Rewind").click();
-		await expect(page.getByText("REPLAY MODE")).toBeVisible();
+		// Open Sessions picker
+		await page.getByText("Sessions").click();
+		await expect(
+			page.getByRole("heading", { name: "Sessions" }),
+		).toBeVisible();
 
-		// Expand filmstrip (button shows ▲ when collapsed, ▼ when expanded)
-		await page.locator("button", { hasText: "▲" }).click();
+		// Click first session to see timeline view
+		const sessionThumbnails = page.locator(
+			'[data-testid="session-thumbnail"]',
+		);
+		await sessionThumbnails.first().click();
 
-		// Wait for filmstrip to be expanded (button changes to ▼)
-		await expect(page.locator("button", { hasText: "▼" })).toBeVisible();
+		// Timeline view should show thumbnails from the session
+		// Each session has thumbnails at different times
+		const timelineThumbs = page.locator('img[alt^="Frame at"]');
+		await expect(timelineThumbs.first()).toBeVisible({ timeout: 5000 });
 
-		// Verify thumbnails are visible
-		// Thumbnails have alt="Thumbnail" and are rendered as img elements
-		const thumbnails = page.locator('img[alt="Thumbnail"]');
-		await expect(thumbnails.first()).toBeVisible({ timeout: 5000 });
-
-		// There should be at least some thumbnails (seeded 5 chunks)
-		const count = await thumbnails.count();
+		// There should be multiple thumbnails (seeded sessions have 6 thumbnails each)
+		const count = await timelineThumbs.count();
 		expect(count).toBeGreaterThan(0);
 
-		// Click a thumbnail to seek (use first visible one)
-		await thumbnails.first().click();
+		// Click a thumbnail to seek to that time and enter replay
+		await timelineThumbs.first().click();
+
+		// Should now be in replay mode
+		await expect(page.getByText("REPLAY MODE")).toBeVisible();
 
 		// Exit replay
 		await page.locator("button", { hasText: "✕" }).click();
 		await expect(page.getByText("REPLAY MODE")).toBeHidden({ timeout: 5000 });
 	});
 
-	test("Time Machine: Export video downloads file", async ({ page }) => {
-		// Seed with 3 chunks for faster test
-		await seedRewindBuffer(page, 3);
+	test("Sessions: Export video via Share button", async ({ page }) => {
+		// Seed with 3 sessions for faster test
+		await seedSessionBuffer(page, 3);
 		await page.reload();
 
 		// Wait for seeded data to be loaded from IndexedDB
-		await waitForChunksLoaded(page, 3);
+		await waitForSessionsLoaded(page, 3);
 
-		// Enter replay mode
-		await page.getByText("Rewind").click();
+		// Open Sessions picker and select a session
+		await page.getByText("Sessions").click();
+		await expect(
+			page.getByRole("heading", { name: "Sessions" }),
+		).toBeVisible();
+
+		// Click first session
+		const sessionThumbnails = page.locator(
+			'[data-testid="session-thumbnail"]',
+		);
+		await sessionThumbnails.first().click();
+
+		// Play from start to enter replay mode
+		await page.getByText("Play from Start").click();
 		await expect(page.getByText("REPLAY MODE")).toBeVisible();
 
-		// Set up download listener before clicking save
+		// Set up download listener before clicking share
 		const downloadPromise = page.waitForEvent("download", { timeout: 30000 });
 
-		// Click save button
-		const saveButton = page.locator("button", { hasText: /Save/ });
-		await saveButton.click();
+		// Click share button (may need to wait for it to appear)
+		const shareButton = page.locator("button", { hasText: /Share/ });
+		await expect(shareButton).toBeVisible();
+		await shareButton.click();
 
 		// Wait for download to complete
 		const download = await downloadPromise;
 
-		// Verify download filename pattern
-		expect(download.suggestedFilename()).toMatch(
-			/^magic-monitor-replay-.*\.webm$/,
-		);
+		// Verify download filename pattern (practice-clip is the default name)
+		expect(download.suggestedFilename()).toMatch(/\.webm$/);
 
 		// Save to temp location and verify we got something
 		const path = await download.path();
 		expect(path).toBeTruthy();
 
-		// The file should have content (at least the 3 chunks concatenated)
+		// The file should have content
 		const fs = await import("node:fs/promises");
 		const stats = await fs.stat(path!);
 		expect(stats.size).toBeGreaterThan(0);
