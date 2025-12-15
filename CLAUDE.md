@@ -15,7 +15,23 @@ Address your human partner as "Igor" at all times.
 - When you disagree with an approach, push back with specific technical reasons (or gut feeling)
 - Discuss architectural decisions together before implementation; routine fixes don't need discussion
 
+## Requires Explicit "YES" From User
+
+- Pushing to **upstream** (idvorkin repo) - always needs PR + human approval
+- Force pushing (`--force`, `-f`)
+- Removing/deleting tests
+- Any action that loses work (hard resets, deleting unmerged branches)
+
+## Git Workflow
+
+| Remote     | Repo                     | Who Can Merge             |
+| ---------- | ------------------------ | ------------------------- |
+| `origin`   | idvorkin-ai-tools (fork) | Agents directly           |
+| `upstream` | idvorkin                 | Humans only (PR required) |
+
 ## Build & Development Commands
+
+Use **Tailscale URLs** (e.g., `https://squeaker-teeth.ts.net:5173`), not localhost.
 
 ```bash
 just dev      # Run development server (npm run dev) - opens http://localhost:5173
@@ -163,10 +179,19 @@ Names must tell what code does, not how it's implemented or its history.
 
 ### Testing
 
+- **Tests > Code** - Users should never find bugs tests could have caught
 - Follow TDD: write failing test → make it pass → refactor
 - Tests must comprehensively cover functionality
 - Never delete a failing test - fix the code or discuss
 - Test output must be clean - capture and validate expected errors
+
+### Bug Investigation Protocol
+
+Before fixing ANY bug:
+
+1. **Spec**: Is this actually a bug? Ask if unclear.
+2. **Test**: Add missing test BEFORE fixing.
+3. **Arch**: Deeper problem? Discuss before patching.
 
 ### Debugging
 
@@ -176,3 +201,31 @@ Names must tell what code does, not how it's implemented or its history.
 4. Find working examples to compare against
 5. Form a single hypothesis and test minimally
 6. Never add multiple fixes at once
+
+### Before Implementing
+
+1. **Spec first** - Understand what success looks like
+2. **Confirm understanding** - Ask if unsure
+3. **Read existing code** - Understand context before changing
+
+## Retros
+
+Run weekly (or when user says "retro"). See [chop-conventions retros guide](https://github.com/idvorkin/chop-conventions/blob/main/dev-inner-loop/retros.md).
+
+**Storage:** `retros/` directory at project root
+- `_retro_state.json` - tracks last execution date
+- `YYYY-MM-DD.md` - individual retro reports
+
+**Process:**
+1. Use subagents to analyze `~/.claude/history.jsonl` (avoid context overflow)
+2. Look for friction moments - where user corrected the agent
+3. Map patterns to CLAUDE.md improvements
+4. Scan for secrets before committing
+
+## CLI Tips
+
+- Git output truncated: `git --no-pager diff`
+- head/cat errors: `unset PAGER`
+- Check justfile before writing new commands
+- Open files for user in tmux split: `tmux split-window -h -l 66% "nvim /path/to/file"`
+- See [chop-conventions/running-commands.md](https://github.com/idvorkin/chop-conventions/blob/main/dev-inner-loop/running-commands.md) for more
