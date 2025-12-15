@@ -273,9 +273,10 @@ describe("useReplayPlayer", () => {
 	});
 
 	describe("video element handling", () => {
-		it("timeout should check actual video element state, not stale closure", async () => {
-			// Bug: timeout callback captured stale isReady value (always false at timeout creation)
-			// Fix: check videoElement.readyState instead of captured isReady
+		it("timeout should check actual video element state using ref, not stale closure", async () => {
+			// Bug: timeout callback captured videoElement state variable at timeout creation time
+			// If video element changes between loadSession call and timeout firing, timeout checks wrong element
+			// Fix: use currentVideoElementRef.current instead of captured videoElement state
 			vi.useFakeTimers();
 
 			const { result } = renderHook(() =>
@@ -286,49 +287,60 @@ describe("useReplayPlayer", () => {
 				}),
 			);
 
-			// Create mock video element BEFORE loading
-			const mockVideo = document.createElement("video");
-			Object.defineProperty(mockVideo, "readyState", {
+			// Create first mock video element
+			const mockVideo1 = document.createElement("video");
+			Object.defineProperty(mockVideo1, "readyState", {
 				value: 0, // HAVE_NOTHING (starts not loaded)
 				writable: true,
 			});
-			Object.defineProperty(mockVideo, "duration", {
+			Object.defineProperty(mockVideo1, "duration", {
 				value: 60,
 				writable: true,
 			});
 
-			// Mount video element FIRST
+			// Mount first video element
 			act(() => {
-				result.current.videoRef(mockVideo);
+				result.current.videoRef(mockVideo1);
 			});
 
-			// Now load session - this creates the timeout with isReady=false captured
+			// Load session - this creates the timeout with videoElement=mockVideo1 captured
 			await act(async () => {
 				await result.current.loadSession("test-id");
 			});
 
-			// Video starts loading immediately (readyState advances)
-			Object.defineProperty(mockVideo, "readyState", {
-				value: 1, // HAVE_METADATA
+			// Simulate video element changing (e.g., component remount)
+			const mockVideo2 = document.createElement("video");
+			Object.defineProperty(mockVideo2, "readyState", {
+				value: 1, // HAVE_METADATA (new element is ready)
+				writable: true,
+			});
+			Object.defineProperty(mockVideo2, "duration", {
+				value: 60,
 				writable: true,
 			});
 
-			// Trigger loadedmetadata event to set isReady=true
+			// Unmount first, mount second - this updates currentVideoElementRef
 			act(() => {
-				mockVideo.dispatchEvent(new Event("loadedmetadata"));
+				result.current.videoRef(null);
+				result.current.videoRef(mockVideo2);
 			});
 
-			// At this point, isReady should be true and video has metadata
+			// Trigger loadedmetadata on the NEW video element
+			act(() => {
+				mockVideo2.dispatchEvent(new Event("loadedmetadata"));
+			});
+
+			// At this point, currentVideoElementRef.current is mockVideo2 and it's ready
 			expect(result.current.isReady).toBe(true);
 
 			// Fast-forward past timeout
-			// With the bug: timeout sees stale isReady=false (captured at creation) and sets error
-			// With the fix: timeout checks videoElement.readyState >= 1 and doesn't error
+			// With the bug: timeout checks stale mockVideo1 (readyState=0) and sets error
+			// With the fix: timeout checks currentVideoElementRef.current (mockVideo2, readyState=1) and doesn't error
 			await act(async () => {
 				vi.advanceTimersByTime(1000);
 			});
 
-			// Should NOT have timeout error because video actually loaded successfully
+			// Should NOT have timeout error because current video element is actually ready
 			expect(result.current.error).toBeNull();
 
 			vi.useRealTimers();
@@ -472,6 +484,30 @@ describe("useReplayPlayer", () => {
 			});
 
 			expect(mockShare.share).not.toHaveBeenCalled();
+		});
+
+		it("sets error when export fails", async () => {
+			// Make share service fail
+			mockShare.share.mockRejectedValue(new Error("Share failed"));
+
+			const { result } = renderHook(() =>
+				useReplayPlayer({
+					sessionStorageService: mockStorage,
+					shareService: mockShare,
+				}),
+			);
+
+			await act(async () => {
+				await result.current.loadSession("test-id");
+			});
+
+			// Export should fail and set error
+			await act(async () => {
+				await result.current.exportVideo();
+			});
+
+			expect(result.current.error).toBe("Export failed - please try again");
+			expect(result.current.isExporting).toBe(false);
 		});
 	});
 });

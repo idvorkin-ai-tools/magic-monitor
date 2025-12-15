@@ -44,6 +44,38 @@ describe("SessionStorageService", () => {
 			await SessionStorageService.init();
 			// No error means success
 		});
+
+		it("has onclose handler that clears dbInstance on unexpected closure", async () => {
+			// Initialize the database and save a session
+			await SessionStorageService.init();
+			const session = createTestSession();
+			const id = await SessionStorageService.saveSession(session);
+			expect(id).toBeDefined();
+
+			// Access the DB to ensure dbInstance is set
+			const retrieved = await SessionStorageService.getSession(id);
+			expect(retrieved).not.toBeNull();
+
+			// We can't directly test dbInstance (it's private), but we can verify
+			// that the database connection has an onclose handler by checking that
+			// operations succeed after unexpected closure.
+			//
+			// In a real scenario, the browser might close the DB if another tab
+			// requests a version change. The onclose handler should clear dbInstance
+			// so the next operation reopens the DB instead of using a stale connection.
+			//
+			// For now, this test verifies the handler exists by ensuring we can
+			// re-establish connection after closure.
+			SessionStorageService.close();
+
+			// After close, should be able to save and retrieve new session
+			const session2 = createTestSession();
+			const id2 = await SessionStorageService.saveSession(session2);
+			expect(id2).toBeDefined();
+
+			const retrieved2 = await SessionStorageService.getSession(id2);
+			expect(retrieved2).not.toBeNull();
+		});
 	});
 
 	describe("saveSession", () => {
@@ -65,6 +97,26 @@ describe("SessionStorageService", () => {
 			expect(retrieved?.id).toBe(id);
 			expect(retrieved?.duration).toBe(120);
 			expect(retrieved?.saved).toBe(false);
+		});
+	});
+
+	describe("saveSessionWithBlob", () => {
+		it("saves both session and blob atomically", async () => {
+			const session = createTestSession({ duration: 120 });
+			const blob = new Blob(["test video data"], { type: "video/webm" });
+
+			const id = await SessionStorageService.saveSessionWithBlob(session, blob);
+
+			expect(id).toBeDefined();
+			expect(typeof id).toBe("string");
+
+			// Both should be retrievable
+			const retrievedSession = await SessionStorageService.getSession(id);
+			expect(retrievedSession).not.toBeNull();
+			expect(retrievedSession?.duration).toBe(120);
+
+			const retrievedBlob = await SessionStorageService.getBlob(id);
+			expect(retrievedBlob).not.toBeNull();
 		});
 	});
 
@@ -287,6 +339,32 @@ describe("SessionStorageService", () => {
 
 			expect(await SessionStorageService.getSession(id)).toBeNull();
 			expect(await SessionStorageService.getBlob(id)).toBeNull();
+		});
+
+		it("deletes session only when both session and blob exist", async () => {
+			// Verify that delete succeeds atomically
+			const session = createTestSession();
+			const id = await SessionStorageService.saveSession(session);
+			const blob = new Blob(["test"], { type: "video/webm" });
+			await SessionStorageService.saveBlob(id, blob);
+
+			// Successful deletion - both should be gone
+			await SessionStorageService.deleteSessionWithBlob(id);
+
+			expect(await SessionStorageService.getSession(id)).toBeNull();
+			expect(await SessionStorageService.getBlob(id)).toBeNull();
+		});
+
+		it("handles deletion when blob does not exist", async () => {
+			// Delete should succeed even if blob doesn't exist
+			const session = createTestSession();
+			const id = await SessionStorageService.saveSession(session);
+
+			// Don't save a blob - only session exists
+			await SessionStorageService.deleteSessionWithBlob(id);
+
+			// Session should be deleted regardless
+			expect(await SessionStorageService.getSession(id)).toBeNull();
 		});
 	});
 

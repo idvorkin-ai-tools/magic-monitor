@@ -94,6 +94,7 @@ export function useReplayPlayer({
 
 	// Refs for values that shouldn't trigger re-renders
 	const blobUrlRef = useRef<string | null>(null);
+	const currentVideoElementRef = useRef<HTMLVideoElement | null>(null);
 	const isTrimPreviewRef = useRef(false);
 	const pendingSeekRef = useRef<{ time: number; sessionId: string } | null>(null);
 	const loadTimeoutRef = useRef<number | null>(null);
@@ -103,6 +104,11 @@ export function useReplayPlayer({
 
 	// Cleanup blob URL
 	const cleanupBlobUrl = useCallback(() => {
+		// Clear video element src if it exists
+		if (currentVideoElementRef.current) {
+			currentVideoElementRef.current.src = "";
+		}
+		// Revoke blob URL
 		if (blobUrlRef.current) {
 			URL.revokeObjectURL(blobUrlRef.current);
 			blobUrlRef.current = null;
@@ -120,13 +126,25 @@ export function useReplayPlayer({
 	// Callback ref for video element - triggers initialization when element mounts
 	const videoRef = useCallback(
 		(element: HTMLVideoElement | null) => {
-			setVideoElement(element);
-
-			// If element is mounted and we have a pending blob URL, initialize
-			if (element && blobUrlRef.current && session && !element.src) {
-				element.src = blobUrlRef.current;
-				element.load();
+			// Handle unmount - clear src to prevent stale blob URL usage
+			if (element === null && currentVideoElementRef.current) {
+				currentVideoElementRef.current.src = "";
+				currentVideoElementRef.current = null;
 			}
+
+			// Handle mount - set up new element
+			if (element) {
+				currentVideoElementRef.current = element;
+
+				// Only set src if element doesn't already have it set to our blob URL
+				// This prevents double-setting in strict mode mount/unmount/remount cycles
+				if (blobUrlRef.current && session && element.src !== blobUrlRef.current) {
+					element.src = blobUrlRef.current;
+					element.load();
+				}
+			}
+
+			setVideoElement(element);
 		},
 		[session],
 	);
@@ -184,8 +202,8 @@ export function useReplayPlayer({
 
 				// Set timeout for loading
 				loadTimeoutRef.current = window.setTimeout(() => {
-					// Check actual video state, not stale closure
-					if (videoElement && videoElement.readyState < 1) {
+					// Check actual video state using ref, not stale closure
+					if (currentVideoElementRef.current && currentVideoElementRef.current.readyState < 1) {
 						setError("Video loading timed out - please try again");
 						setIsLoading(false);
 					}
@@ -456,6 +474,7 @@ export function useReplayPlayer({
 			setExportProgress(1);
 		} catch (err) {
 			console.error("Export failed:", err);
+			setError("Export failed - please try again");
 		} finally {
 			setIsExporting(false);
 			setExportProgress(0);

@@ -80,6 +80,61 @@ describe("ThumbnailCaptureService", () => {
 			const result = await ThumbnailCaptureService.captureAtTime(blob, 5);
 			expect(result).toMatch(/^data:image\/jpeg/);
 		});
+
+		it("rejects with timeout error if video metadata never loads", async () => {
+			const blob = new Blob(["test"], { type: "video/webm" });
+
+			// Create a video element that never fires onloadedmetadata
+			const mockVideo = {
+				muted: false,
+				playsInline: false,
+				src: "",
+				onloadedmetadata: null as null | (() => void),
+				onseeked: null as null | (() => void),
+				onerror: null as null | (() => void),
+				load: vi.fn(),
+			} as unknown as HTMLVideoElement;
+
+			const originalCreateElement = document.createElement.bind(document);
+			vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+				if (tag === "video") return mockVideo;
+				if (tag === "canvas") return mockCanvas;
+				return originalCreateElement(tag);
+			});
+
+			// Capture the blob URL so we can verify it gets revoked
+			let createdUrl: string | undefined;
+			const originalCreateObjectURL = URL.createObjectURL;
+			vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob) => {
+				createdUrl = originalCreateObjectURL(blob);
+				return createdUrl;
+			});
+
+			const revokeURLSpy = vi.spyOn(URL, "revokeObjectURL");
+
+			// Mock timers to control timeout
+			vi.useFakeTimers();
+
+			const capturePromise = ThumbnailCaptureService.captureAtTime(blob, 5);
+
+			// Setup rejection handler immediately to prevent unhandled rejection warnings
+			let rejectionError: Error | undefined;
+			void capturePromise.catch((err) => {
+				rejectionError = err;
+			});
+
+			// Fast-forward past the timeout (should be 10 seconds)
+			await vi.advanceTimersByTimeAsync(10000);
+
+			// Verify the promise rejected with timeout error
+			expect(rejectionError).toBeInstanceOf(Error);
+			expect(rejectionError?.message).toBe("Timeout loading video metadata");
+
+			// Verify blob URL was revoked to prevent memory leak
+			expect(revokeURLSpy).toHaveBeenCalledWith(createdUrl);
+
+			vi.useRealTimers();
+		});
 	});
 
 	describe("generateThumbnailsAtIntervals", () => {
@@ -91,6 +146,62 @@ describe("ThumbnailCaptureService", () => {
 				15,
 			);
 			expect(results).toBeInstanceOf(Array);
+		});
+
+		it("rejects with timeout error if video metadata never loads", async () => {
+			const blob = new Blob(["test"], { type: "video/webm" });
+
+			// Create a video element that never fires onloadedmetadata
+			const mockVideo = {
+				muted: false,
+				playsInline: false,
+				src: "",
+				onloadedmetadata: null as null | (() => void),
+				onseeked: null as null | (() => void),
+				onerror: null as null | (() => void),
+				load: vi.fn(),
+			} as unknown as HTMLVideoElement;
+
+			const originalCreateElement = document.createElement.bind(document);
+			vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+				if (tag === "video") return mockVideo;
+				if (tag === "canvas") return mockCanvas;
+				return originalCreateElement(tag);
+			});
+
+			// Capture the blob URL so we can verify it gets revoked
+			let createdUrl: string | undefined;
+			const originalCreateObjectURL = URL.createObjectURL;
+			vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob) => {
+				createdUrl = originalCreateObjectURL(blob);
+				return createdUrl;
+			});
+
+			const revokeURLSpy = vi.spyOn(URL, "revokeObjectURL");
+
+			// Mock timers to control timeout
+			vi.useFakeTimers();
+
+			const capturePromise =
+				ThumbnailCaptureService.generateThumbnailsAtIntervals(blob, 15);
+
+			// Setup rejection handler immediately to prevent unhandled rejection warnings
+			let rejectionError: Error | undefined;
+			void capturePromise.catch((err) => {
+				rejectionError = err;
+			});
+
+			// Fast-forward past the timeout (should be 10 seconds)
+			await vi.advanceTimersByTimeAsync(10000);
+
+			// Verify the promise rejected with timeout error
+			expect(rejectionError).toBeInstanceOf(Error);
+			expect(rejectionError?.message).toBe("Timeout loading video metadata");
+
+			// Verify blob URL was revoked to prevent memory leak
+			expect(revokeURLSpy).toHaveBeenCalledWith(createdUrl);
+
+			vi.useRealTimers();
 		});
 	});
 });

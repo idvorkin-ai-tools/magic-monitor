@@ -28,6 +28,10 @@ function getDB(): Promise<IDBDatabase> {
 
 		request.onsuccess = () => {
 			dbInstance = request.result;
+			// Clear dbInstance if database closes unexpectedly
+			dbInstance.onclose = () => {
+				dbInstance = null;
+			};
 			resolve(dbInstance);
 		};
 
@@ -64,6 +68,34 @@ export const SessionStorageService = {
 	},
 
 	// ===== Create =====
+
+	/**
+	 * Save a new session and its blob together atomically.
+	 * Uses a single transaction to ensure both are saved or neither is saved.
+	 * Returns the generated session ID.
+	 */
+	async saveSessionWithBlob(
+		session: Omit<PracticeSession, "id">,
+		blob: Blob,
+	): Promise<string> {
+		const db = await getDB();
+		const id = generateId();
+		const fullSession: PracticeSession = { ...session, id };
+
+		return new Promise((resolve, reject) => {
+			// Single transaction spanning both stores for atomicity
+			const tx = db.transaction([SESSIONS_STORE, BLOBS_STORE], "readwrite");
+			const sessionsStore = tx.objectStore(SESSIONS_STORE);
+			const blobsStore = tx.objectStore(BLOBS_STORE);
+
+			// Queue both save operations in the same transaction
+			sessionsStore.add(fullSession);
+			blobsStore.put({ id, blob });
+
+			tx.oncomplete = () => resolve(id);
+			tx.onerror = () => reject(new Error("Failed to save session with blob"));
+		});
+	},
 
 	/**
 	 * Save a new session. Returns the generated session ID.
@@ -284,10 +316,25 @@ export const SessionStorageService = {
 	},
 
 	/**
-	 * Delete a session and its blob together.
+	 * Delete a session and its blob together atomically.
+	 * Uses a single transaction to ensure both are deleted or neither is deleted.
 	 */
 	async deleteSessionWithBlob(id: string): Promise<void> {
-		await Promise.all([this.deleteSession(id), this.deleteBlob(id)]);
+		const db = await getDB();
+
+		return new Promise((resolve, reject) => {
+			// Single transaction spanning both stores for atomicity
+			const tx = db.transaction([SESSIONS_STORE, BLOBS_STORE], "readwrite");
+			const sessionsStore = tx.objectStore(SESSIONS_STORE);
+			const blobsStore = tx.objectStore(BLOBS_STORE);
+
+			// Queue both delete operations in the same transaction
+			sessionsStore.delete(id);
+			blobsStore.delete(id);
+
+			tx.oncomplete = () => resolve();
+			tx.onerror = () => reject(new Error("Failed to delete session with blob"));
+		});
 	},
 
 	// ===== Pruning =====

@@ -38,7 +38,14 @@ export const ThumbnailCaptureService = {
 
 			const cleanup = () => {
 				URL.revokeObjectURL(url);
+				clearTimeout(timeoutId);
 			};
+
+			// Timeout to prevent memory leak if video never loads
+			const timeoutId = setTimeout(() => {
+				cleanup();
+				reject(new Error("Timeout loading video metadata"));
+			}, 10000);
 
 			video.onloadedmetadata = () => {
 				// Clamp time to valid range
@@ -87,7 +94,14 @@ export const ThumbnailCaptureService = {
 
 			const cleanup = () => {
 				URL.revokeObjectURL(url);
+				clearTimeout(timeoutId);
 			};
+
+			// Timeout to prevent memory leak if video never loads
+			const timeoutId = setTimeout(() => {
+				cleanup();
+				reject(new Error("Timeout loading video metadata"));
+			}, 10000);
 
 			const captureNext = () => {
 				if (currentTime > video.duration) {

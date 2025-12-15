@@ -64,7 +64,17 @@ export const MediaRecorderService = {
 						chunks.push(e.data);
 					}
 				};
-				recorder.start();
+
+				try {
+					recorder.start();
+				} catch (err) {
+					// Provide a meaningful error message when MediaRecorder.start() fails
+					// Common causes: unsupported codec, invalid stream state, no active tracks
+					const errorMessage = err instanceof Error ? err.message : String(err);
+					throw new Error(
+						`Failed to start recording. This may occur if the codec is not supported, the stream is in an invalid state, or there are no active video tracks. Original error: ${errorMessage}`,
+					);
+				}
 			},
 			stop: (): Promise<RecordingChunk> => {
 				return new Promise((resolve, reject) => {

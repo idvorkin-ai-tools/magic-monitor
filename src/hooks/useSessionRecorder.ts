@@ -10,7 +10,10 @@ import {
 } from "../services/SessionStorageService";
 import { ThumbnailCaptureService } from "../services/ThumbnailCaptureService";
 import { TimerService, type TimerServiceType } from "../services/TimerService";
-import { VideoFixService, type VideoFixServiceType } from "../services/VideoFixService";
+import {
+	VideoFixService,
+	type VideoFixServiceType,
+} from "../services/VideoFixService";
 import type { PracticeSession, SessionThumbnail } from "../types/sessions";
 import { SESSION_CONFIG } from "../types/sessions";
 
@@ -59,7 +62,9 @@ export function useSessionRecorder({
 	// Recording state
 	const [isRecording, setIsRecording] = useState(false);
 	const [currentBlockDuration, setCurrentBlockDuration] = useState(0);
-	const [currentThumbnails, setCurrentThumbnails] = useState<SessionThumbnail[]>([]);
+	const [currentThumbnails, setCurrentThumbnails] = useState<
+		SessionThumbnail[]
+	>([]);
 	const [error, setError] = useState<string | null>(null);
 
 	// Session lists
@@ -74,6 +79,7 @@ export function useSessionRecorder({
 	const durationTimerRef = useRef<number | null>(null);
 	const currentThumbnailsRef = useRef<SessionThumbnail[]>([]);
 	const enabledRef = useRef(enabled);
+	const checkReadyIntervalRef = useRef<number | null>(null);
 
 	// Initialize storage and load sessions
 	useEffect(() => {
@@ -121,7 +127,10 @@ export function useSessionRecorder({
 			);
 			const time = (timerService.now() - blockStartTimeRef.current) / 1000;
 			const newThumbnail = { time, dataUrl };
-			currentThumbnailsRef.current = [...currentThumbnailsRef.current, newThumbnail];
+			currentThumbnailsRef.current = [
+				...currentThumbnailsRef.current,
+				newThumbnail,
+			];
 			setCurrentThumbnails((prev) => [...prev, newThumbnail]);
 		} catch (err) {
 			console.warn("Failed to capture thumbnail:", err);
@@ -181,53 +190,50 @@ export function useSessionRecorder({
 				return null;
 			}
 		},
-		[
-			videoFixService,
-			sessionStorageService,
-			refreshSessions,
-		],
+		[videoFixService, sessionStorageService, refreshSessions],
 	);
 
 	// Stop current recording block
-	const stopCurrentBlock = useCallback(async (): Promise<PracticeSession | null> => {
-		const session = recordingSessionRef.current;
-		if (!session || session.getState() !== "recording") {
-			return null;
-		}
+	const stopCurrentBlock =
+		useCallback(async (): Promise<PracticeSession | null> => {
+			const session = recordingSessionRef.current;
+			if (!session || session.getState() !== "recording") {
+				return null;
+			}
 
-		// Clear timers (blockTimer uses setTimeout, others use setInterval)
-		if (blockTimerRef.current) {
-			timerService.clearTimeout(blockTimerRef.current);
-			blockTimerRef.current = null;
-		}
-		if (thumbnailTimerRef.current) {
-			timerService.clearInterval(thumbnailTimerRef.current);
-			thumbnailTimerRef.current = null;
-		}
-		if (durationTimerRef.current) {
-			timerService.clearInterval(durationTimerRef.current);
-			durationTimerRef.current = null;
-		}
+			// Clear timers (blockTimer uses setTimeout, others use setInterval)
+			if (blockTimerRef.current) {
+				timerService.clearTimeout(blockTimerRef.current);
+				blockTimerRef.current = null;
+			}
+			if (thumbnailTimerRef.current) {
+				timerService.clearInterval(thumbnailTimerRef.current);
+				thumbnailTimerRef.current = null;
+			}
+			if (durationTimerRef.current) {
+				timerService.clearInterval(durationTimerRef.current);
+				durationTimerRef.current = null;
+			}
 
-		try {
-			const result = await session.stop();
-			recordingSessionRef.current = null;
-			setIsRecording(false);
+			try {
+				const result = await session.stop();
+				recordingSessionRef.current = null;
+				setIsRecording(false);
 
-			// Finalize the block - use ref to avoid dependency on state
-			const thumbnails = [...currentThumbnailsRef.current];
-			currentThumbnailsRef.current = [];
-			setCurrentThumbnails([]);
-			setCurrentBlockDuration(0);
+				// Finalize the block - use ref to avoid dependency on state
+				const thumbnails = [...currentThumbnailsRef.current];
+				currentThumbnailsRef.current = [];
+				setCurrentThumbnails([]);
+				setCurrentBlockDuration(0);
 
-			return await finalizeBlock(result.blob, result.duration, thumbnails);
-		} catch (err) {
-			console.error("Failed to stop recording:", err);
-			recordingSessionRef.current = null;
-			setIsRecording(false);
-			return null;
-		}
-	}, [finalizeBlock, timerService]);
+				return await finalizeBlock(result.blob, result.duration, thumbnails);
+			} catch (err) {
+				console.error("Failed to stop recording:", err);
+				recordingSessionRef.current = null;
+				setIsRecording(false);
+				return null;
+			}
+		}, [finalizeBlock, timerService]);
 
 	// Start a new recording block
 	const startRecordingBlock = useCallback(() => {
@@ -250,7 +256,21 @@ export function useSessionRecorder({
 			setCurrentBlockDuration(0);
 			setError(null);
 
-			session.start();
+			// Wrap session.start() in try-catch to handle MediaRecorder failures
+			try {
+				session.start();
+			} catch (startErr) {
+				// MediaRecorder.start() failed - surface the error to the user
+				const errorMessage =
+					startErr instanceof Error
+						? startErr.message
+						: "Failed to start recording";
+				console.error("MediaRecorder.start() failed:", startErr);
+				setError(errorMessage);
+				setIsRecording(false);
+				return;
+			}
+
 			recordingSessionRef.current = session;
 			setIsRecording(true);
 
@@ -278,7 +298,7 @@ export function useSessionRecorder({
 				}
 			}, blockDurationMs);
 		} catch (err) {
-			console.error("Failed to start recording:", err);
+			console.error("Failed to create recording session:", err);
 			setError("Recording failed - check camera connection");
 			setIsRecording(false);
 		}
@@ -299,33 +319,64 @@ export function useSessionRecorder({
 			if (recordingSessionRef.current) {
 				stopCurrentBlock();
 			}
+			// Clear any pending ready check
+			if (checkReadyIntervalRef.current) {
+				timerService.clearInterval(checkReadyIntervalRef.current);
+				checkReadyIntervalRef.current = null;
+			}
 			return;
 		}
 
 		// Wait for video to be ready
 		const video = videoRef.current;
 		if (!video || video.readyState < 3) {
+			// Clear any existing check interval before starting a new one
+			if (checkReadyIntervalRef.current) {
+				timerService.clearInterval(checkReadyIntervalRef.current);
+				checkReadyIntervalRef.current = null;
+			}
+
 			let attempts = 0;
 			const MAX_ATTEMPTS = 50; // 5 seconds
 
-			const checkReady = timerService.setInterval(() => {
+			checkReadyIntervalRef.current = timerService.setInterval(() => {
 				attempts++;
 				if (videoRef.current && videoRef.current.readyState >= 3) {
-					timerService.clearInterval(checkReady);
-					startRecordingBlock();
+					// Clear interval before starting recording
+					if (checkReadyIntervalRef.current) {
+						timerService.clearInterval(checkReadyIntervalRef.current);
+						checkReadyIntervalRef.current = null;
+					}
+					// Verify still enabled before starting
+					if (enabledRef.current) {
+						startRecordingBlock();
+					}
 				} else if (attempts >= MAX_ATTEMPTS) {
-					timerService.clearInterval(checkReady);
+					if (checkReadyIntervalRef.current) {
+						timerService.clearInterval(checkReadyIntervalRef.current);
+						checkReadyIntervalRef.current = null;
+					}
 					setError("Camera not ready - recording could not start");
 				}
 			}, 100);
 
-			return () => timerService.clearInterval(checkReady);
+			return () => {
+				if (checkReadyIntervalRef.current) {
+					timerService.clearInterval(checkReadyIntervalRef.current);
+					checkReadyIntervalRef.current = null;
+				}
+			};
 		}
 
 		// Video is ready, start recording
 		startRecordingBlock();
 
 		return () => {
+			// Clear check ready interval if still running
+			if (checkReadyIntervalRef.current) {
+				timerService.clearInterval(checkReadyIntervalRef.current);
+				checkReadyIntervalRef.current = null;
+			}
 			// Stop active recording session
 			if (recordingSessionRef.current) {
 				const session = recordingSessionRef.current;
