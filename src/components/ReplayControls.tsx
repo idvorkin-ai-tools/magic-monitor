@@ -1,8 +1,9 @@
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useMobileDetection } from "../hooks/useMobileDetection";
 import type { ReplayPlayerControls } from "../hooks/useReplayPlayer";
 import { selectThumbnailsForDisplay } from "../utils/thumbnailSelection";
+import { StatusButton } from "./StatusButton";
 import { Timeline } from "./Timeline";
 
 // ===== Types =====
@@ -13,6 +14,9 @@ interface ReplayControlsProps {
 	onSaveClick: () => void;
 	onSessionsClick?: () => void;
 	isMobile?: boolean;
+	isSmartZoom?: boolean;
+	onSmartZoomChange?: (enabled: boolean) => void;
+	isModelLoading?: boolean;
 }
 
 // ===== Helper =====
@@ -32,6 +36,9 @@ export function ReplayControls({
 	onSaveClick,
 	onSessionsClick,
 	isMobile = false,
+	isSmartZoom = false,
+	onSmartZoomChange,
+	isModelLoading = false,
 }: ReplayControlsProps) {
 	const {
 		isReady,
@@ -57,9 +64,57 @@ export function ReplayControls({
 	// Thumbnail display state
 	const [showThumbnails, setShowThumbnails] = useState(true);
 	const [thumbnailSize, setThumbnailSize] = useState(50); // 0-100 slider
+	const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+	const [isFloating, setIsFloating] = useState(false);
+	const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
+	const previewPanelRef = useRef<HTMLDivElement>(null);
 
 	const { isMobile: detectedMobile } = useMobileDetection();
 	const effectiveMobile = isMobile || detectedMobile;
+
+	// Handle drag start for floating preview panel
+	const handleDragStart = useCallback((e: React.PointerEvent) => {
+		if (!isFloating) return;
+		e.preventDefault();
+		const panel = previewPanelRef.current;
+		if (!panel) return;
+
+		panel.setPointerCapture(e.pointerId);
+		dragRef.current = {
+			startX: e.clientX,
+			startY: e.clientY,
+			startPosX: previewPosition.x,
+			startPosY: previewPosition.y,
+		};
+	}, [isFloating, previewPosition]);
+
+	const handleDragMove = useCallback((e: React.PointerEvent) => {
+		if (!dragRef.current) return;
+		const dx = e.clientX - dragRef.current.startX;
+		const dy = e.clientY - dragRef.current.startY;
+		setPreviewPosition({
+			x: dragRef.current.startPosX + dx,
+			y: dragRef.current.startPosY + dy,
+		});
+	}, []);
+
+	const handleDragEnd = useCallback((e: React.PointerEvent) => {
+		if (!dragRef.current) return;
+		const panel = previewPanelRef.current;
+		if (panel) {
+			panel.releasePointerCapture(e.pointerId);
+		}
+		dragRef.current = null;
+	}, []);
+
+	// Toggle floating mode
+	const toggleFloating = useCallback(() => {
+		if (isFloating) {
+			// Reset position when docking
+			setPreviewPosition({ x: 0, y: 0 });
+		}
+		setIsFloating(!isFloating);
+	}, [isFloating]);
 
 	// Select thumbnails for display based on size slider and device
 	const displayThumbnails = useMemo(() => {
@@ -71,22 +126,103 @@ export function ReplayControls({
 		);
 	}, [showThumbnails, player.session, effectiveMobile]);
 
+	// Calculate thumbnail dimensions for floating panel (same formula as Timeline)
+	const floatingThumbWidth = Math.round(48 + (thumbnailSize / 100) * 152);
+	const floatingThumbHeight = Math.round(floatingThumbWidth * (9 / 16));
+
 	return (
-		<div
-			className={clsx(
-				"absolute left-1/2 -translate-x-1/2 flex flex-col gap-2 items-center z-50 w-full max-w-4xl",
-				isMobile ? "bottom-3 px-2" : "bottom-12 px-4",
+		<>
+			{/* Floating preview panel */}
+			{isFloating && displayThumbnails && displayThumbnails.length > 0 && (
+				<div
+					ref={previewPanelRef}
+					className="fixed z-[60] bg-gray-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-700"
+					style={{
+						left: `calc(50% + ${previewPosition.x}px)`,
+						top: `calc(30% + ${previewPosition.y}px)`,
+						transform: "translateX(-50%)",
+						maxWidth: "90vw",
+						maxHeight: "50vh",
+						touchAction: "none", // Prevent browser gesture interference during drag
+					}}
+					onPointerDown={handleDragStart}
+					onPointerMove={handleDragMove}
+					onPointerUp={handleDragEnd}
+					onPointerCancel={handleDragEnd}
+				>
+					{/* Header - drag handle */}
+					<div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 cursor-move">
+						<span className="text-xs text-gray-400 select-none">Previews (drag to move)</span>
+						<div className="flex items-center gap-2">
+							<span className="text-xs text-gray-500">-</span>
+							<input
+								type="range"
+								min="0"
+								max="100"
+								value={thumbnailSize}
+								onChange={(e) => setThumbnailSize(Number(e.target.value))}
+								className="w-20 h-1 accent-blue-500 cursor-pointer"
+								onPointerDown={(e) => e.stopPropagation()}
+							/>
+							<span className="text-xs text-gray-500">+</span>
+							<button
+								onClick={toggleFloating}
+								className="ml-2 text-xs text-gray-400 hover:text-white"
+								title="Dock previews"
+								onPointerDown={(e) => e.stopPropagation()}
+							>
+								⬋
+							</button>
+						</div>
+					</div>
+					{/* Thumbnails */}
+					<div className="p-2 overflow-auto" style={{ maxHeight: "calc(50vh - 40px)" }}>
+						<div className="flex flex-wrap gap-1 justify-center">
+							{displayThumbnails.map((thumb, index) => (
+								<button
+									key={index}
+									onClick={() => seek(thumb.time)}
+									onPointerDown={(e) => e.stopPropagation()}
+									style={{ width: floatingThumbWidth, height: floatingThumbHeight }}
+									className={clsx(
+										"flex-shrink-0 rounded overflow-hidden relative",
+										"hover:ring-2 hover:ring-blue-500 transition-all",
+										currentTime >= thumb.time &&
+											(index === displayThumbnails.length - 1 ||
+												currentTime < displayThumbnails[index + 1]?.time) &&
+											"ring-2 ring-blue-500",
+									)}
+								>
+									<img
+										src={thumb.dataUrl}
+										alt=""
+										className="w-full h-full object-cover"
+									/>
+									<div className="absolute bottom-0.5 left-0.5 bg-black/70 text-white text-[10px] px-1 rounded font-mono">
+										{Math.floor(thumb.time / 60)}:{Math.floor(thumb.time % 60).toString().padStart(2, "0")}
+									</div>
+								</button>
+							))}
+						</div>
+					</div>
+				</div>
 			)}
-		>
-			{/* Main control bar */}
+
+			<div
+				className={clsx(
+					"absolute left-1/2 -translate-x-1/2 flex flex-col gap-2 items-center z-50 w-full max-w-4xl",
+					isMobile ? "bottom-3 px-2" : "bottom-12 px-4",
+				)}
+			>
+				{/* Main control bar */}
 			<div
 				className={clsx(
 					"bg-gray-900/95 backdrop-blur-md flex flex-col w-full",
 					isMobile ? "rounded-lg" : "rounded-2xl",
 				)}
 			>
-				{/* Thumbnail controls */}
-				{player.session?.thumbnails && player.session.thumbnails.length > 0 && (
+				{/* Thumbnail controls - when docked */}
+				{!isFloating && player.session?.thumbnails && player.session.thumbnails.length > 0 && (
 					<div className="flex items-center justify-between px-4 pt-2">
 						<button
 							onClick={() => setShowThumbnails(!showThumbnails)}
@@ -114,12 +250,19 @@ export function ReplayControls({
 									className="w-20 h-1 accent-blue-500 cursor-pointer"
 								/>
 								<span className="text-xs text-gray-500">+</span>
+								<button
+									onClick={toggleFloating}
+									className="ml-2 text-xs text-gray-400 hover:text-white"
+									title="Float previews"
+								>
+									⬈
+								</button>
 							</div>
 						)}
 					</div>
 				)}
 
-				{/* Timeline */}
+				{/* Timeline - only show thumbnails when not floating */}
 				<div className={clsx("px-4", isMobile ? "py-2" : "py-3")}>
 					<Timeline
 						currentTime={currentTime}
@@ -127,7 +270,7 @@ export function ReplayControls({
 						inPoint={inPoint}
 						outPoint={outPoint}
 						onSeek={seek}
-						thumbnails={displayThumbnails}
+						thumbnails={isFloating ? undefined : displayThumbnails}
 						isMobile={isMobile}
 						disabled={!isReady}
 						thumbnailSize={thumbnailSize}
@@ -208,6 +351,26 @@ export function ReplayControls({
 						>
 							▶▶
 						</button>
+
+						{/* Smart Zoom Toggle */}
+						{onSmartZoomChange && !isMobile && (
+							<>
+								<div className="h-6 w-px bg-gray-700" />
+								<StatusButton
+									onClick={() => onSmartZoomChange(!isSmartZoom)}
+									disabled={isModelLoading}
+									active={isSmartZoom && !isModelLoading}
+									color="green"
+									title="Smart Zoom - Auto-follow movement"
+								>
+									{isModelLoading
+										? "Loading..."
+										: isSmartZoom
+											? "Smart ✓"
+											: "Smart"}
+								</StatusButton>
+							</>
+						)}
 					</div>
 
 					{/* Center: Time display */}
@@ -317,5 +480,6 @@ export function ReplayControls({
 				</div>
 			</div>
 		</div>
+		</>
 	);
 }

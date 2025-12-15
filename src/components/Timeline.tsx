@@ -30,8 +30,8 @@ export function Timeline({
 	thumbnailSize = 50,
 }: TimelineProps) {
 	// Calculate thumbnail dimensions based on size slider (0=small, 100=large)
-	// Width ranges from 32px to 96px, height maintains 16:9 aspect
-	const thumbWidth = Math.round(32 + (thumbnailSize / 100) * 64);
+	// Width ranges from 48px to 200px, height maintains 16:9 aspect
+	const thumbWidth = Math.round(48 + (thumbnailSize / 100) * 152);
 	const thumbHeight = Math.round(thumbWidth * (9 / 16));
 	const trackRef = useRef<HTMLDivElement>(null);
 	const activeHandlersRef = useRef<{

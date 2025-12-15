@@ -1,5 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSmartZoom } from "../hooks/useSmartZoom";
 import type { ReplayPlayerControls } from "../hooks/useReplayPlayer";
+import type { SmoothingPreset } from "../smoothing";
+import { Minimap } from "./Minimap";
 import { ReplayControls } from "./ReplayControls";
 
 // ===== Types =====
@@ -10,6 +13,7 @@ interface ReplayViewProps {
 	onSessionsClick?: () => void;
 	isMobile?: boolean;
 	videoTransform?: string;
+	smoothingPreset?: SmoothingPreset;
 }
 
 // ===== Component =====
@@ -20,17 +24,68 @@ export function ReplayView({
 	onSessionsClick,
 	isMobile = false,
 	videoTransform,
+	smoothingPreset = "ema",
 }: ReplayViewProps) {
 	// Destructure player state to avoid eslint false positives about refs
 	const {
 		isLoading,
+		isReady,
 		error,
-		videoRef,
+		videoRef: playerVideoRef,
 		saveClip,
 	} = player;
 
 	const [showSaveDialog, setShowSaveDialog] = useState(false);
 	const [clipName, setClipName] = useState("");
+	const [isSmartZoom, setIsSmartZoom] = useState(false);
+	const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
+
+	// Create a ref for smart zoom (since player uses callback ref)
+	const videoRef = useRef<HTMLVideoElement | null>(null);
+
+	// Callback ref that syncs both refs
+	const handleVideoRef = useCallback(
+		(element: HTMLVideoElement | null) => {
+			videoRef.current = element;
+			playerVideoRef(element);
+		},
+		[playerVideoRef],
+	);
+
+	// Update videoSrc for minimap when video is ready (blob URL is set)
+	// Listen to loadeddata event to catch when src is actually loaded
+	useEffect(() => {
+		const video = videoRef.current;
+		if (!video) return;
+
+		const handleLoadedData = () => {
+			if (video.src) {
+				setVideoSrc(video.src);
+			}
+		};
+
+		// Check if already loaded
+		if (isReady && video.src) {
+			setVideoSrc(video.src);
+		} else if (!isReady) {
+			setVideoSrc(undefined);
+		}
+
+		video.addEventListener("loadeddata", handleLoadedData);
+		return () => video.removeEventListener("loadeddata", handleLoadedData);
+	}, [isReady]);
+
+	// Smart Zoom for replay video
+	const smartZoom = useSmartZoom({
+		videoRef,
+		enabled: isSmartZoom,
+		smoothingPreset,
+	});
+
+	// Compute effective transform: use smartZoom when enabled, else passed transform
+	const effectiveTransform = isSmartZoom
+		? `scale(${smartZoom.zoom}) translate(${(smartZoom.pan.x * 100).toFixed(2)}%, ${(smartZoom.pan.y * 100).toFixed(2)}%)`
+		: videoTransform;
 
 	// Handle save clip
 	const handleSaveClip = useCallback(async () => {
@@ -77,14 +132,23 @@ export function ReplayView({
 				</div>
 			)}
 
+			{/* Minimap (zoom indicator) - only when smart zoom is active */}
+			{isSmartZoom && (
+				<Minimap
+					videoSrc={videoSrc}
+					zoom={smartZoom.zoom}
+					pan={smartZoom.pan}
+				/>
+			)}
+
 			{/* Video element (managed by player hook) */}
 			<video
-				ref={videoRef}
+				ref={handleVideoRef}
 				muted
 				playsInline
 				className="flex-1 w-full h-full object-contain"
 				style={{
-					transform: videoTransform,
+					transform: effectiveTransform,
 				}}
 			/>
 
@@ -95,6 +159,9 @@ export function ReplayView({
 				onSaveClick={() => setShowSaveDialog(true)}
 				onSessionsClick={onSessionsClick}
 				isMobile={isMobile}
+				isSmartZoom={isSmartZoom}
+				onSmartZoomChange={setIsSmartZoom}
+				isModelLoading={smartZoom.isModelLoading}
 			/>
 
 			{/* Save Dialog */}

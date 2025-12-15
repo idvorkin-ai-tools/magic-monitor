@@ -112,11 +112,6 @@ export function SessionPicker({
 		setView("list");
 	}, []);
 
-	// Handle current recording click
-	const handleCurrentRecordingClick = useCallback(() => {
-		// TODO: Stop current recording and show it
-		// For now, this is a placeholder
-	}, []);
 
 	// Handle close
 	const handleClose = useCallback(() => {
@@ -185,8 +180,8 @@ export function SessionPicker({
 									</h3>
 									<div className="flex gap-4">
 										<div
-											className="relative cursor-pointer group"
-											onClick={handleCurrentRecordingClick}
+											className="relative cursor-default"
+											title="Recording in progress"
 										>
 											<div className="w-32 h-20 rounded-lg overflow-hidden bg-gray-800 relative">
 												<img

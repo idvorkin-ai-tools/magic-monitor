@@ -1,24 +1,30 @@
 import { useEffect, useRef } from "react";
 
 interface MinimapProps {
-	stream: MediaStream | null;
+	stream?: MediaStream | null;
+	videoSrc?: string; // For blob URLs in replay mode
 	zoom: number;
 	pan: { x: number; y: number };
 	frame?: ImageBitmap | null;
 	onPanTo?: (targetPan: { x: number; y: number }) => void;
+	isMirror?: boolean;
 }
 
-export function Minimap({ stream, zoom, pan, frame, onPanTo }: MinimapProps) {
+export function Minimap({ stream, videoSrc, zoom, pan, frame, onPanTo, isMirror = false }: MinimapProps) {
 	const miniVideoRef = useRef<HTMLVideoElement>(null);
 	const miniCanvasRef = useRef<HTMLCanvasElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 
-	// Sync the mini video with the main video stream
+	// Sync the mini video with the main video stream or blob URL
 	useEffect(() => {
-		if (!frame && stream && miniVideoRef.current) {
-			miniVideoRef.current.srcObject = stream;
+		if (!frame && miniVideoRef.current) {
+			if (stream) {
+				miniVideoRef.current.srcObject = stream;
+			} else if (videoSrc) {
+				miniVideoRef.current.src = videoSrc;
+			}
 		}
-	}, [stream, frame]);
+	}, [stream, videoSrc, frame]);
 
 	// Render frame if provided
 	useEffect(() => {
@@ -81,6 +87,7 @@ export function Minimap({ stream, zoom, pan, frame, onPanTo }: MinimapProps) {
 					playsInline
 					muted
 					className="w-full h-full object-contain opacity-50 pointer-events-none"
+					style={{ transform: isMirror ? "scaleX(-1)" : undefined }}
 				/>
 			)}
 
