@@ -83,10 +83,24 @@ export function SessionPicker({
 		}
 	}, [isOpen, onRefresh]);
 
-	// Show ALL thumbnails in session picker (it's scrollable, no need to filter)
+	// Show up to 12 thumbnails, evenly distributed across the video
 	const displayThumbnails = useMemo(() => {
 		if (!selectedSession) return [];
-		return selectedSession.thumbnails;
+		const all = selectedSession.thumbnails;
+		const maxThumbnails = 12;
+
+		if (all.length <= maxThumbnails) {
+			return all;
+		}
+
+		// Evenly distribute: always include first and last
+		const selected: typeof all = [];
+		const step = (all.length - 1) / (maxThumbnails - 1);
+		for (let i = 0; i < maxThumbnails; i++) {
+			const index = Math.round(i * step);
+			selected.push(all[index]);
+		}
+		return selected;
 	}, [selectedSession]);
 
 	// Load storage usage
@@ -177,8 +191,8 @@ export function SessionPicker({
 					</button>
 				</div>
 
-				{/* Content */}
-				<div className="flex-1 overflow-y-auto p-4">
+				{/* Content - min-h-0 is required for overflow-y-auto to work in flex containers */}
+				<div className="flex-1 min-h-0 overflow-y-auto p-4">
 					{/* Delete Error */}
 					{deleteError && (
 						<div className="mb-4 p-3 bg-red-900/50 border border-red-600 rounded-lg text-red-200 text-sm">
