@@ -381,15 +381,17 @@ export function CameraStage() {
 				onStopAndViewRecording={handleStopAndViewRecording}
 			/>
 
-			{/* Minimap (Only when zoomed) */}
-			<Minimap
-				stream={stream}
-				zoom={effectiveZoom}
-				pan={effectivePan}
-				frame={null}
-				onPanTo={handlePanTo}
-				isMirror={isMirror}
-			/>
+			{/* Minimap (Only when zoomed, hidden in replay mode since ReplayView has its own) */}
+			{appState === "live" && (
+				<Minimap
+					stream={stream}
+					zoom={effectiveZoom}
+					pan={effectivePan}
+					frame={null}
+					onPanTo={handlePanTo}
+					isMirror={isMirror}
+				/>
+			)}
 
 			{/* Status Bar */}
 			<div className="absolute bottom-8 right-8 z-40 text-white/50 font-mono text-xs pointer-events-none flex flex-col items-end gap-1">
