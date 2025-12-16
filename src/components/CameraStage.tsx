@@ -388,6 +388,7 @@ export function CameraStage() {
 				pan={effectivePan}
 				frame={null}
 				onPanTo={handlePanTo}
+				isMirror={isMirror}
 			/>
 
 			{/* Status Bar */}

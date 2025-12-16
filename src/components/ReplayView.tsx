@@ -171,6 +171,7 @@ export function ReplayView({
 					videoSrc={videoSrc}
 					zoom={smartZoom.zoom}
 					pan={smartZoom.pan}
+					mainVideoRef={videoRef}
 				/>
 			)}
 

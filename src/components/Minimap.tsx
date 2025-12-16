@@ -8,23 +8,56 @@ interface MinimapProps {
 	frame?: ImageBitmap | null;
 	onPanTo?: (targetPan: { x: number; y: number }) => void;
 	isMirror?: boolean;
+	/** Reference to main video for syncing playback time in replay mode */
+	mainVideoRef?: React.RefObject<HTMLVideoElement | null>;
 }
 
-export function Minimap({ stream, videoSrc, zoom, pan, frame, onPanTo, isMirror = false }: MinimapProps) {
+export function Minimap({ stream, videoSrc, zoom, pan, frame, onPanTo, isMirror = false, mainVideoRef }: MinimapProps) {
 	const miniVideoRef = useRef<HTMLVideoElement>(null);
 	const miniCanvasRef = useRef<HTMLCanvasElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	// Sync the mini video with the main video stream or blob URL
 	useEffect(() => {
-		if (!frame && miniVideoRef.current) {
+		const miniVideo = miniVideoRef.current;
+		if (!frame && miniVideo) {
 			if (stream) {
-				miniVideoRef.current.srcObject = stream;
+				miniVideo.srcObject = stream;
+				// Ensure video plays
+				miniVideo.play().catch(() => {
+					// Autoplay blocked - that's okay, video will still show frames
+				});
 			} else if (videoSrc) {
-				miniVideoRef.current.src = videoSrc;
+				miniVideo.src = videoSrc;
+				miniVideo.load();
 			}
 		}
 	}, [stream, videoSrc, frame]);
+
+	// Sync minimap video time with main video in replay mode
+	useEffect(() => {
+		const miniVideo = miniVideoRef.current;
+		const mainVideo = mainVideoRef?.current;
+		if (!miniVideo || !mainVideo || !videoSrc) return;
+
+		const syncTime = () => {
+			if (Math.abs(miniVideo.currentTime - mainVideo.currentTime) > 0.5) {
+				miniVideo.currentTime = mainVideo.currentTime;
+			}
+		};
+
+		// Sync on seek and periodically
+		mainVideo.addEventListener("seeked", syncTime);
+		mainVideo.addEventListener("timeupdate", syncTime);
+
+		// Initial sync
+		syncTime();
+
+		return () => {
+			mainVideo.removeEventListener("seeked", syncTime);
+			mainVideo.removeEventListener("timeupdate", syncTime);
+		};
+	}, [videoSrc, mainVideoRef]);
 
 	// Render frame if provided
 	useEffect(() => {
