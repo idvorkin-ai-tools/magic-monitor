@@ -1,6 +1,6 @@
-import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PAN_CONSTANTS, ZOOM_CONSTANTS } from "../constants/zoom";
+import { HandLandmarkerService, type LoadingState } from "../services/HandLandmarkerService";
 import {
 	clampSpeed,
 	createSmoother,
@@ -163,7 +163,6 @@ export function useSmartZoom({
 	// The refs above always have the real-time value; state is for UI display only
 	const UI_UPDATE_INTERVAL = 6;
 
-	const landmarkerRef = useRef<HandLandmarker | null>(null);
 	const requestRef = useRef<number>(0);
 	const lastVideoTimeRef = useRef<number>(-1);
 
@@ -171,84 +170,21 @@ export function useSmartZoom({
 	const debugTraceRef = useRef<DebugTraceEntry[]>([]);
 	const frameCountRef = useRef(0);
 
+	// Subscribe to singleton HandLandmarkerService for model loading
 	useEffect(() => {
-		async function loadModel() {
-			try {
-				// Use local WASM files for offline support
-				const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
-
-				// Fetch model with progress tracking
-				const response = await fetch("/mediapipe/hand_landmarker.task");
-				const contentLength = response.headers.get("Content-Length");
-				const total = contentLength ? parseInt(contentLength, 10) : 0;
-
-				if (!response.body) {
-					throw new Error("Response body is null");
-				}
-
-				const reader = response.body.getReader();
-				let receivedLength = 0;
-				const chunks: Uint8Array[] = [];
-
-				// Read chunks and track progress
-				while (true) {
-					const { done, value } = await reader.read();
-
-					if (done) break;
-
-					chunks.push(value);
-					receivedLength += value.length;
-
-					// Update progress (0-100%)
-					if (total > 0) {
-						setLoadingProgress(Math.round((receivedLength / total) * 100));
-					}
-				}
-
-				// Combine chunks into single Uint8Array
-				const modelBuffer = new Uint8Array(receivedLength);
-				let position = 0;
-				for (const chunk of chunks) {
-					modelBuffer.set(chunk, position);
-					position += chunk.length;
-				}
-
-				// Download complete, now initializing model
-				setLoadingPhase("initializing");
-
-				// Create HandLandmarker with GPU delegate specified during creation
-				// Note: delegate must be set during creation, not after, for GPU compilation
-				console.log("[SmartZoom] Creating HandLandmarker with GPU delegate...");
-				landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-					baseOptions: {
-						modelAssetBuffer: modelBuffer,
-						delegate: "GPU",
-					},
-					runningMode: "VIDEO",
-					numHands: 2,
-				});
-
-				// Log WebGL availability for GPU delegate diagnostics
-				const canvas = document.createElement("canvas");
-				const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
-				console.log("[SmartZoom] WebGL available:", !!gl, gl ? `(${gl.getParameter(gl.VERSION)})` : "");
-				console.log("[SmartZoom] HandLandmarker initialized successfully");
-
-				setIsModelLoading(false);
-			} catch (error) {
-				console.error("Error loading HandLandmarker:", error);
-				setIsModelLoading(false);
-			}
-		}
-
-		loadModel();
-
-		return () => {
-			if (landmarkerRef.current) {
-				landmarkerRef.current.close();
-				landmarkerRef.current = null;
-			}
+		const handleStateChange = (state: LoadingState) => {
+			setIsModelLoading(state.phase === "downloading" || state.phase === "initializing");
+			setLoadingProgress(state.progress);
+			setLoadingPhase(state.phase === "initializing" ? "initializing" : "downloading");
 		};
+
+		const unsubscribe = HandLandmarkerService.subscribe(handleStateChange);
+
+		// Trigger model loading (no-op if already loaded/loading)
+		HandLandmarkerService.load();
+
+		return unsubscribe;
+		// Note: No cleanup of model - it's shared across components via the service
 	}, []);
 
 	// Clear debug trace when smart zoom is disabled
@@ -260,7 +196,8 @@ export function useSmartZoom({
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: isModelLoading triggers effect re-run when model loads
 	useEffect(() => {
-		if (!enabled || !landmarkerRef.current || !videoRef.current) return;
+		const landmarker = HandLandmarkerService.getModel();
+		if (!enabled || !landmarker || !videoRef.current) return;
 
 		const detect = () => {
 			const video = videoRef.current;
@@ -274,7 +211,7 @@ export function useSmartZoom({
 				lastVideoTimeRef.current = video.currentTime;
 
 				const startTimeMs = performance.now();
-				const result = landmarkerRef.current?.detectForVideo(
+				const result = landmarker.detectForVideo(
 					video,
 					startTimeMs,
 				);

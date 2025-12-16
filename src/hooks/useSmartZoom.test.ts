@@ -1,5 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HandLandmarkerService } from "../services/HandLandmarkerService";
 import {
 	clampNormalizedPan,
 	clampPanToViewport,
@@ -38,6 +39,9 @@ describe("useSmartZoom", () => {
 
 	beforeEach(() => {
 		vi.useFakeTimers();
+
+		// Reset the singleton service before each test
+		HandLandmarkerService._reset();
 
 		// Mock fetch for model loading
 		globalThis.fetch = vi.fn().mockResolvedValue({
