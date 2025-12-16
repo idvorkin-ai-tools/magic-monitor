@@ -1,5 +1,6 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PAN_CONSTANTS, ZOOM_CONSTANTS } from "../constants/zoom";
 import {
 	clampSpeed,
 	createSmoother,
@@ -138,12 +139,9 @@ export function useSmartZoom({
 		smootherRef.current.reset();
 	}, [smoothingPreset]);
 
-	// Constants (see docs/SMART_ZOOM_SPEC.md)
-	const MIN_ZOOM = 1;
-	const MAX_ZOOM = 3;
-	const ZOOM_THRESHOLD = 0.1;
-	// Pan threshold in normalized coords (0.025 ≈ 50px on 1920px video)
-	const PAN_THRESHOLD = 0.025;
+	// Destructure constants for cleaner code (see docs/SMART_ZOOM_SPEC.md)
+	const { MIN_ZOOM, MAX_ZOOM, THRESHOLD: ZOOM_THRESHOLD } = ZOOM_CONSTANTS;
+	const { THRESHOLD: PAN_THRESHOLD } = PAN_CONSTANTS;
 
 	// Output state
 	const [zoom, setZoom] = useState(1);

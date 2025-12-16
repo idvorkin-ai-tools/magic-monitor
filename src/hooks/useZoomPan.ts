@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ZOOM_CONSTANTS } from "../constants/zoom";
 
 export interface ZoomPanState {
 	zoom: number;
@@ -92,7 +93,7 @@ export function useZoomPan({
 			// Notify that manual zoom is happening (so caller can disable smart zoom)
 			onZoomChange?.();
 			setZoomInternal((currentZoom) => {
-				const newZoom = Math.min(Math.max(currentZoom - e.deltaY * 0.001, minZoom), maxZoom);
+				const newZoom = Math.min(Math.max(currentZoom - e.deltaY * ZOOM_CONSTANTS.WHEEL_SENSITIVITY, minZoom), maxZoom);
 				// Re-clamp pan with new zoom level
 				setPanInternal((prev) => clampPan(prev, newZoom));
 				return newZoom;
