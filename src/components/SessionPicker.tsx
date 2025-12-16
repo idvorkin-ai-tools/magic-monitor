@@ -6,7 +6,6 @@ import { SessionStorageService } from "../services/SessionStorageService";
 import type { PracticeSession } from "../types/sessions";
 import { SESSION_CONFIG } from "../types/sessions";
 import { formatDuration } from "../utils/formatters";
-import { selectThumbnailsForDisplay } from "../utils/thumbnailSelection";
 import { PreviewSizeSlider } from "./PreviewSizeSlider";
 import { SessionThumbnail } from "./SessionThumbnail";
 import { ThumbnailGrid } from "./ThumbnailGrid";
@@ -84,15 +83,11 @@ export function SessionPicker({
 		}
 	}, [isOpen, onRefresh]);
 
-	// Select thumbnails for display based on device and clip duration
+	// Show ALL thumbnails in session picker (it's scrollable, no need to filter)
 	const displayThumbnails = useMemo(() => {
 		if (!selectedSession) return [];
-		return selectThumbnailsForDisplay(
-			selectedSession.thumbnails,
-			selectedSession.duration,
-			isMobile,
-		);
-	}, [selectedSession, isMobile]);
+		return selectedSession.thumbnails;
+	}, [selectedSession]);
 
 	// Load storage usage
 	useEffect(() => {
