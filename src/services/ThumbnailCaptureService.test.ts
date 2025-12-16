@@ -105,8 +105,8 @@ describe("ThumbnailCaptureService", () => {
 			// Capture the blob URL so we can verify it gets revoked
 			let createdUrl: string | undefined;
 			const originalCreateObjectURL = URL.createObjectURL;
-			vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob) => {
-				createdUrl = originalCreateObjectURL(blob);
+			vi.spyOn(URL, "createObjectURL").mockImplementation((obj: Blob | MediaSource) => {
+				createdUrl = originalCreateObjectURL(obj);
 				return createdUrl;
 			});
 
@@ -172,8 +172,8 @@ describe("ThumbnailCaptureService", () => {
 			// Capture the blob URL so we can verify it gets revoked
 			let createdUrl: string | undefined;
 			const originalCreateObjectURL = URL.createObjectURL;
-			vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob) => {
-				createdUrl = originalCreateObjectURL(blob);
+			vi.spyOn(URL, "createObjectURL").mockImplementation((obj: Blob | MediaSource) => {
+				createdUrl = originalCreateObjectURL(obj);
 				return createdUrl;
 			});
 

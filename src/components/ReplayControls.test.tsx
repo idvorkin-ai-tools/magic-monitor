@@ -12,9 +12,9 @@ vi.mock("../hooks/useMobileDetection", () => ({
 
 describe("ReplayControls", () => {
 	let mockPlayer: ReplayPlayerControls;
-	let mockOnExit: ReturnType<typeof vi.fn>;
-	let mockOnSaveClick: ReturnType<typeof vi.fn>;
-	let mockOnSessionsClick: ReturnType<typeof vi.fn>;
+	let mockOnExit: () => void;
+	let mockOnSaveClick: () => void;
+	let mockOnSessionsClick: () => void;
 
 	const mockSession: PracticeSession = {
 		id: "test-session",

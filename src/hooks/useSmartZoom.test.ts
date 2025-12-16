@@ -40,7 +40,7 @@ describe("useSmartZoom", () => {
 		vi.useFakeTimers();
 
 		// Mock fetch for model loading
-		global.fetch = vi.fn().mockResolvedValue({
+		globalThis.fetch = vi.fn().mockResolvedValue({
 			headers: {
 				get: vi.fn().mockReturnValue("8192000"), // 8MB
 			},

@@ -65,6 +65,7 @@ export function CameraStage() {
 	// Zoom/Pan State and Handlers
 	const zoomPan = useZoomPan({
 		videoRef,
+		containerRef,
 		onZoomChange: () => {
 			// Manual zoom/pan takes control from smart zoom
 			if (isSmartZoom) setIsSmartZoom(false);

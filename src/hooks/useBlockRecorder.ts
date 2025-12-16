@@ -44,6 +44,24 @@ export function useBlockRecorder({
 
 		const stream = video.srcObject as MediaStream;
 
+		// Validate stream health before attempting to record
+		if (!stream.active) {
+			setError("Camera stream is not active. Try refreshing the page.");
+			return;
+		}
+
+		const videoTracks = stream.getVideoTracks();
+		if (videoTracks.length === 0) {
+			setError("No video track available from camera.");
+			return;
+		}
+
+		const liveTrack = videoTracks.find((t) => t.readyState === "live");
+		if (!liveTrack) {
+			setError("Camera video track has ended. Try selecting a different camera.");
+			return;
+		}
+
 		try {
 			const session = mediaRecorderService.startRecording(stream, {
 				videoBitsPerSecond: SESSION_CONFIG.VIDEO_BITRATE,
@@ -60,7 +78,20 @@ export function useBlockRecorder({
 					startErr instanceof Error
 						? startErr.message
 						: "Failed to start recording";
+				// Log diagnostic info to help debug MediaRecorder failures
 				console.error("MediaRecorder.start() failed:", startErr);
+				console.error("[MediaRecorder Debug]", {
+					streamActive: stream.active,
+					videoTracks: stream.getVideoTracks().map((t) => ({
+						id: t.id,
+						label: t.label,
+						readyState: t.readyState,
+						enabled: t.enabled,
+						muted: t.muted,
+					})),
+					audioTracks: stream.getAudioTracks().length,
+					mimeType: mediaRecorderService.getBestCodec(),
+				});
 				setError(errorMessage);
 				setIsRecording(false);
 				return;

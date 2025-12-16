@@ -3,11 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 import { useZoomPan } from "./useZoomPan";
 import { createRef } from "react";
 
+// Helper to create mock refs for testing
+function createMockRefs() {
+	const videoRef = createRef<HTMLVideoElement>();
+	const containerRef = { current: document.createElement("div") };
+	return { videoRef, containerRef };
+}
+
 describe("useZoomPan", () => {
 	describe("initial state", () => {
 		it("should initialize with zoom 1 and pan at origin", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			expect(result.current.zoom).toBe(1);
 			expect(result.current.pan).toEqual({ x: 0, y: 0 });
@@ -17,8 +24,8 @@ describe("useZoomPan", () => {
 
 	describe("setZoom", () => {
 		it("should update zoom within min/max bounds", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(3);
@@ -28,9 +35,9 @@ describe("useZoomPan", () => {
 		});
 
 		it("should clamp zoom to minZoom", () => {
-			const videoRef = createRef<HTMLVideoElement>();
+			const { videoRef, containerRef } = createMockRefs();
 			const { result } = renderHook(() =>
-				useZoomPan({ videoRef, minZoom: 1, maxZoom: 5 }),
+				useZoomPan({ videoRef, containerRef, minZoom: 1, maxZoom: 5 }),
 			);
 
 			act(() => {
@@ -41,9 +48,9 @@ describe("useZoomPan", () => {
 		});
 
 		it("should clamp zoom to maxZoom", () => {
-			const videoRef = createRef<HTMLVideoElement>();
+			const { videoRef, containerRef } = createMockRefs();
 			const { result } = renderHook(() =>
-				useZoomPan({ videoRef, minZoom: 1, maxZoom: 5 }),
+				useZoomPan({ videoRef, containerRef, minZoom: 1, maxZoom: 5 }),
 			);
 
 			act(() => {
@@ -54,8 +61,8 @@ describe("useZoomPan", () => {
 		});
 
 		it("should re-clamp pan when zoom changes", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			// Set high zoom and pan to max
 			act(() => {
@@ -77,8 +84,8 @@ describe("useZoomPan", () => {
 
 	describe("setPan", () => {
 		it("should update pan position", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(2);
@@ -89,8 +96,8 @@ describe("useZoomPan", () => {
 		});
 
 		it("should clamp pan to maxPan based on zoom level", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(2);
@@ -104,8 +111,8 @@ describe("useZoomPan", () => {
 		});
 
 		it("should clamp negative pan values", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(2);
@@ -118,8 +125,8 @@ describe("useZoomPan", () => {
 		});
 
 		it("should not allow panning at zoom 1", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setPan({ x: 0.1, y: 0.1 });
@@ -130,58 +137,48 @@ describe("useZoomPan", () => {
 		});
 	});
 
-	describe("handleWheel", () => {
+	describe("wheel events", () => {
 		it("should increase zoom on scroll up", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
-			const wheelEvent = {
-				preventDefault: vi.fn(),
-				deltaY: -100, // scroll up
-			} as unknown as React.WheelEvent;
-
+			// Dispatch wheel event on the container
 			act(() => {
-				result.current.handleWheel(wheelEvent);
+				const wheelEvent = new WheelEvent("wheel", { deltaY: -100, cancelable: true });
+				containerRef.current!.dispatchEvent(wheelEvent);
 			});
 
-			expect(wheelEvent.preventDefault).toHaveBeenCalled();
 			expect(result.current.zoom).toBeGreaterThan(1);
 		});
 
 		it("should decrease zoom on scroll down", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(3);
 			});
 
-			const wheelEvent = {
-				preventDefault: vi.fn(),
-				deltaY: 100, // scroll down
-			} as unknown as React.WheelEvent;
-
+			// Dispatch wheel event on the container
 			act(() => {
-				result.current.handleWheel(wheelEvent);
+				const wheelEvent = new WheelEvent("wheel", { deltaY: 100, cancelable: true });
+				containerRef.current!.dispatchEvent(wheelEvent);
 			});
 
 			expect(result.current.zoom).toBeLessThan(3);
 		});
 
 		it("should call onZoomChange callback", () => {
-			const videoRef = createRef<HTMLVideoElement>();
+			const { videoRef, containerRef } = createMockRefs();
 			const onZoomChange = vi.fn();
-			const { result } = renderHook(() =>
-				useZoomPan({ videoRef, onZoomChange }),
+			renderHook(() =>
+				useZoomPan({ videoRef, containerRef, onZoomChange }),
 			);
 
-			const wheelEvent = {
-				preventDefault: vi.fn(),
-				deltaY: -100,
-			} as unknown as React.WheelEvent;
-
+			// Dispatch wheel event on the container
 			act(() => {
-				result.current.handleWheel(wheelEvent);
+				const wheelEvent = new WheelEvent("wheel", { deltaY: -100, cancelable: true });
+				containerRef.current!.dispatchEvent(wheelEvent);
 			});
 
 			expect(onZoomChange).toHaveBeenCalled();
@@ -190,8 +187,8 @@ describe("useZoomPan", () => {
 
 	describe("handleMouseDown", () => {
 		it("should start dragging when zoom > 1", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(2);
@@ -210,8 +207,8 @@ describe("useZoomPan", () => {
 		});
 
 		it("should not start dragging at zoom 1", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			const mouseEvent = {
 				clientX: 100,
@@ -228,9 +225,10 @@ describe("useZoomPan", () => {
 
 	describe("handleMouseMove", () => {
 		it("should update pan position when dragging", () => {
-			const videoRef = createRef<HTMLVideoElement>();
+			const { containerRef } = createMockRefs();
+			const videoRef = { current: null } as React.RefObject<HTMLVideoElement | null>;
 			// Mock getBoundingClientRect
-			videoRef.current = {
+			(videoRef as { current: HTMLVideoElement | null }).current = {
 				getBoundingClientRect: () => ({
 					width: 1000,
 					height: 1000,
@@ -244,7 +242,7 @@ describe("useZoomPan", () => {
 				}),
 			} as HTMLVideoElement;
 
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(2);
@@ -274,8 +272,8 @@ describe("useZoomPan", () => {
 		});
 
 		it("should not update pan when not dragging", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(2);
@@ -291,8 +289,8 @@ describe("useZoomPan", () => {
 
 	describe("handleMouseUp", () => {
 		it("should stop dragging", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(2);
@@ -317,8 +315,8 @@ describe("useZoomPan", () => {
 
 	describe("resetZoom", () => {
 		it("should reset zoom to 1 and pan to origin", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(3);
@@ -334,10 +332,10 @@ describe("useZoomPan", () => {
 		});
 
 		it("should call onZoomChange callback", () => {
-			const videoRef = createRef<HTMLVideoElement>();
+			const { videoRef, containerRef } = createMockRefs();
 			const onZoomChange = vi.fn();
 			const { result } = renderHook(() =>
-				useZoomPan({ videoRef, onZoomChange }),
+				useZoomPan({ videoRef, containerRef, onZoomChange }),
 			);
 
 			act(() => {
@@ -350,8 +348,8 @@ describe("useZoomPan", () => {
 
 	describe("pan constraints", () => {
 		it("should calculate correct maxPan for zoom 2", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(2);
@@ -364,8 +362,8 @@ describe("useZoomPan", () => {
 		});
 
 		it("should calculate correct maxPan for zoom 5", () => {
-			const videoRef = createRef<HTMLVideoElement>();
-			const { result } = renderHook(() => useZoomPan({ videoRef }));
+			const { videoRef, containerRef } = createMockRefs();
+			const { result } = renderHook(() => useZoomPan({ videoRef, containerRef }));
 
 			act(() => {
 				result.current.setZoom(5);
@@ -378,9 +376,9 @@ describe("useZoomPan", () => {
 		});
 
 		it("should calculate correct maxPan for zoom 10", () => {
-			const videoRef = createRef<HTMLVideoElement>();
+			const { videoRef, containerRef } = createMockRefs();
 			const { result } = renderHook(() =>
-				useZoomPan({ videoRef, maxZoom: 10 }),
+				useZoomPan({ videoRef, containerRef, maxZoom: 10 }),
 			);
 
 			act(() => {

@@ -16,6 +16,7 @@ function createMockSessionStorage() {
 		getRecentSessions: vi.fn().mockResolvedValue([]),
 		getSavedSessions: vi.fn().mockResolvedValue([]),
 		saveSession: vi.fn().mockResolvedValue("test-id"),
+		saveSessionWithBlob: vi.fn().mockResolvedValue("test-id"),
 		saveBlob: vi.fn().mockResolvedValue(undefined),
 		pruneOldSessions: vi.fn().mockResolvedValue(0),
 		getSession: vi.fn(),

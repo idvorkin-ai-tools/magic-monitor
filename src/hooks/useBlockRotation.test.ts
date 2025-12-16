@@ -16,7 +16,7 @@ function createMockTimerService() {
 
 describe("useBlockRotation", () => {
 	let mockTimer: ReturnType<typeof createMockTimerService>;
-	let onBlockComplete: ReturnType<typeof vi.fn>;
+	let onBlockComplete: () => void;
 
 	beforeEach(() => {
 		vi.clearAllMocks();

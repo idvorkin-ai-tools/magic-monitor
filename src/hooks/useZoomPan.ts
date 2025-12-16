@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export interface ZoomPanState {
 	zoom: number;
@@ -16,7 +16,8 @@ export interface ZoomPanHandlers {
 }
 
 export interface UseZoomPanOptions {
-	videoRef: React.RefObject<HTMLVideoElement>;
+	videoRef: React.RefObject<HTMLVideoElement | null>;
+	containerRef: React.RefObject<HTMLElement | null>;
 	minZoom?: number;
 	maxZoom?: number;
 	onZoomChange?: () => void;
@@ -40,6 +41,7 @@ export interface UseZoomPanResult extends ZoomPanState, ZoomPanHandlers {
  */
 export function useZoomPan({
 	videoRef,
+	containerRef,
 	minZoom = 1,
 	maxZoom = 5,
 	onZoomChange,
@@ -79,16 +81,33 @@ export function useZoomPan({
 		[clampPan],
 	);
 
-	const handleWheel = useCallback(
-		(e: React.WheelEvent) => {
+	// Attach wheel listener with { passive: false } to allow preventDefault
+	// React's onWheel is passive by default, causing browser warnings
+	useEffect(() => {
+		const container = containerRef.current;
+		if (!container) return;
+
+		const handleWheel = (e: WheelEvent) => {
 			e.preventDefault();
 			// Notify that manual zoom is happening (so caller can disable smart zoom)
 			onZoomChange?.();
-			const newZoom = zoom - e.deltaY * 0.001;
-			setZoom(newZoom);
-		},
-		[zoom, setZoom, onZoomChange],
-	);
+			setZoomInternal((currentZoom) => {
+				const newZoom = Math.min(Math.max(currentZoom - e.deltaY * 0.001, minZoom), maxZoom);
+				// Re-clamp pan with new zoom level
+				setPanInternal((prev) => clampPan(prev, newZoom));
+				return newZoom;
+			});
+		};
+
+		container.addEventListener("wheel", handleWheel, { passive: false });
+		return () => container.removeEventListener("wheel", handleWheel);
+	}, [containerRef, onZoomChange, minZoom, maxZoom, clampPan]);
+
+	// Keep handleWheel for API compatibility (no-op since useEffect handles it)
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const handleWheel = useCallback((_e: React.WheelEvent) => {
+		// Wheel events are now handled via useEffect with { passive: false }
+	}, []);
 
 	const handleMouseDown = useCallback(
 		(e: React.MouseEvent) => {

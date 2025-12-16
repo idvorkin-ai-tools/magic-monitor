@@ -24,6 +24,7 @@ function createMockSessionStorage() {
 		setTrimPoints: vi.fn().mockResolvedValue(undefined),
 		init: vi.fn(),
 		saveSession: vi.fn(),
+		saveSessionWithBlob: vi.fn().mockResolvedValue("test-id"),
 		saveBlob: vi.fn(),
 		pruneOldSessions: vi.fn(),
 		getRecentSessions: vi.fn(),

@@ -210,6 +210,7 @@ export function useSmartZoom({
 
 				// Create HandLandmarker with GPU delegate specified during creation
 				// Note: delegate must be set during creation, not after, for GPU compilation
+				console.log("[SmartZoom] Creating HandLandmarker with GPU delegate...");
 				landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
 					baseOptions: {
 						modelAssetBuffer: modelBuffer,
@@ -218,6 +219,12 @@ export function useSmartZoom({
 					runningMode: "VIDEO",
 					numHands: 2,
 				});
+
+				// Log WebGL availability for GPU delegate diagnostics
+				const canvas = document.createElement("canvas");
+				const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+				console.log("[SmartZoom] WebGL available:", !!gl, gl ? `(${gl.getParameter(gl.VERSION)})` : "");
+				console.log("[SmartZoom] HandLandmarker initialized successfully");
 
 				setIsModelLoading(false);
 			} catch (error) {
