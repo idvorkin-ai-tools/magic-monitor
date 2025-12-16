@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type WheelEvent } from "react";
 import type { SessionThumbnail } from "../types/sessions";
 
 // ===== Types =====
@@ -34,6 +34,7 @@ export function Timeline({
 	const thumbWidth = Math.round(48 + (thumbnailSize / 100) * 152);
 	const thumbHeight = Math.round(thumbWidth * (9 / 16));
 	const trackRef = useRef<HTMLDivElement>(null);
+	const thumbStripRef = useRef<HTMLDivElement>(null);
 	const activeHandlersRef = useRef<{
 		move: ((e: PointerEvent) => void) | null;
 		up: ((e: PointerEvent) => void) | null;
@@ -101,6 +102,18 @@ export function Timeline({
 			}
 		};
 	}, []);
+	// Handle horizontal scroll with mouse wheel on thumbnail strip
+	const handleThumbWheelScroll = useCallback((e: WheelEvent<HTMLDivElement>) => {
+		const strip = thumbStripRef.current;
+		if (!strip) return;
+
+		// Convert vertical scroll to horizontal
+		if (e.deltaY !== 0) {
+			e.preventDefault();
+			strip.scrollLeft += e.deltaY;
+		}
+	}, []);
+
 	// Calculate positions as percentages
 	const currentPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 	const inPercent = inPoint !== null && duration > 0 ? (inPoint / duration) * 100 : null;
@@ -110,7 +123,11 @@ export function Timeline({
 		<div className="w-full">
 			{/* Thumbnail strip (if available) */}
 			{thumbnails && thumbnails.length > 0 && (
-				<div className="flex gap-1 mb-2 overflow-x-auto pb-1">
+				<div
+					ref={thumbStripRef}
+					className="flex gap-1 mb-2 overflow-x-auto pb-1"
+					onWheel={handleThumbWheelScroll}
+				>
 					{thumbnails.map((thumb, index) => (
 						<button
 							key={index}
