@@ -929,8 +929,9 @@ describe("ReplayControls", () => {
 				/>,
 			);
 
-			const track = container.querySelector(".bg-gray-700");
-			expect(track).toHaveClass("cursor-not-allowed");
+			// Cursor styling is on the timeline container, not the track
+			const timelineContainer = container.querySelector('[data-testid="timeline-container"]');
+			expect(timelineContainer).toHaveClass("cursor-not-allowed");
 		});
 
 		it("calls player.seek multiple times when dragging on Timeline", () => {
