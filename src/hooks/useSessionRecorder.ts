@@ -87,6 +87,14 @@ export function useSessionRecorder({
 		mediaRecorderService,
 		timerService,
 	});
+	// Destructure stable callbacks to use in dependency arrays
+	const {
+		startRecording,
+		stopRecording,
+		getState: getRecordingState,
+		isRecording,
+		error: recordingError,
+	} = blockRecorder;
 
 	const thumbnailCapture = useThumbnailCapture({
 		videoRef,
@@ -128,7 +136,7 @@ export function useSessionRecorder({
 				const thumbnails = stopCapture();
 
 				// Stop recording
-				const result = await blockRecorder.stopRecording();
+				const result = await stopRecording();
 				if (!result) {
 					setCurrentBlockDuration(0);
 					return null;
@@ -148,7 +156,7 @@ export function useSessionRecorder({
 				// Always clear stopping flag when done
 				isStoppingRef.current = false;
 			}
-		}, [blockRecorder, stopCapture, saveBlock, timerService]);
+		}, [stopRecording, stopCapture, saveBlock, timerService]);
 
 	// Handle block rotation
 	const onBlockComplete = useCallback(async () => {
@@ -180,7 +188,7 @@ export function useSessionRecorder({
 		setCurrentBlockDuration(0);
 
 		// Start recording
-		blockRecorder.startRecording();
+		startRecording();
 
 		// Start thumbnail capture
 		startCapture(blockStartTimeRef.current);
@@ -193,7 +201,7 @@ export function useSessionRecorder({
 
 		// Set up block rotation timer
 		blockRotationRef.current.startRotation();
-	}, [blockRecorder, startCapture, timerService]);
+	}, [startRecording, startCapture, timerService]);
 
 	// Keep ref in sync with latest startRecordingBlock
 	useEffect(() => {
@@ -204,7 +212,7 @@ export function useSessionRecorder({
 	useEffect(() => {
 		if (!enabled) {
 			// Stop recording when disabled
-			if (blockRecorder.getState() === "recording") {
+			if (getRecordingState() === "recording") {
 				stopCurrentBlock();
 			}
 			// Clear any pending ready check
@@ -291,8 +299,8 @@ export function useSessionRecorder({
 				checkReadyIntervalRef.current = null;
 			}
 			// Stop active recording session (forCleanup: true to skip setState during unmount)
-			if (blockRecorder.getState() === "recording") {
-				blockRecorder.stopRecording({ forCleanup: true }).catch(console.error);
+			if (getRecordingState() === "recording") {
+				stopRecording({ forCleanup: true }).catch(console.error);
 			}
 			// Cleanup duration timer
 			if (durationTimerRef.current) {
@@ -305,16 +313,17 @@ export function useSessionRecorder({
 		startRecordingBlock,
 		stopCurrentBlock,
 		timerService,
-		blockRecorder,
+		getRecordingState,
+		stopRecording,
 	]);
 
 	// Combine errors from all hooks
 	const combinedError =
-		blockRecorder.error || sessionList.error || null;
+		recordingError || sessionList.error || null;
 
 	return {
 		// State
-		isRecording: blockRecorder.isRecording,
+		isRecording,
 		currentBlockDuration,
 		currentThumbnails: thumbnailCapture.thumbnails,
 		error: combinedError,
