@@ -30,6 +30,12 @@ export function CameraStage() {
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 
+	// Video dimensions (for About dialog)
+	const [videoDimensions, setVideoDimensions] = useState<{
+		width: number;
+		height: number;
+	} | null>(null);
+
 	// Mobile Detection
 	const { isMobile } = useMobileDetection();
 
@@ -118,8 +124,18 @@ export function CameraStage() {
 	});
 
 	// Camera State via Humble Object Hook
-	const { stream, error, devices, selectedDeviceId, setSelectedDeviceId, retry } =
-		useCamera();
+	const {
+		stream,
+		error,
+		devices,
+		selectedDeviceId,
+		setSelectedDeviceId,
+		resolution,
+		setResolution,
+		orientation,
+		setOrientation,
+		retry,
+	} = useCamera();
 
 	// Version check for updates
 	const {
@@ -164,6 +180,20 @@ export function CameraStage() {
 			videoRef.current.srcObject = stream;
 		}
 	}, [stream]);
+
+	// Update video dimensions when metadata loads (called via onLoadedMetadata prop)
+	const handleVideoMetadataLoaded = useCallback(
+		(e: React.SyntheticEvent<HTMLVideoElement>) => {
+			const video = e.currentTarget;
+			if (video.videoWidth && video.videoHeight) {
+				setVideoDimensions({
+					width: video.videoWidth,
+					height: video.videoHeight,
+				});
+			}
+		},
+		[],
+	);
 
 	// App state transitions
 	const handleOpenPicker = useCallback(async () => {
@@ -331,6 +361,12 @@ export function CameraStage() {
 				devices={devices}
 				selectedDeviceId={selectedDeviceId}
 				onDeviceChange={setSelectedDeviceId}
+				resolution={resolution}
+				onResolutionChange={setResolution}
+				orientation={orientation}
+				onOrientationChange={setOrientation}
+				videoWidth={videoDimensions?.width}
+				videoHeight={videoDimensions?.height}
 				isMirror={isMirror}
 				onMirrorChange={setIsMirror}
 				isSmartZoom={isSmartZoom}
@@ -437,6 +473,7 @@ export function CameraStage() {
 				autoPlay
 				playsInline
 				muted
+				onLoadedMetadata={handleVideoMetadataLoaded}
 				className={clsx(
 					"max-w-full max-h-full object-contain transition-transform duration-75 ease-out",
 					appState === "replay" ? "hidden" : "block",

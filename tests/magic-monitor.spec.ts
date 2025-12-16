@@ -574,6 +574,119 @@ test.describe("Magic Monitor E2E", () => {
 		const newText = await durationElement.textContent();
 		expect(newText).not.toBe(initialText);
 	});
+
+	test("Settings: Resolution selector shows options", async ({ page }) => {
+		// Open settings
+		await page.getByTitle("Settings").click();
+
+		// Check resolution select is visible
+		const resolutionSelect = page.locator("select#resolution");
+		await expect(resolutionSelect).toBeVisible();
+
+		// Verify all resolution options are present
+		await expect(resolutionSelect).toContainText("720p (HD)");
+		await expect(resolutionSelect).toContainText("1080p (Full HD)");
+		await expect(resolutionSelect).toContainText("4K (Ultra HD)");
+	});
+
+	test("Settings: Resolution selector defaults to 4K", async ({ page }) => {
+		// Open settings
+		await page.getByTitle("Settings").click();
+
+		// Check resolution select default value is 4k
+		const resolutionSelect = page.locator("select#resolution");
+		const value = await resolutionSelect.inputValue();
+		expect(value).toBe("4k");
+	});
+
+	test("Settings: Resolution change persists to localStorage (per-device)", async ({ page }) => {
+		// Open settings
+		await page.getByTitle("Settings").click();
+
+		// Change resolution to 1080p
+		const resolutionSelect = page.locator("select#resolution");
+		await resolutionSelect.selectOption("1080p");
+
+		// Verify selection changed
+		const newValue = await resolutionSelect.inputValue();
+		expect(newValue).toBe("1080p");
+
+		// Close settings
+		await page.keyboard.press("Escape");
+
+		// Verify localStorage was updated with per-device settings
+		const storedSettings = await page.evaluate(() => {
+			return localStorage.getItem("magic-monitor-camera-device-settings");
+		});
+		expect(storedSettings).toBeTruthy();
+		const parsedSettings = JSON.parse(storedSettings!);
+		// Check that some device has resolution 1080p
+		const hasCorrectResolution = Object.values(parsedSettings).some(
+			(s: unknown) => (s as { resolution: string }).resolution === "1080p"
+		);
+		expect(hasCorrectResolution).toBe(true);
+
+		// Persist the value before reload (since beforeEach clears it via addInitScript)
+		await page.addInitScript(() => {
+			// Set up per-device settings for mock camera
+			const settings = { "mock-camera-1": { resolution: "1080p", orientation: "landscape" } };
+			localStorage.setItem("magic-monitor-camera-device-settings", JSON.stringify(settings));
+			localStorage.setItem("magic-monitor-camera-device-id", "mock-camera-1");
+		});
+
+		// Reload page and verify setting persisted
+		await page.reload();
+		await page.getByTitle("Settings").click();
+
+		const resolutionSelectAfterReload = page.locator("select#resolution");
+		const valueAfterReload = await resolutionSelectAfterReload.inputValue();
+		expect(valueAfterReload).toBe("1080p");
+	});
+
+	test("Settings: Resolution shows actual video dimensions", async ({ page }) => {
+		// Open settings
+		await page.getByTitle("Settings").click();
+
+		// Wait for actual resolution to be displayed (after video metadata loads)
+		// The mock canvas stream may report different dimensions depending on browser/timing
+		const actualResolutionText = page.getByText(/Actual: \d+×\d+/);
+		await expect(actualResolutionText).toBeVisible({ timeout: 5000 });
+
+		// Just verify the format is correct - actual dimensions vary in test environment
+		const text = await actualResolutionText.textContent();
+		expect(text).toMatch(/Actual: \d+×\d+/);
+	});
+
+	test("Settings: Orientation toggle switches between landscape and portrait", async ({ page }) => {
+		// Open settings
+		await page.getByTitle("Settings").click();
+
+		// Find the orientation toggle buttons
+		const landscapeButton = page.getByTitle("Landscape");
+		const portraitButton = page.getByTitle("Portrait");
+
+		// Verify both buttons exist
+		await expect(landscapeButton).toBeVisible();
+		await expect(portraitButton).toBeVisible();
+
+		// Landscape should be active by default (has bg-blue-600 class)
+		await expect(landscapeButton).toHaveClass(/bg-blue-600/);
+		await expect(portraitButton).not.toHaveClass(/bg-blue-600/);
+
+		// Click portrait
+		await portraitButton.click();
+
+		// Portrait should now be active
+		await expect(portraitButton).toHaveClass(/bg-blue-600/);
+		await expect(landscapeButton).not.toHaveClass(/bg-blue-600/);
+
+		// Click landscape again
+		await landscapeButton.click();
+
+		// Landscape should be active again
+		await expect(landscapeButton).toHaveClass(/bg-blue-600/);
+		await expect(portraitButton).not.toHaveClass(/bg-blue-600/);
+	});
 });
 
 test.describe("Bug Report", () => {

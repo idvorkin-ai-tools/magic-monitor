@@ -97,7 +97,7 @@ describe("useCamera", () => {
 			renderHook(() => useCamera("initial-device"));
 
 			await waitFor(() => {
-				expect(CameraService.start).toHaveBeenCalledWith("initial-device");
+				expect(CameraService.start).toHaveBeenCalledWith("initial-device", "4k", "landscape");
 			});
 		});
 
@@ -107,7 +107,7 @@ describe("useCamera", () => {
 			renderHook(() => useCamera());
 
 			await waitFor(() => {
-				expect(CameraService.start).toHaveBeenCalledWith("stored-device");
+				expect(CameraService.start).toHaveBeenCalledWith("stored-device", "4k", "landscape");
 			});
 		});
 
@@ -117,7 +117,7 @@ describe("useCamera", () => {
 			renderHook(() => useCamera("initial-device"));
 
 			await waitFor(() => {
-				expect(CameraService.start).toHaveBeenCalledWith("initial-device");
+				expect(CameraService.start).toHaveBeenCalledWith("initial-device", "4k", "landscape");
 			});
 		});
 	});

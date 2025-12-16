@@ -1,5 +1,6 @@
 import { ExternalLink, Github, Smartphone } from "lucide-react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import { RESOLUTION_PRESETS, type Orientation, type Resolution } from "../services/CameraService";
 import {
 	SMOOTHING_PRESET_DESCRIPTIONS,
 	SMOOTHING_PRESET_LABELS,
@@ -15,6 +16,12 @@ interface SettingsModalProps {
 	devices: MediaDeviceInfo[];
 	selectedDeviceId: string;
 	onDeviceChange: (deviceId: string) => void;
+	resolution: Resolution;
+	onResolutionChange: (resolution: Resolution) => void;
+	orientation: Orientation;
+	onOrientationChange: (orientation: Orientation) => void;
+	videoWidth?: number;
+	videoHeight?: number;
 
 	// Display
 	isMirror: boolean;
@@ -60,6 +67,12 @@ export function SettingsModal({
 	devices,
 	selectedDeviceId,
 	onDeviceChange,
+	resolution,
+	onResolutionChange,
+	orientation,
+	onOrientationChange,
+	videoWidth,
+	videoHeight,
 	isMirror,
 	onMirrorChange,
 	isSmartZoom,
@@ -144,6 +157,61 @@ export function SettingsModal({
 								</option>
 							))}
 						</select>
+					</div>
+
+					{/* Resolution */}
+					<div className="space-y-2">
+						<label
+							htmlFor="resolution"
+							className="text-sm font-medium text-gray-400"
+						>
+							Resolution
+						</label>
+						<div className="flex gap-2">
+							<select
+								id="resolution"
+								value={resolution}
+								onChange={(e) => onResolutionChange(e.target.value as Resolution)}
+								className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+							>
+								{(Object.keys(RESOLUTION_PRESETS) as Resolution[]).map((res) => (
+									<option key={res} value={res}>
+										{RESOLUTION_PRESETS[res].label}
+									</option>
+								))}
+							</select>
+							<div className="flex rounded-lg overflow-hidden border border-white/10">
+								<button
+									type="button"
+									onClick={() => onOrientationChange("landscape")}
+									className={`px-3 py-2 text-sm font-medium transition-colors ${
+										orientation === "landscape"
+											? "bg-blue-600 text-white"
+											: "bg-black/30 text-gray-400 hover:text-white"
+									}`}
+									title="Landscape"
+								>
+									⬜
+								</button>
+								<button
+									type="button"
+									onClick={() => onOrientationChange("portrait")}
+									className={`px-3 py-2 text-sm font-medium transition-colors ${
+										orientation === "portrait"
+											? "bg-blue-600 text-white"
+											: "bg-black/30 text-gray-400 hover:text-white"
+									}`}
+									title="Portrait"
+								>
+									▯
+								</button>
+							</div>
+						</div>
+						{videoWidth && videoHeight && (
+							<div className="text-xs text-gray-500">
+								Actual: {videoWidth}×{videoHeight}
+							</div>
+						)}
 					</div>
 
 					{/* Mirror Video */}
