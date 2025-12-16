@@ -81,9 +81,20 @@ export const MediaRecorderService = {
 					recorder.onstop = () => {
 						const blob = new Blob(chunks, { type: mimeType });
 						const duration = Date.now() - startTime;
+						// Clear chunks array to release memory
+						chunks.length = 0;
+						// Clear event handlers to help GC
+						recorder.ondataavailable = null;
+						recorder.onstop = null;
+						recorder.onerror = null;
 						resolve({ blob, duration });
 					};
 					recorder.onerror = () => {
+						// Clear on error too
+						chunks.length = 0;
+						recorder.ondataavailable = null;
+						recorder.onstop = null;
+						recorder.onerror = null;
 						reject(new Error("Recording failed"));
 					};
 					if (recorder.state === "recording") {

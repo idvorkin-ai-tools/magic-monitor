@@ -36,8 +36,8 @@ export function CameraStage() {
 	// App state: live (recording), picker (viewing sessions), replay (playing back)
 	const [appState, setAppState] = useState<AppState>("live");
 
-	// Recording pause state
-	const [isRecordingPaused, setIsRecordingPaused] = useState(false);
+	// Recording pause state (default: paused for better performance)
+	const [isRecordingPaused, setIsRecordingPaused] = useState(true);
 
 	// Settings (persisted to localStorage)
 	const { settings, setters } = useSettings();
@@ -65,14 +65,17 @@ export function CameraStage() {
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const [isAboutOpen, setIsAboutOpen] = useState(false);
 
+	// Manual zoom/pan callback - disables smart zoom when user manually zooms
+	// Wrapped in useCallback to prevent effect re-runs in useZoomPan
+	const handleManualZoom = useCallback(() => {
+		if (isSmartZoom) setIsSmartZoom(false);
+	}, [isSmartZoom, setIsSmartZoom]);
+
 	// Zoom/Pan State and Handlers
 	const zoomPan = useZoomPan({
 		videoRef,
 		containerRef,
-		onZoomChange: () => {
-			// Manual zoom/pan takes control from smart zoom
-			if (isSmartZoom) setIsSmartZoom(false);
-		},
+		onZoomChange: handleManualZoom,
 	});
 	const { zoom, pan, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp, resetZoom, setZoom, setPan } = zoomPan;
 
@@ -426,7 +429,7 @@ export function CameraStage() {
 			{/* Hand Skeleton Debug Overlay */}
 			{showHandSkeleton && isSmartZoom && appState === "live" && (
 				<HandSkeleton
-					landmarks={smartZoom.debugLandmarks}
+					landmarksRef={smartZoom.debugLandmarksRef}
 					videoRef={videoRef}
 					isMirror={isMirror}
 				/>

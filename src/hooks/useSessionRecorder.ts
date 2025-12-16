@@ -72,6 +72,7 @@ export function useSessionRecorder({
 	const checkReadyIntervalRef = useRef<number | null>(null);
 	const enabledRef = useRef(enabled);
 	const startRecordingBlockRef = useRef<(() => void) | null>(null);
+	const isStoppingRef = useRef(false); // Track if we're in the middle of stopping
 	const blockRotationRef = useRef<{
 		startRotation: () => void;
 		stopRotation: () => void;
@@ -108,35 +109,43 @@ export function useSessionRecorder({
 	// Stop current recording block
 	const stopCurrentBlock =
 		useCallback(async (): Promise<PracticeSession | null> => {
-			// Stop duration timer
-			if (durationTimerRef.current) {
-				timerService.clearInterval(durationTimerRef.current);
-				durationTimerRef.current = null;
-			}
+			// Mark that we're stopping to prevent concurrent start
+			isStoppingRef.current = true;
 
-			// Stop block rotation
-			blockRotationRef.current.stopRotation();
+			try {
+				// Stop duration timer
+				if (durationTimerRef.current) {
+					timerService.clearInterval(durationTimerRef.current);
+					durationTimerRef.current = null;
+				}
 
-			// Stop thumbnail capture
-			const thumbnails = thumbnailCapture.stopCapture();
+				// Stop block rotation
+				blockRotationRef.current.stopRotation();
 
-			// Stop recording
-			const result = await blockRecorder.stopRecording();
-			if (!result) {
+				// Stop thumbnail capture
+				const thumbnails = thumbnailCapture.stopCapture();
+
+				// Stop recording
+				const result = await blockRecorder.stopRecording();
+				if (!result) {
+					setCurrentBlockDuration(0);
+					return null;
+				}
+
+				// Save the block
+				const session = await saveBlock(
+					result.blob,
+					result.duration,
+					thumbnails,
+					blockStartTimeRef.current,
+				);
+
 				setCurrentBlockDuration(0);
-				return null;
+				return session;
+			} finally {
+				// Always clear stopping flag when done
+				isStoppingRef.current = false;
 			}
-
-			// Save the block
-			const session = await saveBlock(
-				result.blob,
-				result.duration,
-				thumbnails,
-				blockStartTimeRef.current,
-			);
-
-			setCurrentBlockDuration(0);
-			return session;
 		}, [blockRecorder, thumbnailCapture, saveBlock, timerService]);
 
 	// Handle block rotation
@@ -159,6 +168,12 @@ export function useSessionRecorder({
 
 	// Start a new recording block
 	const startRecordingBlock = useCallback(() => {
+		// Don't start if we're in the middle of stopping a previous recording
+		if (isStoppingRef.current) {
+			console.warn("[SessionRecorder] Skipping start - still stopping previous recording");
+			return;
+		}
+
 		blockStartTimeRef.current = timerService.now();
 		setCurrentBlockDuration(0);
 
@@ -212,7 +227,8 @@ export function useSessionRecorder({
 
 			checkReadyIntervalRef.current = timerService.setInterval(() => {
 				attempts++;
-				if (videoRef.current && videoRef.current.readyState >= 3) {
+				// Wait for video to be ready AND any pending stop to complete
+				if (videoRef.current && videoRef.current.readyState >= 3 && !isStoppingRef.current) {
 					// Clear interval before starting recording
 					if (checkReadyIntervalRef.current) {
 						timerService.clearInterval(checkReadyIntervalRef.current);
@@ -239,8 +255,32 @@ export function useSessionRecorder({
 			};
 		}
 
-		// Video is ready, start recording
-		startRecordingBlock();
+		// Video is ready - but wait if we're still stopping a previous recording
+		if (isStoppingRef.current) {
+			// Use interval to wait for stop to complete
+			let stopWaitAttempts = 0;
+			const MAX_STOP_WAIT = 30; // 3 seconds max wait
+
+			checkReadyIntervalRef.current = timerService.setInterval(() => {
+				stopWaitAttempts++;
+				if (!isStoppingRef.current && enabledRef.current) {
+					if (checkReadyIntervalRef.current) {
+						timerService.clearInterval(checkReadyIntervalRef.current);
+						checkReadyIntervalRef.current = null;
+					}
+					startRecordingBlock();
+				} else if (stopWaitAttempts >= MAX_STOP_WAIT) {
+					if (checkReadyIntervalRef.current) {
+						timerService.clearInterval(checkReadyIntervalRef.current);
+						checkReadyIntervalRef.current = null;
+					}
+					console.warn("[SessionRecorder] Timed out waiting for previous recording to stop");
+				}
+			}, 100);
+		} else {
+			// Video is ready and not stopping - start immediately
+			startRecordingBlock();
+		}
 
 		return () => {
 			// Clear check ready interval if still running

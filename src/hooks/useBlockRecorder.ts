@@ -34,6 +34,7 @@ export function useBlockRecorder({
 	const [error, setError] = useState<string | null>(null);
 	const recordingSessionRef = useRef<RecordingSession | null>(null);
 	const blockStartTimeRef = useRef<number>(0);
+	const clonedStreamRef = useRef<MediaStream | null>(null); // Track cloned stream for cleanup
 
 	const startRecording = useCallback(() => {
 		const video = videoRef.current;
@@ -42,7 +43,11 @@ export function useBlockRecorder({
 			return;
 		}
 
-		const stream = video.srcObject as MediaStream;
+		// Clone the stream for recording to avoid affecting the main video display
+		// This prevents encoder state from impacting MediaPipe hand tracking
+		const originalStream = video.srcObject as MediaStream;
+		const stream = originalStream.clone();
+		clonedStreamRef.current = stream; // Store for cleanup on stop
 
 		// Validate stream health before attempting to record
 		if (!stream.active) {
@@ -106,26 +111,38 @@ export function useBlockRecorder({
 		}
 	}, [videoRef, mediaRecorderService, timerService]);
 
+	// Helper to clean up cloned stream
+	const cleanupClonedStream = useCallback(() => {
+		if (clonedStreamRef.current) {
+			// Stop all tracks to release encoder resources
+			clonedStreamRef.current.getTracks().forEach((track) => track.stop());
+			clonedStreamRef.current = null;
+		}
+	}, []);
+
 	const stopRecording =
 		useCallback(async (): Promise<{ blob: Blob; duration: number } | null> => {
 			const session = recordingSessionRef.current;
 			if (!session || session.getState() !== "recording") {
+				cleanupClonedStream();
 				return null;
 			}
 
 			try {
 				const result = await session.stop();
 				recordingSessionRef.current = null;
+				cleanupClonedStream(); // Release cloned stream tracks
 				setIsRecording(false);
 				return result;
 			} catch (err) {
 				console.error("Failed to stop recording:", err);
 				setError("Recording may have been lost - please try again");
 				recordingSessionRef.current = null;
+				cleanupClonedStream(); // Cleanup on error too
 				setIsRecording(false);
 				return null;
 			}
-		}, []);
+		}, [cleanupClonedStream]);
 
 	const getState = useCallback(() => {
 		return recordingSessionRef.current?.getState() ?? "inactive";

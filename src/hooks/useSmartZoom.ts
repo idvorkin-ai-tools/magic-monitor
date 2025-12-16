@@ -122,7 +122,9 @@ export function useSmartZoom({
 	const [isModelLoading, setIsModelLoading] = useState(true);
 	const [loadingProgress, setLoadingProgress] = useState(0);
 	const [loadingPhase, setLoadingPhase] = useState<"downloading" | "initializing">("downloading");
-	const [debugLandmarks, setDebugLandmarks] = useState<HandLandmark[][]>([]);
+	// Use ref instead of state for landmarks to avoid 60fps re-renders
+	// HandSkeleton reads from this ref directly in its own rAF loop
+	const debugLandmarksRef = useRef<HandLandmark[][]>([]);
 
 	// Smoother instance (recreated when preset changes)
 	const smootherRef = useRef<Smoother>(createSmoother(smoothingPreset));
@@ -139,9 +141,8 @@ export function useSmartZoom({
 		smootherRef.current.reset();
 	}, [smoothingPreset]);
 
-	// Destructure constants for cleaner code (see docs/SMART_ZOOM_SPEC.md)
-	const { MIN_ZOOM, MAX_ZOOM, THRESHOLD: ZOOM_THRESHOLD } = ZOOM_CONSTANTS;
-	const { THRESHOLD: PAN_THRESHOLD } = PAN_CONSTANTS;
+	// Use constants directly from imports (not destructured) to avoid useEffect dep issues
+	// See docs/SMART_ZOOM_SPEC.md for constant meanings
 
 	// Output state
 	const [zoom, setZoom] = useState(1);
@@ -151,6 +152,14 @@ export function useSmartZoom({
 		right: false,
 		top: false,
 		bottom: false,
+	});
+
+	// Track previous state values to avoid unnecessary setState calls
+	// This prevents re-renders when values haven't actually changed
+	const prevStateRef = useRef({
+		zoom: 1,
+		pan: { x: 0, y: 0 },
+		clampedEdges: { left: false, right: false, top: false, bottom: false },
 	});
 
 	const landmarkerRef = useRef<HandLandmarker | null>(null);
@@ -298,7 +307,7 @@ export function useSmartZoom({
 					let targetZoom = 1 / (maxDim * padding);
 
 					// Clamp zoom (see docs/SMART_ZOOM_SPEC.md)
-					targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
+					targetZoom = Math.min(Math.max(targetZoom, ZOOM_CONSTANTS.MIN_ZOOM), ZOOM_CONSTANTS.MAX_ZOOM);
 
 					// Determine target pan in NORMALIZED coordinates (0-1 range)
 					// Pan of 0 = centered, positive = shift view left/up
@@ -318,7 +327,7 @@ export function useSmartZoom({
 					// panDist is now in normalized units (0-1), threshold is also normalized
 
 					// Only update committed target if change is significant
-					if (zoomDelta > ZOOM_THRESHOLD || panDist > PAN_THRESHOLD) {
+					if (zoomDelta > ZOOM_CONSTANTS.THRESHOLD || panDist > PAN_CONSTANTS.THRESHOLD) {
 						committedTargetRef.current = {
 							zoom: targetZoom,
 							pan: { x: targetPanX, y: targetPanY },
@@ -377,13 +386,27 @@ export function useSmartZoom({
 						debugTraceRef.current.shift();
 					}
 
-					setZoom(prevPositionRef.current.zoom);
-					setPan({
-						x: prevPositionRef.current.x,
-						y: prevPositionRef.current.y,
-					});
-					setClampedEdges(edges);
-					setDebugLandmarks(result.landmarks);
+					// Only update state when values actually change to avoid unnecessary re-renders
+					const newZoom = prevPositionRef.current.zoom;
+					const newPan = { x: prevPositionRef.current.x, y: prevPositionRef.current.y };
+					const newEdges = edges;
+
+					if (newZoom !== prevStateRef.current.zoom) {
+						prevStateRef.current.zoom = newZoom;
+						setZoom(newZoom);
+					}
+					if (newPan.x !== prevStateRef.current.pan.x || newPan.y !== prevStateRef.current.pan.y) {
+						prevStateRef.current.pan = newPan;
+						setPan(newPan);
+					}
+					if (newEdges.left !== prevStateRef.current.clampedEdges.left ||
+						newEdges.right !== prevStateRef.current.clampedEdges.right ||
+						newEdges.top !== prevStateRef.current.clampedEdges.top ||
+						newEdges.bottom !== prevStateRef.current.clampedEdges.bottom) {
+						prevStateRef.current.clampedEdges = newEdges;
+						setClampedEdges(newEdges);
+					}
+					debugLandmarksRef.current = result.landmarks;
 				} else {
 					// No hands? Slowly zoom out to 1
 					// For zoom out, we can bypass hysteresis or set target to 1
@@ -441,13 +464,27 @@ export function useSmartZoom({
 						debugTraceRef.current.shift();
 					}
 
-					setZoom(prevPositionRef.current.zoom);
-					setPan({
-						x: prevPositionRef.current.x,
-						y: prevPositionRef.current.y,
-					});
-					setClampedEdges(edges);
-					setDebugLandmarks([]);
+					// Only update state when values actually change to avoid unnecessary re-renders
+					const newZoom = prevPositionRef.current.zoom;
+					const newPan = { x: prevPositionRef.current.x, y: prevPositionRef.current.y };
+					const newEdges = edges;
+
+					if (newZoom !== prevStateRef.current.zoom) {
+						prevStateRef.current.zoom = newZoom;
+						setZoom(newZoom);
+					}
+					if (newPan.x !== prevStateRef.current.pan.x || newPan.y !== prevStateRef.current.pan.y) {
+						prevStateRef.current.pan = newPan;
+						setPan(newPan);
+					}
+					if (newEdges.left !== prevStateRef.current.clampedEdges.left ||
+						newEdges.right !== prevStateRef.current.clampedEdges.right ||
+						newEdges.top !== prevStateRef.current.clampedEdges.top ||
+						newEdges.bottom !== prevStateRef.current.clampedEdges.bottom) {
+						prevStateRef.current.clampedEdges = newEdges;
+						setClampedEdges(newEdges);
+					}
+					debugLandmarksRef.current = [];
 				}
 			}
 
@@ -484,7 +521,7 @@ export function useSmartZoom({
 		zoom,
 		pan,
 		clampedEdges,
-		debugLandmarks,
+		debugLandmarksRef,
 		getDebugTrace,
 	};
 }

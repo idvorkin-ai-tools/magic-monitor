@@ -43,7 +43,7 @@ export interface AppStateContext {
 export const SESSION_CONFIG = {
 	BLOCK_DURATION_MS: 5 * 60 * 1000, // 5 minutes
 	MAX_RECENT_DURATION_SECONDS: 10 * 60, // 10 minutes of history
-	VIDEO_BITRATE: 15_000_000, // 15 Mbps for 4K
+	VIDEO_BITRATE: 5_000_000, // 5 Mbps - balanced quality/performance
 	THUMBNAIL_QUALITY: 0.7, // JPEG quality
 	THUMBNAIL_INTERVAL_MS: 3_000, // every 3 seconds (for fine-grained selection)
 	STORAGE_WARNING_BYTES: 3 * 1024 * 1024 * 1024, // 3 GB

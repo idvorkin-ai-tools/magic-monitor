@@ -47,11 +47,25 @@ function createMockTimerService() {
 	};
 }
 
+function createMockStream() {
+	const stream = new MediaStream();
+	// Add clone method that returns a new stream with same tracks
+	stream.clone = vi.fn(() => {
+		const cloned = new MediaStream();
+		// Mock getTracks for cleanup verification
+		cloned.getTracks = vi.fn(() => [
+			{ stop: vi.fn(), kind: "video" } as unknown as MediaStreamTrack,
+		]);
+		return cloned;
+	});
+	return stream;
+}
+
 function createMockVideoRef(hasStream = true) {
 	return {
 		current: {
 			readyState: 4,
-			srcObject: hasStream ? new MediaStream() : null,
+			srcObject: hasStream ? createMockStream() : null,
 			videoWidth: 1920,
 			videoHeight: 1080,
 		} as unknown as HTMLVideoElement,
