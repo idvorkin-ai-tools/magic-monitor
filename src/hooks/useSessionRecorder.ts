@@ -93,6 +93,8 @@ export function useSessionRecorder({
 		thumbnailIntervalMs,
 		timerService,
 	});
+	// Destructure stable callbacks to use in dependency arrays
+	const { startCapture, stopCapture } = thumbnailCapture;
 
 	const sessionList = useSessionList({
 		sessionStorageService,
@@ -123,7 +125,7 @@ export function useSessionRecorder({
 				blockRotationRef.current.stopRotation();
 
 				// Stop thumbnail capture
-				const thumbnails = thumbnailCapture.stopCapture();
+				const thumbnails = stopCapture();
 
 				// Stop recording
 				const result = await blockRecorder.stopRecording();
@@ -146,7 +148,7 @@ export function useSessionRecorder({
 				// Always clear stopping flag when done
 				isStoppingRef.current = false;
 			}
-		}, [blockRecorder, thumbnailCapture, saveBlock, timerService]);
+		}, [blockRecorder, stopCapture, saveBlock, timerService]);
 
 	// Handle block rotation
 	const onBlockComplete = useCallback(async () => {
@@ -181,7 +183,7 @@ export function useSessionRecorder({
 		blockRecorder.startRecording();
 
 		// Start thumbnail capture
-		thumbnailCapture.startCapture(blockStartTimeRef.current);
+		startCapture(blockStartTimeRef.current);
 
 		// Set up duration update interval
 		durationTimerRef.current = timerService.setInterval(() => {
@@ -191,7 +193,7 @@ export function useSessionRecorder({
 
 		// Set up block rotation timer
 		blockRotationRef.current.startRotation();
-	}, [blockRecorder, thumbnailCapture, timerService]);
+	}, [blockRecorder, startCapture, timerService]);
 
 	// Keep ref in sync with latest startRecordingBlock
 	useEffect(() => {
