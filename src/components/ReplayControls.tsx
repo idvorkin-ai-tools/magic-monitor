@@ -17,6 +17,8 @@ interface ReplayControlsProps {
 	isSmartZoom?: boolean;
 	onSmartZoomChange?: (enabled: boolean) => void;
 	isModelLoading?: boolean;
+	loadingProgress?: number;
+	loadingPhase?: "downloading" | "initializing";
 }
 
 // ===== Helper =====
@@ -39,6 +41,8 @@ export function ReplayControls({
 	isSmartZoom = false,
 	onSmartZoomChange,
 	isModelLoading = false,
+	loadingProgress = 0,
+	loadingPhase = "downloading",
 }: ReplayControlsProps) {
 	const {
 		isReady,
@@ -169,6 +173,7 @@ export function ReplayControls({
 								onClick={toggleFloating}
 								className="ml-2 text-xs text-gray-400 hover:text-white"
 								title="Dock previews"
+							aria-label="Dock previews"
 								onPointerDown={(e) => e.stopPropagation()}
 							>
 								⬋
@@ -254,6 +259,7 @@ export function ReplayControls({
 									onClick={toggleFloating}
 									className="ml-2 text-xs text-gray-400 hover:text-white"
 									title="Float previews"
+							aria-label="Float previews"
 								>
 									⬈
 								</button>
@@ -319,6 +325,7 @@ export function ReplayControls({
 								isMobile ? "p-1 text-sm" : "p-1.5 text-lg",
 								isReady ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed",
 							)}
+						aria-label="Previous frame"
 							title="Previous frame"
 						>
 							◀◀
@@ -347,6 +354,7 @@ export function ReplayControls({
 								isMobile ? "p-1 text-sm" : "p-1.5 text-lg",
 								isReady ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed",
 							)}
+						aria-label="Next frame"
 							title="Next frame"
 						>
 							▶▶
@@ -364,7 +372,9 @@ export function ReplayControls({
 									title="Smart Zoom - Auto-follow movement"
 								>
 									{isModelLoading
-										? "Loading..."
+										? loadingPhase === "initializing"
+											? "Initializing..."
+											: `Downloading ${loadingProgress}%`
 										: isSmartZoom
 											? "Smart ✓"
 											: "Smart"}

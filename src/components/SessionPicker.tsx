@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { useMobileDetection } from "../hooks/useMobileDetection";
 import { SessionStorageService } from "../services/SessionStorageService";
 import type { PracticeSession } from "../types/sessions";
@@ -56,6 +57,8 @@ export function SessionPicker({
 	onRefresh,
 	activeSessionId,
 }: SessionPickerProps) {
+	const containerRef = useFocusTrap({ isOpen, onClose });
+
 	const [view, setView] = useState<PickerView>("list");
 	const [selectedSession, setSelectedSession] = useState<PracticeSession | null>(null);
 	const [storageUsage, setStorageUsage] = useState({ used: 0, quota: 0 });
@@ -64,14 +67,16 @@ export function SessionPicker({
 
 	const { isMobile } = useMobileDetection();
 
-	// Reset to list view when picker opens (intentional state reset on modal open)
+	// Reset to list view and refresh sessions when picker opens
 	useEffect(() => {
 		if (isOpen) {
 			// eslint-disable-next-line react-hooks/set-state-in-effect -- intentional modal reset
 			setView("list");
 			setSelectedSession(null);
+			// Refresh sessions to show latest recordings
+			onRefresh();
 		}
-	}, [isOpen]);
+	}, [isOpen, onRefresh]);
 
 	// Select thumbnails for display based on device and clip duration
 	const displayThumbnails = useMemo(() => {
@@ -142,7 +147,7 @@ export function SessionPicker({
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-			<div className="bg-gray-900 rounded-2xl w-full max-w-4xl max-h-[90vh] mx-4 overflow-hidden flex flex-col">
+			<div ref={containerRef} className="bg-gray-900 rounded-2xl w-full max-w-4xl max-h-[90vh] mx-4 overflow-hidden flex flex-col">
 				{/* Header */}
 				<div className="flex items-center justify-between p-4 border-b border-gray-700">
 					{view === "timeline" && selectedSession ? (
@@ -163,6 +168,7 @@ export function SessionPicker({
 					<button
 						onClick={handleClose}
 						className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800"
+					aria-label="Close"
 					>
 						✕
 					</button>

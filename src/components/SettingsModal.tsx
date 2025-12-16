@@ -1,4 +1,5 @@
 import { ExternalLink, Github, Smartphone } from "lucide-react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import {
 	SMOOTHING_PRESET_DESCRIPTIONS,
 	SMOOTHING_PRESET_LABELS,
@@ -85,6 +86,8 @@ export function SettingsModal({
 	isShakeSupported,
 	onOpenAbout,
 }: SettingsModalProps) {
+	const containerRef = useFocusTrap({ isOpen, onClose });
+
 	if (!isOpen) return null;
 
 	return (
@@ -93,12 +96,17 @@ export function SettingsModal({
 			onClick={onClose}
 		>
 			<div
+				ref={containerRef}
 				className="bg-gray-900 border border-white/10 p-6 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto"
 				onClick={(e) => e.stopPropagation()}
 			>
 				<div className="flex justify-between items-center mb-6">
 					<h2 className="text-xl font-bold text-white">Settings</h2>
-					<button onClick={onClose} className="text-white/50 hover:text-white">
+					<button
+				onClick={onClose}
+				className="text-white/50 hover:text-white"
+				aria-label="Close settings"
+			>
 						<svg
 							className="w-6 h-6"
 							fill="none"

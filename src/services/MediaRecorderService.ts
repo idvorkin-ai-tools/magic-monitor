@@ -98,56 +98,6 @@ export const MediaRecorderService = {
 	},
 
 	/**
-	 * Extract first frame of video blob as JPEG data URL.
-	 * Isolated for testability.
-	 */
-	async extractPreviewFrame(blob: Blob): Promise<string> {
-		return new Promise((resolve, reject) => {
-			const video = document.createElement("video");
-			video.muted = true;
-			video.playsInline = true;
-
-			const blobUrl = URL.createObjectURL(blob);
-			video.src = blobUrl;
-
-			video.onloadeddata = () => {
-				video.currentTime = 0;
-			};
-
-			video.onseeked = () => {
-				try {
-					const canvas = document.createElement("canvas");
-					canvas.width = video.videoWidth;
-					canvas.height = video.videoHeight;
-
-					const ctx = canvas.getContext("2d");
-					if (!ctx) {
-						URL.revokeObjectURL(blobUrl);
-						reject(new Error("Could not get canvas context"));
-						return;
-					}
-
-					ctx.drawImage(video, 0, 0);
-					const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-
-					URL.revokeObjectURL(blobUrl);
-					resolve(dataUrl);
-				} catch (err) {
-					URL.revokeObjectURL(blobUrl);
-					reject(err);
-				}
-			};
-
-			video.onerror = () => {
-				URL.revokeObjectURL(blobUrl);
-				reject(new Error("Failed to load video for preview extraction"));
-			};
-
-			video.load();
-		});
-	},
-
-	/**
 	 * Create a video element for playback.
 	 */
 	createPlaybackElement(): HTMLVideoElement {

@@ -1,4 +1,5 @@
 import { Bug, ExternalLink, GitBranch, GitCommit, Github } from "lucide-react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import {
 	BUILD_TIMESTAMP,
 	GIT_BRANCH,
@@ -22,6 +23,8 @@ export function AboutModal({
 	onReportBug,
 	bugReportShortcut,
 }: AboutModalProps) {
+	const containerRef = useFocusTrap({ isOpen, onClose });
+
 	if (!isOpen) return null;
 
 	const buildDate = new Date(BUILD_TIMESTAMP);
@@ -41,6 +44,7 @@ export function AboutModal({
 			onClick={onClose}
 		>
 			<div
+				ref={containerRef}
 				className="bg-gray-900 border border-white/10 p-6 rounded-2xl w-full max-w-sm shadow-2xl"
 				onClick={(e) => e.stopPropagation()}
 			>

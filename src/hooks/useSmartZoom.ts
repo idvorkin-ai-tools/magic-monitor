@@ -119,6 +119,8 @@ export function useSmartZoom({
 	smoothingPreset = "ema",
 }: SmartZoomConfig) {
 	const [isModelLoading, setIsModelLoading] = useState(true);
+	const [loadingProgress, setLoadingProgress] = useState(0);
+	const [loadingPhase, setLoadingPhase] = useState<"downloading" | "initializing">("downloading");
 	const [debugLandmarks, setDebugLandmarks] = useState<HandLandmark[][]>([]);
 
 	// Smoother instance (recreated when preset changes)
@@ -167,14 +169,56 @@ export function useSmartZoom({
 				// Use local WASM files for offline support
 				const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
 
-				// Use local model file for offline support
-				landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
-					baseOptions: {
-						modelAssetPath: "/mediapipe/hand_landmarker.task",
-						delegate: "GPU",
-					},
+				// Fetch model with progress tracking
+				const response = await fetch("/mediapipe/hand_landmarker.task");
+				const contentLength = response.headers.get("Content-Length");
+				const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+				if (!response.body) {
+					throw new Error("Response body is null");
+				}
+
+				const reader = response.body.getReader();
+				let receivedLength = 0;
+				const chunks: Uint8Array[] = [];
+
+				// Read chunks and track progress
+				while (true) {
+					const { done, value } = await reader.read();
+
+					if (done) break;
+
+					chunks.push(value);
+					receivedLength += value.length;
+
+					// Update progress (0-100%)
+					if (total > 0) {
+						setLoadingProgress(Math.round((receivedLength / total) * 100));
+					}
+				}
+
+				// Combine chunks into single Uint8Array
+				const modelBuffer = new Uint8Array(receivedLength);
+				let position = 0;
+				for (const chunk of chunks) {
+					modelBuffer.set(chunk, position);
+					position += chunk.length;
+				}
+
+				// Download complete, now initializing model
+				setLoadingPhase("initializing");
+
+				// Create HandLandmarker from buffer
+				landmarkerRef.current = await HandLandmarker.createFromModelBuffer(
+					vision,
+					modelBuffer,
+				);
+				landmarkerRef.current.setOptions({
 					runningMode: "VIDEO",
 					numHands: 2,
+					baseOptions: {
+						delegate: "GPU",
+					},
 				});
 
 				setIsModelLoading(false);
@@ -418,6 +462,8 @@ export function useSmartZoom({
 
 	return {
 		isModelLoading,
+		loadingProgress,
+		loadingPhase,
 		zoom,
 		pan,
 		clampedEdges,

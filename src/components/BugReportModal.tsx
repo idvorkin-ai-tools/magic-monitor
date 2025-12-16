@@ -1,6 +1,7 @@
 import { Bug, Camera, Copy, ExternalLink, Smartphone, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BugReportData } from "../hooks/useBugReporter";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { DeviceService } from "../services/DeviceService";
 
 interface BugReportModalProps {
@@ -35,6 +36,8 @@ export function BugReportModal({
 	onFirstTimeShown,
 	shortcut,
 }: BugReportModalProps) {
+	const containerRef = useFocusTrap({ isOpen, onClose });
+
 	const [title, setTitle] = useState(defaultData.title);
 	const [description, setDescription] = useState(defaultData.description);
 	const [includeMetadata, setIncludeMetadata] = useState(
@@ -122,6 +125,7 @@ export function BugReportModal({
 			onClick={onClose}
 		>
 			<div
+				ref={containerRef}
 				className="bg-gray-900 border border-white/10 p-6 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
 				onClick={(e) => e.stopPropagation()}
 			>

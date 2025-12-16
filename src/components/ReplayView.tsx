@@ -33,6 +33,10 @@ export function ReplayView({
 		error,
 		videoRef: playerVideoRef,
 		saveClip,
+		isPlaying,
+		play,
+		pause,
+		stepFrame,
 	} = player;
 
 	const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -94,6 +98,51 @@ export function ReplayView({
 		setShowSaveDialog(false);
 		setClipName("");
 	}, [saveClip, clipName]);
+
+	// Keyboard shortcuts for replay controls
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			// Ignore if typing in input field
+			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+				return;
+			}
+
+			switch (e.key) {
+				case " ": // Space = play/pause
+					e.preventDefault();
+					if (isReady) {
+						if (isPlaying) {
+							pause();
+						} else {
+							play();
+						}
+					}
+					break;
+				case "ArrowLeft": // Left arrow = previous frame
+					e.preventDefault();
+					if (isReady) {
+						stepFrame(-1);
+					}
+					break;
+				case "ArrowRight": // Right arrow = next frame
+					e.preventDefault();
+					if (isReady) {
+						stepFrame(1);
+					}
+					break;
+				case "s":
+				case "S": // S = sessions picker
+					e.preventDefault();
+					if (onSessionsClick) {
+						onSessionsClick();
+					}
+					break;
+			}
+		};
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [isReady, isPlaying, play, pause, stepFrame, onSessionsClick]);
 
 	return (
 		<div className="absolute inset-0 flex flex-col">
@@ -162,6 +211,8 @@ export function ReplayView({
 				isSmartZoom={isSmartZoom}
 				onSmartZoomChange={setIsSmartZoom}
 				isModelLoading={smartZoom.isModelLoading}
+				loadingProgress={smartZoom.loadingProgress}
+				loadingPhase={smartZoom.loadingPhase}
 			/>
 
 			{/* Save Dialog */}

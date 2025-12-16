@@ -8,11 +8,11 @@ import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
 import { useReplayPlayer } from "../hooks/useReplayPlayer";
 import { useSessionRecorder } from "../hooks/useSessionRecorder";
+import { useSettings } from "../hooks/useSettings";
 import { useShakeDetector } from "../hooks/useShakeDetector";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import { useVersionCheck } from "../hooks/useVersionCheck";
-import { DeviceService } from "../services/DeviceService";
-import type { SmoothingPreset } from "../smoothing";
+import { useZoomPan } from "../hooks/useZoomPan";
 import type { AppState } from "../types/sessions";
 import { AboutModal } from "./AboutModal";
 import { BugReportModal } from "./BugReportModal";
@@ -23,24 +23,9 @@ import { SessionPicker } from "./SessionPicker";
 import { SettingsModal } from "./SettingsModal";
 import { StatusButton } from "./StatusButton";
 
-// Storage keys for persisted settings
-const SMOOTHING_PRESET_STORAGE_KEY = "magic-monitor-smoothing-preset";
-const SMART_ZOOM_STORAGE_KEY = "magic-monitor-smart-zoom";
-const SHOW_HAND_SKELETON_STORAGE_KEY = "magic-monitor-show-hand-skeleton";
-const FLASH_ENABLED_STORAGE_KEY = "magic-monitor-flash-enabled";
-const FLASH_THRESHOLD_STORAGE_KEY = "magic-monitor-flash-threshold";
-const FLASH_TARGET_COLOR_STORAGE_KEY = "magic-monitor-flash-target-color";
-const MIRROR_STORAGE_KEY = "magic-monitor-mirror";
-
 export function CameraStage() {
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
-
-	// Zoom/Pan State
-	const [zoom, setZoom] = useState(1);
-	const [pan, setPan] = useState({ x: 0, y: 0 });
-	const [isDragging, setIsDragging] = useState(false);
-	const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
 	// Mobile Detection
 	const { isMobile } = useMobileDetection();
@@ -51,123 +36,41 @@ export function CameraStage() {
 	// Recording pause state
 	const [isRecordingPaused, setIsRecordingPaused] = useState(false);
 
-	// Flash Detection State (persisted to localStorage)
-	const [flashEnabled, setFlashEnabledInternal] = useState(() => {
-		return DeviceService.getStorageItem(FLASH_ENABLED_STORAGE_KEY) === "true";
-	});
-	const [targetColor, setTargetColorInternal] = useState<{
-		r: number;
-		g: number;
-		b: number;
-	} | null>(() => {
-		const stored = DeviceService.getStorageItem(FLASH_TARGET_COLOR_STORAGE_KEY);
-		if (stored) {
-			try {
-				return JSON.parse(stored);
-			} catch {
-				return null;
-			}
-		}
-		return null;
-	});
-	const [threshold, setThresholdInternal] = useState(() => {
-		const stored = DeviceService.getStorageItem(FLASH_THRESHOLD_STORAGE_KEY);
-		if (stored) {
-			const parsed = Number.parseInt(stored, 10);
-			if (!Number.isNaN(parsed)) return parsed;
-		}
-		return 20;
-	});
-	const [isPickingColor, setIsPickingColor] = useState(false);
+	// Settings (persisted to localStorage)
+	const { settings, setters } = useSettings();
+	const {
+		flashEnabled,
+		targetColor,
+		threshold,
+		isSmartZoom,
+		showHandSkeleton,
+		smoothingPreset,
+		isMirror,
+	} = settings;
+	const {
+		setFlashEnabled,
+		setTargetColor,
+		setThreshold,
+		setIsSmartZoom,
+		setShowHandSkeleton,
+		setSmoothingPreset,
+		setIsMirror,
+	} = setters;
 
-	// Smart Zoom State (persisted to localStorage)
-	const [isSmartZoom, setIsSmartZoomInternal] = useState(() => {
-		const stored = DeviceService.getStorageItem(SMART_ZOOM_STORAGE_KEY);
-		if (stored !== null) return stored === "true";
-		return true; // Default on
-	});
-	const [showHandSkeleton, setShowHandSkeletonInternal] = useState(() => {
-		return (
-			DeviceService.getStorageItem(SHOW_HAND_SKELETON_STORAGE_KEY) === "true"
-		);
-	});
+	// UI state
+	const [isPickingColor, setIsPickingColor] = useState(false);
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const [isAboutOpen, setIsAboutOpen] = useState(false);
 
-	// Mirror state (persisted to localStorage)
-	const [isMirror, setIsMirrorInternal] = useState(() => {
-		return DeviceService.getStorageItem(MIRROR_STORAGE_KEY) === "true";
-	});
-
-	// Smoothing preset state (persisted to localStorage)
-	const [smoothingPreset, setSmoothingPresetInternal] =
-		useState<SmoothingPreset>(() => {
-			const stored = DeviceService.getStorageItem(SMOOTHING_PRESET_STORAGE_KEY);
-			if (
-				stored === "ema" ||
-				stored === "kalmanFast" ||
-				stored === "kalmanSmooth"
-			) {
-				return stored;
-			}
-			return "ema";
-		});
-
-	// Wrapped setters that persist to localStorage
-	const setSmoothingPreset = useCallback((preset: SmoothingPreset) => {
-		setSmoothingPresetInternal(preset);
-		DeviceService.setStorageItem(SMOOTHING_PRESET_STORAGE_KEY, preset);
-	}, []);
-
-	const setIsSmartZoom = useCallback((value: boolean) => {
-		setIsSmartZoomInternal(value);
-		DeviceService.setStorageItem(SMART_ZOOM_STORAGE_KEY, String(value));
-	}, []);
-
-	const setShowHandSkeleton = useCallback((value: boolean) => {
-		setShowHandSkeletonInternal(value);
-		DeviceService.setStorageItem(SHOW_HAND_SKELETON_STORAGE_KEY, String(value));
-	}, []);
-
-	const setFlashEnabled = useCallback((value: boolean) => {
-		setFlashEnabledInternal(value);
-		DeviceService.setStorageItem(FLASH_ENABLED_STORAGE_KEY, String(value));
-	}, []);
-
-	const setThreshold = useCallback((value: number) => {
-		setThresholdInternal(value);
-		DeviceService.setStorageItem(FLASH_THRESHOLD_STORAGE_KEY, String(value));
-	}, []);
-
-	const setTargetColor = useCallback(
-		(color: { r: number; g: number; b: number } | null) => {
-			setTargetColorInternal(color);
-			if (color) {
-				DeviceService.setStorageItem(
-					FLASH_TARGET_COLOR_STORAGE_KEY,
-					JSON.stringify(color),
-				);
-			} else {
-				DeviceService.setStorageItem(FLASH_TARGET_COLOR_STORAGE_KEY, "");
-			}
+	// Zoom/Pan State and Handlers
+	const zoomPan = useZoomPan({
+		videoRef,
+		onZoomChange: () => {
+			// Manual zoom/pan takes control from smart zoom
+			if (isSmartZoom) setIsSmartZoom(false);
 		},
-		[],
-	);
-
-	const setIsMirror = useCallback((value: boolean) => {
-		setIsMirrorInternal(value);
-		DeviceService.setStorageItem(MIRROR_STORAGE_KEY, String(value));
-	}, []);
-
-	// Helper to clamp NORMALIZED pan values (resolution-independent)
-	// See docs/SMART_ZOOM_SPEC.md: maxPan = (1 - 1/zoom) / 2
-	const clampPan = useCallback((p: { x: number; y: number }, z: number) => {
-		const maxPan = (1 - 1 / z) / 2;
-		return {
-			x: Math.max(-maxPan, Math.min(maxPan, p.x)),
-			y: Math.max(-maxPan, Math.min(maxPan, p.y)),
-		};
-	}, []);
+	});
+	const { zoom, pan, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp, resetZoom, setZoom, setPan } = zoomPan;
 
 	// Smart Zoom
 	const smartZoom = useSmartZoom({
@@ -296,95 +199,61 @@ export function CameraStage() {
 		onExitReplay: handleExitReplay,
 	});
 
-	const handleWheel = (e: React.WheelEvent) => {
-		e.preventDefault();
-		// Manual zoom takes control from smart zoom
-		if (isSmartZoom) setIsSmartZoom(false);
-		const newZoom = Math.min(Math.max(zoom - e.deltaY * 0.001, 1), 5);
-		setZoom(newZoom);
+	// Color picker for flash detection
+	const pickColor = useCallback(
+		(x: number, y: number) => {
+			if (!videoRef.current || !containerRef.current) return;
 
-		// Re-clamp pan with new zoom level
-		setPan((prev) => clampPan(prev, newZoom));
-	};
+			const video = videoRef.current;
+			const rect = video.getBoundingClientRect();
 
-	const handleMouseDown = (e: React.MouseEvent) => {
-		if (isPickingColor) {
-			pickColor(e.clientX, e.clientY);
-			return;
-		}
+			const scaleX = video.videoWidth / rect.width;
+			const scaleY = video.videoHeight / rect.height;
 
-		if (zoom > 1) {
-			setIsDragging(true);
-			setLastMousePos({ x: e.clientX, y: e.clientY });
-		}
-	};
+			const videoX = (x - rect.left) * scaleX;
+			const videoY = (y - rect.top) * scaleY;
 
-	const pickColor = (x: number, y: number) => {
-		if (!videoRef.current || !containerRef.current) return;
+			const canvas = document.createElement("canvas");
+			canvas.width = video.videoWidth;
+			canvas.height = video.videoHeight;
+			const ctx = canvas.getContext("2d");
+			if (!ctx) return;
 
-		const video = videoRef.current;
-		const rect = video.getBoundingClientRect();
+			ctx.drawImage(video, 0, 0);
+			const pixel = ctx.getImageData(videoX, videoY, 1, 1).data;
 
-		const scaleX = video.videoWidth / rect.width;
-		const scaleY = video.videoHeight / rect.height;
+			setTargetColor({ r: pixel[0], g: pixel[1], b: pixel[2] });
+			setIsPickingColor(false);
+			setFlashEnabled(true);
+		},
+		[setTargetColor, setFlashEnabled],
+	);
 
-		const videoX = (x - rect.left) * scaleX;
-		const videoY = (y - rect.top) * scaleY;
+	// Wrap zoom/pan handleMouseDown to support color picking
+	const handleMouseDownWithColorPicking = useCallback(
+		(e: React.MouseEvent) => {
+			if (isPickingColor) {
+				pickColor(e.clientX, e.clientY);
+				return;
+			}
+			handleMouseDown(e);
+		},
+		[isPickingColor, pickColor, handleMouseDown],
+	);
 
-		const canvas = document.createElement("canvas");
-		canvas.width = video.videoWidth;
-		canvas.height = video.videoHeight;
-		const ctx = canvas.getContext("2d");
-		if (!ctx) return;
-
-		ctx.drawImage(video, 0, 0);
-		const pixel = ctx.getImageData(videoX, videoY, 1, 1).data;
-
-		setTargetColor({ r: pixel[0], g: pixel[1], b: pixel[2] });
-		setIsPickingColor(false);
-		setFlashEnabled(true);
-	};
-
-	const handleMouseMove = (e: React.MouseEvent) => {
-		if (isDragging && zoom > 1 && !isPickingColor) {
-			const dx = e.clientX - lastMousePos.x;
-			const dy = e.clientY - lastMousePos.y;
-
-			// Convert pixel delta to normalized coordinates
-			// Use video element's rendered size for accurate conversion
-			const videoRect = videoRef.current?.getBoundingClientRect();
-			const renderedWidth = videoRect?.width || 1;
-			const renderedHeight = videoRect?.height || 1;
-
-			// Normalized delta: pixel movement / (rendered size * zoom)
-			// The zoom factor accounts for scale(zoom) in CSS transform
-			const normalizedDx = dx / (renderedWidth * zoom);
-			const normalizedDy = dy / (renderedHeight * zoom);
-
-			const proposedPan = {
-				x: pan.x + normalizedDx,
-				y: pan.y + normalizedDy,
-			};
-
-			setPan(clampPan(proposedPan, zoom));
-			setLastMousePos({ x: e.clientX, y: e.clientY });
-		}
-	};
-
-	const handleMouseUp = () => {
-		setIsDragging(false);
-	};
-
-	const handlePanTo = (target: { x: number; y: number }) => {
-		setPan(clampPan(target, zoom));
-	};
+	const handlePanTo = useCallback(
+		(target: { x: number; y: number }) => {
+			setPan(target);
+		},
+		[setPan],
+	);
 
 	return (
 		<div
 			ref={containerRef}
 			className={`relative w-full h-full bg-black overflow-hidden flex items-center justify-center ${isPickingColor ? "cursor-crosshair" : "cursor-move"}`}
 			onWheel={handleWheel}
-			onMouseDown={handleMouseDown}
+			onMouseDown={handleMouseDownWithColorPicking}
 			onMouseMove={handleMouseMove}
 			onMouseUp={handleMouseUp}
 			onMouseLeave={handleMouseUp}
@@ -619,7 +488,9 @@ export function CameraStage() {
 							title="Smart Zoom - Auto-follow movement"
 						>
 							{smartZoom.isModelLoading
-								? "Loading..."
+								? smartZoom.loadingPhase === "initializing"
+									? "Initializing..."
+									: `Downloading ${smartZoom.loadingProgress}%`
 								: isSmartZoom
 									? "Smart ✓"
 									: "Smart"}
@@ -639,12 +510,7 @@ export function CameraStage() {
 							<>
 								<div className="h-6 w-px bg-white/20" />
 								<button
-									onClick={() => {
-										// Manual reset takes control from smart zoom
-										if (isSmartZoom) setIsSmartZoom(false);
-										setZoom(1);
-										setPan({ x: 0, y: 0 });
-									}}
+									onClick={resetZoom}
 									className="text-white font-bold px-3 py-1 rounded hover:bg-white/20 text-sm"
 								>
 									Reset
@@ -657,10 +523,7 @@ export function CameraStage() {
 									value={effectiveZoom}
 									onChange={(e) => {
 										const newZoom = Number.parseFloat(e.target.value);
-										// Manual zoom takes control from smart zoom
-										if (isSmartZoom) setIsSmartZoom(false);
 										setZoom(newZoom);
-										setPan((prev) => clampPan(prev, newZoom));
 									}}
 									className="w-32 accent-blue-500"
 								/>
@@ -676,6 +539,7 @@ export function CameraStage() {
 							onClick={() => setIsSettingsOpen(true)}
 							className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
 							title="Settings"
+						aria-label="Settings"
 						>
 							<Settings size={18} />
 						</button>
