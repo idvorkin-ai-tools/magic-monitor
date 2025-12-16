@@ -73,8 +73,6 @@ export function useSessionRecorder({
 	// State exposed to consumers
 	const [isRecording, setIsRecording] = useState(false);
 	const [currentBlockDuration, setCurrentBlockDuration] = useState(0);
-	const [lastSavedSession, setLastSavedSession] =
-		useState<PracticeSession | null>(null);
 
 	// Duration tracking
 	const durationTimerRef = useRef<number | null>(null);
@@ -102,7 +100,7 @@ export function useSessionRecorder({
 		sessionStorageService,
 		videoFixService,
 	});
-	const { saveBlock, refreshSessions } = sessionList;
+	const { saveBlock, refreshSessions, isInitialized } = sessionList;
 
 	// Store callbacks in refs so machine doesn't need to be recreated
 	const startRecordingRef = useRef(startRecording);
@@ -161,15 +159,12 @@ export function useSessionRecorder({
 					thumbnails: SessionThumbnail[],
 					blockStartTime: number,
 				) => {
-					const session = await saveBlockRef.current(
+					return saveBlockRef.current(
 						blob,
 						duration,
 						thumbnails,
 						blockStartTime,
 					);
-					if (session) {
-						setLastSavedSession(session);
-					}
 				},
 				onStateChange: (state: SessionRecorderState) => {
 					setIsRecording(state.type === "recording");
@@ -209,15 +204,13 @@ export function useSessionRecorder({
 	// Storage initialization effect
 	useEffect(() => {
 		// When sessionList finishes init, notify machine
-		// sessionList.error will be set if init failed
 		if (sessionList.error) {
 			machineRef.current?.storageInitFailed();
-		} else {
-			// sessionList calls init in its own useEffect, which sets recentSessions
-			// We can use the presence of recentSessions (even empty) to know init completed
+		} else if (isInitialized) {
+			// Only notify machine when storage is actually initialized
 			machineRef.current?.storageInitialized();
 		}
-	}, [sessionList.error, sessionList.recentSessions]);
+	}, [sessionList.error, isInitialized]);
 
 	// Video readiness detection effect
 	useEffect(() => {
@@ -227,17 +220,24 @@ export function useSessionRecorder({
 
 			if (isReady) {
 				machineRef.current?.videoIsReady();
+				// Stop polling once video is ready to prevent memory leak
+				if (videoReadyIntervalRef.current) {
+					timerService.clearInterval(videoReadyIntervalRef.current);
+					videoReadyIntervalRef.current = null;
+				}
 			}
 		};
 
 		// Check immediately
 		checkVideoReady();
 
-		// Poll for readiness changes
-		videoReadyIntervalRef.current = timerService.setInterval(
-			checkVideoReady,
-			100,
-		);
+		// Poll for readiness changes (only if not already ready)
+		if (!videoReadyIntervalRef.current) {
+			videoReadyIntervalRef.current = timerService.setInterval(
+				checkVideoReady,
+				100,
+			);
+		}
 
 		return () => {
 			if (videoReadyIntervalRef.current) {
@@ -263,12 +263,12 @@ export function useSessionRecorder({
 		};
 	}, []);
 
-	// Stop current block manually
+	// Stop current block manually - returns the saved session directly from the machine
 	const stopCurrentBlock =
 		useCallback(async (): Promise<PracticeSession | null> => {
-			await machineRef.current?.stopCurrentBlock();
-			return lastSavedSession;
-		}, [lastSavedSession]);
+			const session = await machineRef.current?.stopCurrentBlock();
+			return session ?? null;
+		}, []);
 
 	// Combine errors from all hooks
 	const combinedError = blockRecorder.error || sessionList.error || null;

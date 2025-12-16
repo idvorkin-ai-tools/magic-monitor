@@ -71,6 +71,40 @@ describe("useSessionList", () => {
 		});
 	});
 
+	it("sets isInitialized to true after successful init", async () => {
+		const { result } = renderHook(() =>
+			useSessionList({
+				sessionStorageService: mockStorage,
+				videoFixService: mockVideoFix,
+			}),
+		);
+
+		// Initially false
+		expect(result.current.isInitialized).toBe(false);
+
+		await waitFor(() => {
+			expect(result.current.isInitialized).toBe(true);
+		});
+	});
+
+	it("keeps isInitialized false when init fails", async () => {
+		mockStorage.init.mockRejectedValue(new Error("Storage unavailable"));
+
+		const { result } = renderHook(() =>
+			useSessionList({
+				sessionStorageService: mockStorage,
+				videoFixService: mockVideoFix,
+			}),
+		);
+
+		await waitFor(() => {
+			expect(result.current.error).not.toBeNull();
+		});
+
+		// isInitialized should remain false on error
+		expect(result.current.isInitialized).toBe(false);
+	});
+
 	it("loads recent and saved sessions on init", async () => {
 		const mockSessions: PracticeSession[] = [
 			{

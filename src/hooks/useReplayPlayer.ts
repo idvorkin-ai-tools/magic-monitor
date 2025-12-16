@@ -537,6 +537,7 @@ export function useReplayPlayer({
 				return updated;
 			} catch (err) {
 				console.error("Failed to save clip:", err);
+				setError("Failed to save clip - please try again");
 				return null;
 			}
 		},

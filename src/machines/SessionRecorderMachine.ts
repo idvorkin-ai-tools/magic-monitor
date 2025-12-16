@@ -1,4 +1,4 @@
-import type { SessionThumbnail } from "../types/sessions";
+import type { PracticeSession, SessionThumbnail } from "../types/sessions";
 
 // ===== State Types =====
 
@@ -24,13 +24,13 @@ export interface SessionRecorderCallbacks {
 	onStartBlockTimer: () => void;
 	onStopBlockTimer: () => void;
 
-	// Persistence
+	// Persistence - returns saved session or null
 	onSaveBlock: (
 		blob: Blob,
 		duration: number,
 		thumbnails: SessionThumbnail[],
 		blockStartTime: number,
-	) => Promise<void>;
+	) => Promise<PracticeSession | null>;
 
 	// State observation
 	onStateChange: (state: SessionRecorderState) => void;
@@ -151,10 +151,10 @@ export class SessionRecorderMachine {
 
 	/**
 	 * Manually stop the current recording block.
-	 * Returns the saved session data.
+	 * Returns the saved session or null if not recording or save failed.
 	 */
-	async stopCurrentBlock(): Promise<void> {
-		if (this.state.type !== "recording") return;
+	async stopCurrentBlock(): Promise<PracticeSession | null> {
+		if (this.state.type !== "recording") return null;
 
 		const blockStart = this.state.blockStart;
 		this.setState({ type: "stopping" });
@@ -165,8 +165,9 @@ export class SessionRecorderMachine {
 		const result = await this.callbacks.onStopRecording();
 
 		// Save if we got a recording
+		let savedSession: PracticeSession | null = null;
 		if (result && result.blob.size > 0) {
-			await this.callbacks.onSaveBlock(
+			savedSession = await this.callbacks.onSaveBlock(
 				result.blob,
 				result.duration,
 				thumbnails,
@@ -180,6 +181,8 @@ export class SessionRecorderMachine {
 		} else {
 			this.setState({ type: "idle" });
 		}
+
+		return savedSession;
 	}
 
 	// ===== Private Methods =====
