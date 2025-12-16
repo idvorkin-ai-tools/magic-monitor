@@ -130,6 +130,28 @@ className={clsx("px-3 py-1.5", isActive ? "bg-green-600" : "bg-gray-700", isDisa
 <StatusButton active={isActive} disabled={isDisabled} color="green">Label</StatusButton>
 ```
 
+### Hook Dependency Anti-Pattern
+
+**NEVER put hook return objects directly in dependency arrays.**
+
+Hooks that return objects with mixed state + callbacks are dangerous:
+```tsx
+// ❌ BAD: Object identity changes on every state update
+const recorder = useBlockRecorder(config);
+useEffect(() => {
+  // This re-runs whenever recorder.isRecording changes!
+}, [recorder]);
+
+// ✅ GOOD: Destructure stable callbacks
+const recorder = useBlockRecorder(config);
+const { startRecording, stopRecording, isRecording } = recorder;
+useEffect(() => {
+  // Callbacks have stable identity via useCallback
+}, [startRecording, stopRecording]);
+```
+
+Why: Even though callbacks use `useCallback`, the containing object is recreated each render. When state inside the hook changes, the object reference changes, causing effects with that object in their deps to re-run → potential infinite loops.
+
 ## Development Conventions
 
 ### Clean Code Principles
