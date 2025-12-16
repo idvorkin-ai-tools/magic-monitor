@@ -206,8 +206,18 @@ export function CameraStage() {
 	});
 
 	// Camera State via Humble Object Hook
-	const { stream, error, devices, selectedDeviceId, setSelectedDeviceId, retry } =
-		useCamera();
+	const {
+		stream,
+		error,
+		devices,
+		selectedDeviceId,
+		setSelectedDeviceId,
+		resolution,
+		setResolution,
+		orientation,
+		setOrientation,
+		retry,
+	} = useCamera();
 
 	// Version check for updates
 	const {
@@ -452,6 +462,10 @@ export function CameraStage() {
 				devices={devices}
 				selectedDeviceId={selectedDeviceId}
 				onDeviceChange={setSelectedDeviceId}
+				resolution={resolution}
+				onResolutionChange={setResolution}
+				orientation={orientation}
+				onOrientationChange={setOrientation}
 				videoWidth={videoDimensions?.width}
 				videoHeight={videoDimensions?.height}
 				isMirror={isMirror}
