@@ -102,6 +102,7 @@ export function useReplayPlayer({
 	const blobUrlRef = useRef<string | null>(null);
 	const currentVideoElementRef = useRef<HTMLVideoElement | null>(null);
 	const isTrimPreviewRef = useRef(false);
+	const trimPreviewRafRef = useRef<number | null>(null); // For precise trim preview stopping
 	const pendingSeekRef = useRef<{ time: number; requestId: number } | null>(null);
 	const loadTimeoutRef = useRef<number | null>(null);
 	const loadRequestIdRef = useRef(0); // For ignoring stale load completions
@@ -349,20 +350,62 @@ export function useReplayPlayer({
 		isTrimPreviewRef.current = false;
 	}, []);
 
+	// Stop the trim preview rAF loop
+	const stopTrimPreviewLoop = useCallback(() => {
+		if (trimPreviewRafRef.current !== null) {
+			cancelAnimationFrame(trimPreviewRafRef.current);
+			trimPreviewRafRef.current = null;
+		}
+		isTrimPreviewRef.current = false;
+	}, []);
+
 	const previewTrim = useCallback(() => {
 		if (!videoElement || !isReady || inPoint === null || outPoint === null) return;
 
+		// Stop any existing preview loop
+		stopTrimPreviewLoop();
+
 		isTrimPreviewRef.current = true;
 		videoElement.currentTime = inPoint;
-		videoElement.play().catch((err) => {
+
+		// Use requestAnimationFrame for precise stopping at outPoint
+		// This avoids overshoot that can happen with timeupdate (fires ~4Hz)
+		const checkOutPoint = () => {
+			if (!isTrimPreviewRef.current || !videoElement) {
+				stopTrimPreviewLoop();
+				return;
+			}
+
+			// Check if we've reached or passed the out point
+			if (videoElement.currentTime >= outPoint) {
+				videoElement.pause();
+				// Ensure we're exactly at outPoint (prevents visual overshoot)
+				videoElement.currentTime = outPoint;
+				stopTrimPreviewLoop();
+				return;
+			}
+
+			// Continue the loop if still playing
+			if (!videoElement.paused) {
+				trimPreviewRafRef.current = requestAnimationFrame(checkOutPoint);
+			} else {
+				stopTrimPreviewLoop();
+			}
+		};
+
+		videoElement.play().then(() => {
+			// Start the rAF loop after play succeeds
+			trimPreviewRafRef.current = requestAnimationFrame(checkOutPoint);
+		}).catch((err) => {
 			console.error("Play failed:", err);
+			stopTrimPreviewLoop();
 			if (err.name === "NotAllowedError") {
 				setError("Playback blocked - tap the video to enable audio");
 			} else {
 				setError("Playback failed - please try again");
 			}
 		});
-	}, [videoElement, isReady, inPoint, outPoint]);
+	}, [videoElement, isReady, inPoint, outPoint, stopTrimPreviewLoop]);
 
 	// Consolidated video lifecycle effect
 	useEffect(() => {
@@ -456,6 +499,11 @@ export function useReplayPlayer({
 			videoElement.removeEventListener("play", handlePlay);
 			videoElement.removeEventListener("pause", handlePause);
 			videoElement.removeEventListener("error", handleError);
+			// Cancel any running trim preview rAF loop
+			if (trimPreviewRafRef.current !== null) {
+				cancelAnimationFrame(trimPreviewRafRef.current);
+				trimPreviewRafRef.current = null;
+			}
 		};
 	}, [videoElement, outPoint, clearLoadTimeout]);
 

@@ -5,7 +5,7 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	workers: process.env.CI ? 1 : undefined,
+	workers: process.env.CI ? 1 : 2,
 	reporter: [
 		["list"],
 		["html", { outputFolder: "playwright-report" }],
@@ -16,6 +16,8 @@ export default defineConfig({
 		video: "on",
 		screenshot: "on",
 		ignoreHTTPSErrors: true,
+		// Block service workers to prevent cached content from interfering with tests
+		serviceWorkers: "block",
 	},
 	projects: [
 		{
@@ -33,12 +35,13 @@ export default defineConfig({
 			},
 		},
 	],
-	// webServer: {
-	// 	command: "npm run dev",
-	// 	url: "http://localhost:5173",
-	// 	reuseExistingServer: true,
-	// 	timeout: 120 * 1000,
-	// 	stdout: "ignore",
-	// 	stderr: "pipe",
-	// },
+	webServer: {
+		command: "npm run dev -- --port 5173",
+		url: "https://localhost:5173",
+		reuseExistingServer: false,
+		timeout: 120 * 1000,
+		stdout: "ignore",
+		stderr: "pipe",
+		ignoreHTTPSErrors: true,
+	},
 });

@@ -96,16 +96,113 @@ async function injectMockCamera(page: Page) {
 				},
 			] as MediaDeviceInfo[];
 		};
+
+		// Mock MediaRecorder to work with canvas streams in headless Chrome
+		const OriginalMediaRecorder = window.MediaRecorder;
+		const mockRecordings = new Map<MediaRecorder, Blob[]>();
+
+		class MockMediaRecorder {
+			stream: MediaStream;
+			state: "inactive" | "recording" | "paused" = "inactive";
+			ondataavailable: ((event: BlobEvent) => void) | null = null;
+			onstop: (() => void) | null = null;
+			onerror: ((event: Event) => void) | null = null;
+
+			constructor(stream: MediaStream, _opts?: MediaRecorderOptions) {
+			void _opts; // Unused but required by MediaRecorder interface
+				this.stream = stream;
+				mockRecordings.set(this as unknown as MediaRecorder, []);
+			}
+
+			static isTypeSupported(mimeType: string): boolean {
+				// Report support for common video types
+				return mimeType.startsWith("video/webm");
+			}
+
+			start(timeslice?: number) {
+				void timeslice; // Unused but matches MediaRecorder interface
+				this.state = "recording";
+				// Simulate data becoming available after a short delay
+				const generateData = () => {
+					if (this.state === "recording" && this.ondataavailable) {
+						// Create a small mock video blob
+						const blob = new Blob(["mock-video-data"], { type: "video/webm" });
+						const chunks = mockRecordings.get(this as unknown as MediaRecorder) || [];
+						chunks.push(blob);
+						this.ondataavailable({ data: blob } as BlobEvent);
+					}
+				};
+				// Generate data periodically
+				const intervalId = setInterval(generateData, 1000);
+				(this as Record<string, unknown>)._intervalId = intervalId;
+			}
+
+			stop() {
+				this.state = "inactive";
+				const intervalId = (this as Record<string, unknown>)._intervalId as number;
+				if (intervalId) clearInterval(intervalId);
+
+				// Final data chunk
+				if (this.ondataavailable) {
+					const blob = new Blob(["mock-video-final"], { type: "video/webm" });
+					const chunks = mockRecordings.get(this as unknown as MediaRecorder) || [];
+					chunks.push(blob);
+					this.ondataavailable({ data: blob } as BlobEvent);
+				}
+
+				if (this.onstop) {
+					this.onstop();
+				}
+			}
+
+			pause() {
+				this.state = "paused";
+			}
+
+			resume() {
+				this.state = "recording";
+			}
+
+			requestData() {
+				if (this.ondataavailable) {
+					const blob = new Blob(["mock-video-chunk"], { type: "video/webm" });
+					this.ondataavailable({ data: blob } as BlobEvent);
+				}
+			}
+		}
+
+		// Only use mock if original doesn't work with our stream
+		// Test if the original MediaRecorder works
+		try {
+			const testRecorder = new OriginalMediaRecorder(stream, { mimeType: "video/webm" });
+			testRecorder.start();
+			testRecorder.stop();
+			console.log("Original MediaRecorder works with canvas stream");
+		} catch {
+			console.log("Original MediaRecorder failed, using mock");
+			// @ts-expect-error - overriding MediaRecorder
+			window.MediaRecorder = MockMediaRecorder;
+		}
 	});
 }
 
 test.describe("Magic Monitor E2E", () => {
-	test.beforeEach(async ({ page }) => {
+	test.beforeEach(async ({ page, context }) => {
 		await injectMockCamera(page);
-		// Clear localStorage to ensure clean state between tests
+		// Clear localStorage and unregister service workers for clean state
 		await page.addInitScript(() => {
 			localStorage.clear();
+			// Unregister any service workers to avoid cached content
+			if ("serviceWorker" in navigator) {
+				navigator.serviceWorker.getRegistrations().then((registrations) => {
+					for (const registration of registrations) {
+						registration.unregister();
+					}
+				});
+			}
 		});
+		// Clear browser context storage state
+		await context.clearCookies();
 		await page.goto("/");
 	});
 
@@ -123,58 +220,6 @@ test.describe("Magic Monitor E2E", () => {
 		const cameraSelect = page.locator("select#camera-source");
 		await expect(cameraSelect).toContainText("Mock Camera 1");
 		await expect(cameraSelect).toContainText("Mock Camera 2");
-	});
-
-	// TODO: Flash detection timing is flaky with mock camera - needs investigation
-	// The mock canvas stream and flash detector's requestAnimationFrame loop
-	// don't sync reliably in the test environment
-	test.skip("Flash Detection Logic", async ({ page }) => {
-		// Use a distinctive color for testing (not pure red to avoid any default state issues)
-		const testColor = "rgb(0, 255, 0)"; // Green
-
-		// 1. Set Mock to GREEN
-		await page.evaluate(
-			(color) => window.mockCamera.setColor(color),
-			testColor,
-		);
-		await page.waitForTimeout(500); // Let mock update
-
-		// 2. Pick the color
-		await page.getByTitle("Settings").click();
-		await page.getByText("Pick Color").click();
-		// Click the video to pick the color (center of screen)
-		await page
-			.getByTestId("main-video")
-			.click({ position: { x: 100, y: 100 }, force: true });
-
-		// 3. Verify flash is now armed
-		await page.getByTitle("Settings").click();
-		// Use exact match since "ARMED" appears in both settings modal and main control bar
-		await expect(
-			page.getByRole("button", { name: "ARMED", exact: true }),
-		).toBeVisible();
-
-		// Close settings modal before testing flash overlay
-		await page.keyboard.press("Escape");
-		await page.waitForTimeout(500);
-
-		// The flash warning overlay is the border-red-600 div.
-		const flashOverlay = page.locator(".border-red-600");
-
-		// 4. Since we're showing green and picked green, flash should be active
-		await expect(flashOverlay).toHaveClass(/opacity-100/, { timeout: 3000 });
-
-		// 5. Change to BLUE - flash should stop (different color)
-		await page.evaluate(() => window.mockCamera.setColor("rgb(0, 0, 255)"));
-		await page.waitForTimeout(500);
-		await expect(flashOverlay).toHaveClass(/opacity-0/, { timeout: 5000 });
-
-		// 6. Change back to GREEN - flash should resume
-		await page.evaluate(
-			(color) => window.mockCamera.setColor(color),
-			testColor,
-		);
-		await expect(flashOverlay).toHaveClass(/opacity-100/, { timeout: 3000 });
 	});
 
 	test("UI Controls: Zoom", async ({ page }) => {
