@@ -58,23 +58,40 @@ export function Timeline({
 		(e: React.PointerEvent) => {
 			// Don't call preventDefault - causes issues with passive event listeners
 			const track = trackRef.current;
+			console.log("[Timeline] pointerdown", { track: !!track, disabled, pointerId: e.pointerId, clientX: e.clientX });
 			if (!track || disabled) return;
 
+			// Store the pointerId for use in handlers (to ensure we capture/release the same pointer)
+			const pointerId = e.pointerId;
+
 			// Capture pointer for drag tracking
-			track.setPointerCapture(e.pointerId);
+			try {
+				track.setPointerCapture(pointerId);
+				console.log("[Timeline] pointer captured", pointerId, "hasCapture:", track.hasPointerCapture?.(pointerId) ?? "unknown");
+			} catch (err) {
+				console.error("[Timeline] setPointerCapture failed:", err);
+			}
 
 			// Seek to click position
 			const time = getTimeFromPosition(e.clientX);
+			console.log("[Timeline] initial seek to", time);
 			onSeek(time);
 
 			// Set up drag using pointer capture (no need for document listeners)
 			const handleMove = (moveEvent: PointerEvent) => {
+				console.log("[Timeline] pointermove", { clientX: moveEvent.clientX, pointerId: moveEvent.pointerId });
 				const newTime = getTimeFromPosition(moveEvent.clientX);
+				console.log("[Timeline] drag seek to", newTime);
 				onSeek(newTime);
 			};
 
 			const handleUp = (upEvent: PointerEvent) => {
-				track.releasePointerCapture(upEvent.pointerId);
+				console.log("[Timeline] pointerup", { pointerId: upEvent.pointerId });
+				try {
+					track.releasePointerCapture(upEvent.pointerId);
+				} catch (err) {
+					console.error("[Timeline] releasePointerCapture failed:", err);
+				}
 				track.removeEventListener("pointermove", handleMove);
 				track.removeEventListener("pointerup", handleUp);
 				track.removeEventListener("pointercancel", handleUp);
@@ -85,6 +102,7 @@ export function Timeline({
 			track.addEventListener("pointermove", handleMove);
 			track.addEventListener("pointerup", handleUp);
 			track.addEventListener("pointercancel", handleUp);
+			console.log("[Timeline] event listeners added");
 		},
 		[getTimeFromPosition, onSeek, disabled],
 	);

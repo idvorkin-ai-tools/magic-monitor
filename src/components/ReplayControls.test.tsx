@@ -932,5 +932,100 @@ describe("ReplayControls", () => {
 			const track = container.querySelector(".bg-gray-700");
 			expect(track).toHaveClass("cursor-not-allowed");
 		});
+
+		it("calls player.seek multiple times when dragging on Timeline", () => {
+			const { container } = render(
+				<ReplayControls
+					player={mockPlayer}
+					onExit={mockOnExit}
+					onSaveClick={mockOnSaveClick}
+				/>,
+			);
+
+			const track = container.querySelector(".bg-gray-700") as HTMLElement;
+
+			vi.spyOn(track, "getBoundingClientRect").mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			// Start drag at 25%
+			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+			expect(mockPlayer.seek).toHaveBeenCalledTimes(1);
+			expect(mockPlayer.seek).toHaveBeenLastCalledWith(15); // 250/1000 * 60 duration
+
+			// Drag to 50%
+			fireEvent.pointerMove(track, { clientX: 500, pointerId: 1 });
+			expect(mockPlayer.seek).toHaveBeenCalledTimes(2);
+			expect(mockPlayer.seek).toHaveBeenLastCalledWith(30); // 500/1000 * 60 duration
+
+			// Drag to 75%
+			fireEvent.pointerMove(track, { clientX: 750, pointerId: 1 });
+			expect(mockPlayer.seek).toHaveBeenCalledTimes(3);
+			expect(mockPlayer.seek).toHaveBeenLastCalledWith(45); // 750/1000 * 60 duration
+
+			// Release
+			fireEvent.pointerUp(track, { clientX: 750, pointerId: 1 });
+
+			// Should not call seek after release
+			fireEvent.pointerMove(track, { clientX: 500, pointerId: 1 });
+			expect(mockPlayer.seek).toHaveBeenCalledTimes(3);
+		});
+
+		it("drag works when control panel is floating", () => {
+			const { container } = render(
+				<ReplayControls
+					player={mockPlayer}
+					onExit={mockOnExit}
+					onSaveClick={mockOnSaveClick}
+				/>,
+			);
+
+			// Click float button to make panel floating
+			const floatButton = screen.getByLabelText("Float controls");
+			fireEvent.click(floatButton);
+
+			// Now verify dock button appears (confirming we're in floating mode)
+			expect(screen.getByLabelText("Dock controls")).toBeTruthy();
+
+			const track = container.querySelector(".bg-gray-700") as HTMLElement;
+
+			vi.spyOn(track, "getBoundingClientRect").mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			// Clear previous mock calls
+			(mockPlayer.seek as ReturnType<typeof vi.fn>).mockClear();
+
+			// Start drag at 25%
+			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+			expect(mockPlayer.seek).toHaveBeenCalledTimes(1);
+
+			// Drag to 50% - this should work even when floating
+			fireEvent.pointerMove(track, { clientX: 500, pointerId: 1 });
+			expect(mockPlayer.seek).toHaveBeenCalledTimes(2);
+
+			// Drag to 75%
+			fireEvent.pointerMove(track, { clientX: 750, pointerId: 1 });
+			expect(mockPlayer.seek).toHaveBeenCalledTimes(3);
+
+			// Release
+			fireEvent.pointerUp(track, { clientX: 750, pointerId: 1 });
+		});
 	});
 });

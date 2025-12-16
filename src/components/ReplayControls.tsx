@@ -78,6 +78,7 @@ export function ReplayControls({
 
 	// Handle drag start for floating control panel
 	const handleDragStart = useCallback((e: React.PointerEvent) => {
+		console.log("[ReplayControls] handleDragStart", { isFloating, target: (e.target as HTMLElement).className });
 		if (!isFloating) return;
 		e.preventDefault();
 		const panel = controlPanelRef.current;
@@ -93,6 +94,7 @@ export function ReplayControls({
 	}, [isFloating, panelPosition]);
 
 	const handleDragMove = useCallback((e: React.PointerEvent) => {
+		console.log("[ReplayControls] handleDragMove", { hasDragRef: !!dragRef.current, target: (e.target as HTMLElement).className });
 		if (!dragRef.current) return;
 		const dx = e.clientX - dragRef.current.startX;
 		const dy = e.clientY - dragRef.current.startY;
@@ -103,6 +105,7 @@ export function ReplayControls({
 	}, []);
 
 	const handleDragEnd = useCallback((e: React.PointerEvent) => {
+		console.log("[ReplayControls] handleDragEnd", { hasDragRef: !!dragRef.current });
 		if (!dragRef.current) return;
 		const panel = controlPanelRef.current;
 		if (panel) {

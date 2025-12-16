@@ -538,6 +538,175 @@ describe("Timeline", () => {
 		});
 	});
 
+	describe("drag behavior diagnosis", () => {
+		it("drag calls onSeek multiple times as pointer moves", () => {
+			const { container } = render(
+				<Timeline
+					currentTime={0}
+					duration={100}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+				/>,
+			);
+
+			const track = container.querySelector(".bg-gray-700") as HTMLElement;
+
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			// Start drag at 25%
+			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledTimes(1);
+			expect(mockOnSeek).toHaveBeenLastCalledWith(25);
+
+			// Move to 50%
+			fireEvent.pointerMove(track, { clientX: 500, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledTimes(2);
+			expect(mockOnSeek).toHaveBeenLastCalledWith(50);
+
+			// Move to 75%
+			fireEvent.pointerMove(track, { clientX: 750, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledTimes(3);
+			expect(mockOnSeek).toHaveBeenLastCalledWith(75);
+
+			// Release
+			fireEvent.pointerUp(track, { clientX: 750, pointerId: 1 });
+
+			// Verify no more calls after release
+			fireEvent.pointerMove(track, { clientX: 500, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledTimes(3);
+		});
+
+		it("native event listeners are added on pointerdown", () => {
+			const { container } = render(
+				<Timeline
+					currentTime={0}
+					duration={100}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+				/>,
+			);
+
+			const track = container.querySelector(".bg-gray-700") as HTMLElement;
+
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			const addEventListenerSpy = vi.spyOn(track, "addEventListener");
+
+			// Start drag
+			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+
+			// Verify native event listeners were added
+			expect(addEventListenerSpy).toHaveBeenCalledWith(
+				"pointermove",
+				expect.any(Function),
+			);
+			expect(addEventListenerSpy).toHaveBeenCalledWith(
+				"pointerup",
+				expect.any(Function),
+			);
+			expect(addEventListenerSpy).toHaveBeenCalledWith(
+				"pointercancel",
+				expect.any(Function),
+			);
+		});
+
+		it("dispatching native pointermove event triggers seek", () => {
+			const { container } = render(
+				<Timeline
+					currentTime={0}
+					duration={100}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+				/>,
+			);
+
+			const track = container.querySelector(".bg-gray-700") as HTMLElement;
+
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			// Start drag
+			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledWith(25);
+			mockOnSeek.mockClear();
+
+			// Dispatch a native PointerEvent directly
+			const moveEvent = new PointerEvent("pointermove", {
+				clientX: 500,
+				pointerId: 1,
+				bubbles: true,
+			});
+			track.dispatchEvent(moveEvent);
+
+			// Should have called onSeek with 50%
+			expect(mockOnSeek).toHaveBeenCalledWith(50);
+		});
+
+		it("pointer capture is called on pointerdown", () => {
+			const { container } = render(
+				<Timeline
+					currentTime={0}
+					duration={100}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+				/>,
+			);
+
+			const track = container.querySelector(".bg-gray-700") as HTMLElement;
+
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			const setPointerCaptureSpy = vi.spyOn(track, "setPointerCapture");
+
+			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+
+			expect(setPointerCaptureSpy).toHaveBeenCalledWith(1);
+		});
+	});
+
 	describe("cleanup", () => {
 		it("removes event listeners on unmount during drag", () => {
 			const { container, unmount } = render(

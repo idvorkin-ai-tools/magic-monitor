@@ -287,13 +287,16 @@ export function useReplayPlayer({
 
 	const seek = useCallback(
 		(time: number) => {
+			console.log("[useReplayPlayer] seek called", { time, videoElement: !!videoElement, isReady, duration: videoElement?.duration });
 			if (videoElement && isReady && Number.isFinite(videoElement.duration)) {
 				const clampedTime = Math.max(0, Math.min(time, videoElement.duration));
+				console.log("[useReplayPlayer] seeking to", clampedTime);
 				videoElement.currentTime = clampedTime;
 				setCurrentTime(clampedTime);
 			} else if (session) {
 				// Video not ready yet, store pending seek with request ID (not session ID)
 				// This avoids stale closure issues since we check against the ref
+				console.log("[useReplayPlayer] storing pending seek", { time });
 				pendingSeekRef.current = { time, requestId: loadRequestIdRef.current };
 			}
 		},
