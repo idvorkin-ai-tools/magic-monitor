@@ -17,6 +17,9 @@ export function Minimap({ stream, videoSrc, zoom, pan, frame, onPanTo, isMirror 
 	const miniCanvasRef = useRef<HTMLCanvasElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 
+	// Track if we're visible (zoom > 1) to re-run effect when video mounts
+	const isVisible = zoom > 1;
+
 	// Sync the mini video with the main video stream or blob URL
 	useEffect(() => {
 		const miniVideo = miniVideoRef.current;
@@ -32,7 +35,7 @@ export function Minimap({ stream, videoSrc, zoom, pan, frame, onPanTo, isMirror 
 				miniVideo.load();
 			}
 		}
-	}, [stream, videoSrc, frame]);
+	}, [stream, videoSrc, frame, isVisible]); // Re-run when becoming visible
 
 	// Sync minimap video time with main video in replay mode
 	useEffect(() => {
@@ -57,7 +60,7 @@ export function Minimap({ stream, videoSrc, zoom, pan, frame, onPanTo, isMirror 
 			mainVideo.removeEventListener("seeked", syncTime);
 			mainVideo.removeEventListener("timeupdate", syncTime);
 		};
-	}, [videoSrc, mainVideoRef]);
+	}, [videoSrc, mainVideoRef, isVisible]); // Re-run when becoming visible
 
 	// Render frame if provided
 	useEffect(() => {
