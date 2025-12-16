@@ -10,6 +10,7 @@ function createMockSessionStorage() {
 		getSavedSessions: vi.fn().mockResolvedValue([]),
 		saveSession: vi.fn().mockResolvedValue("test-id"),
 		saveBlob: vi.fn().mockResolvedValue(undefined),
+		saveSessionWithBlob: vi.fn().mockResolvedValue("test-id"),
 		pruneOldSessions: vi.fn().mockResolvedValue(0),
 		getSession: vi.fn(),
 		getBlob: vi.fn(),
@@ -28,7 +29,11 @@ function createMockSessionStorage() {
 
 function createMockVideoFix() {
 	return {
-		fixDuration: vi.fn().mockImplementation((blob) => Promise.resolve(blob)),
+		fixDuration: vi
+			.fn()
+			.mockImplementation((blob) =>
+				Promise.resolve({ blob, wasFixed: true }),
+			),
 		needsFix: vi.fn().mockReturnValue(true),
 	};
 }
@@ -149,8 +154,7 @@ describe("useSessionList", () => {
 		);
 
 		expect(mockVideoFix.fixDuration).toHaveBeenCalledWith(blob);
-		expect(mockStorage.saveSession).toHaveBeenCalled();
-		expect(mockStorage.saveBlob).toHaveBeenCalledWith("test-id", blob);
+		expect(mockStorage.saveSessionWithBlob).toHaveBeenCalled();
 		expect(session).not.toBeNull();
 		expect(session?.id).toBe("test-id");
 	});
@@ -218,7 +222,9 @@ describe("useSessionList", () => {
 	});
 
 	it("handles save errors", async () => {
-		mockStorage.saveSession.mockRejectedValue(new Error("Save failed"));
+		mockStorage.saveSessionWithBlob.mockRejectedValue(
+			new Error("Save failed"),
+		);
 
 		const { result } = renderHook(() =>
 			useSessionList({

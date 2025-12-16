@@ -229,7 +229,21 @@ export function useSmartZoom({
 		}
 
 		loadModel();
+
+		return () => {
+			if (landmarkerRef.current) {
+				landmarkerRef.current.close();
+				landmarkerRef.current = null;
+			}
+		};
 	}, []);
+
+	// Clear debug trace when smart zoom is disabled
+	useEffect(() => {
+		if (!enabled) {
+			debugTraceRef.current = [];
+		}
+	}, [enabled]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: isModelLoading triggers effect re-run when model loads
 	useEffect(() => {

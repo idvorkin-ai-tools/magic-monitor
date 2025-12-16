@@ -195,10 +195,19 @@ describe("useBlockRecorder", () => {
 			}),
 		);
 
-		result.current.startRecording();
-		const stopResult = await result.current.stopRecording();
+		act(() => {
+			result.current.startRecording();
+		});
 
-		expect(stopResult).toBeNull();
+		let stopResult: Awaited<ReturnType<typeof result.current.stopRecording>>;
+		await act(async () => {
+			stopResult = await result.current.stopRecording();
+		});
+
+		expect(stopResult!).toBeNull();
 		expect(result.current.isRecording).toBe(false);
+		expect(result.current.error).toBe(
+			"Recording may have been lost - please try again",
+		);
 	});
 });

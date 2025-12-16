@@ -244,6 +244,11 @@ export function useReplayPlayer({
 		if (videoElement && isReady) {
 			videoElement.play().catch((err) => {
 				console.error("Play failed:", err);
+				if (err.name === "NotAllowedError") {
+					setError("Playback blocked - tap the video to enable audio");
+				} else {
+					setError("Playback failed - please try again");
+				}
 			});
 		}
 	}, [videoElement, isReady]);
@@ -323,7 +328,14 @@ export function useReplayPlayer({
 
 		isTrimPreviewRef.current = true;
 		videoElement.currentTime = inPoint;
-		videoElement.play().catch(console.error);
+		videoElement.play().catch((err) => {
+			console.error("Play failed:", err);
+			if (err.name === "NotAllowedError") {
+				setError("Playback blocked - tap the video to enable audio");
+			} else {
+				setError("Playback failed - please try again");
+			}
+		});
 	}, [videoElement, isReady, inPoint, outPoint]);
 
 	// Consolidated video lifecycle effect

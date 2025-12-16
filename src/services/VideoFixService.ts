@@ -9,8 +9,13 @@ export const VideoFixService = {
 	 * Fix WebM metadata for seeking support.
 	 * MediaRecorder-produced WebM files often lack proper duration metadata,
 	 * making them non-seekable. This fixes that issue.
+	 *
+	 * @returns Object with blob and wasFixed flag indicating if fix succeeded
 	 */
-	async fixDuration(blob: Blob, durationMs?: number): Promise<Blob> {
+	async fixDuration(
+		blob: Blob,
+		durationMs?: number,
+	): Promise<{ blob: Blob; wasFixed: boolean }> {
 		try {
 			const fixWebmDuration = (await import("fix-webm-duration")).default;
 			// fix-webm-duration infers duration from WebM when not provided
@@ -18,10 +23,10 @@ export const VideoFixService = {
 			const fixed = durationMs
 				? await fixWebmDuration(blob, durationMs)
 				: await fixWebmDuration(blob, 0); // Library calculates duration when 0
-			return fixed;
+			return { blob: fixed, wasFixed: true };
 		} catch (err) {
 			console.warn("fix-webm-duration failed, returning original blob:", err);
-			return blob;
+			return { blob, wasFixed: false };
 		}
 	},
 

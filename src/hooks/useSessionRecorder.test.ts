@@ -55,7 +55,11 @@ function createMockMediaRecorder() {
 
 function createMockVideoFix() {
 	return {
-		fixDuration: vi.fn().mockImplementation((blob) => Promise.resolve(blob)),
+		fixDuration: vi
+			.fn()
+			.mockImplementation((blob) =>
+				Promise.resolve({ blob, wasFixed: true }),
+			),
 		needsFix: vi.fn().mockReturnValue(true),
 	};
 }
@@ -381,35 +385,36 @@ describe("useSessionRecorder", () => {
 		});
 	});
 
-	describe.skip("block rotation", () => {
-		// NOTE: These tests were added after the original issue and have timing issues.
-		// They mix fake timers with real setTimeout/setInterval which causes hangs.
-		// Skipping for now - these are not part of the 4 originally-skipped tests.
-
-		beforeEach(() => {
-			vi.useFakeTimers();
-		});
-
-		afterEach(() => {
-			vi.useRealTimers();
-		});
+	describe("block rotation", () => {
+		// WHY THESE TESTS WERE SKIPPED:
+		// They mixed vi.useFakeTimers() with a mock timerService that called real setTimeout/setInterval.
+		// This created a conflict - fake timers intercept timer calls, but the mock was calling real timers.
+		// Using vi.advanceTimersByTimeAsync() also causes hangs when there are pending async operations.
+		//
+		// THE FIX:
+		// Don't use fake timers at all. Instead, make the mock timerService store callbacks and
+		// let tests trigger them manually. This gives full control without timer complexity.
+		//
+		// BUGS THESE TESTS CATCH:
+		// 1. Block rotation actually triggers after the configured duration
+		// 2. New block starts automatically when enabled is still true
+		// 3. No new block starts when enabled becomes false during rotation
+		// 4. Sessions are properly saved before rotation
 
 		it("completes block and starts new one when enabled is still true", async () => {
 			const videoRef = createMockVideoRef(true);
-			const BLOCK_DURATION = 100; // Use short duration for testing
 
-			// Use fake timer service - just track calls, don't actually set timers
-			const fakeTimerService = {
+			// Create a controllable timer service - capture the LAST setTimeout (block rotation)
+			let blockTimeoutCallback: (() => void) | null = null;
+			let timeoutIdCounter = 1;
+			const controllableTimerService = {
 				now: vi.fn(() => Date.now()),
-				setTimeout: vi.fn((cb, delay) => {
-					// Don't actually call setTimeout, just trigger immediately for testing
-					setTimeout(cb, delay);
-					return 1;
+				setTimeout: vi.fn((cb: () => void) => {
+					// The block rotation setTimeout is called last during startRecordingBlock
+					blockTimeoutCallback = cb;
+					return timeoutIdCounter++;
 				}),
-				setInterval: vi.fn((cb, delay) => {
-					setInterval(cb, delay);
-					return 2;
-				}),
+				setInterval: vi.fn(() => 2),
 				clearTimeout: vi.fn(),
 				clearInterval: vi.fn(),
 				performanceNow: vi.fn(() => performance.now()),
@@ -419,11 +424,11 @@ describe("useSessionRecorder", () => {
 				useSessionRecorder({
 					videoRef,
 					enabled: true,
-					blockDurationMs: BLOCK_DURATION,
+					blockDurationMs: 100,
 					sessionStorageService: mockStorage,
 					mediaRecorderService: mockRecorder,
 					videoFixService: mockVideoFix,
-					timerService: fakeTimerService,
+					timerService: controllableTimerService,
 				}),
 			);
 
@@ -435,14 +440,18 @@ describe("useSessionRecorder", () => {
 			const initialRecordingCalls =
 				mockRecorder.startRecording.mock.calls.length;
 
-			// Fast-forward to block rotation time
+			// Verify we captured a timeout callback
+			expect(blockTimeoutCallback).not.toBeNull();
+
+			// Trigger block rotation manually
 			await act(async () => {
-				await vi.advanceTimersByTimeAsync(BLOCK_DURATION);
+				blockTimeoutCallback!();
 			});
 
-			// Should have stopped the recording
+			// Should have stopped the old recording
+			const mockSession = mockRecorder.startRecording.mock.results[0]?.value;
 			await waitFor(() => {
-				expect(mockRecorder.startRecording().stop).toHaveBeenCalled();
+				expect(mockSession?.stop).toHaveBeenCalled();
 			});
 
 			// Should have saved the session
@@ -459,19 +468,17 @@ describe("useSessionRecorder", () => {
 
 		it("completes block but does NOT start new one when enabled becomes false", async () => {
 			const videoRef = createMockVideoRef(true);
-			const BLOCK_DURATION = 100; // Use short duration for testing
 
-			// Use fake timer service - just track calls, don't actually set timers
-			const fakeTimerService = {
+			// Create a controllable timer service - capture the LAST setTimeout (block rotation)
+			let blockTimeoutCallback: (() => void) | null = null;
+			let timeoutIdCounter = 1;
+			const controllableTimerService = {
 				now: vi.fn(() => Date.now()),
-				setTimeout: vi.fn((cb, delay) => {
-					setTimeout(cb, delay);
-					return 1;
+				setTimeout: vi.fn((cb: () => void) => {
+					blockTimeoutCallback = cb;
+					return timeoutIdCounter++;
 				}),
-				setInterval: vi.fn((cb, delay) => {
-					setInterval(cb, delay);
-					return 2;
-				}),
+				setInterval: vi.fn(() => 2),
 				clearTimeout: vi.fn(),
 				clearInterval: vi.fn(),
 				performanceNow: vi.fn(() => performance.now()),
@@ -482,11 +489,11 @@ describe("useSessionRecorder", () => {
 					useSessionRecorder({
 						videoRef,
 						enabled,
-						blockDurationMs: BLOCK_DURATION,
+						blockDurationMs: 100,
 						sessionStorageService: mockStorage,
 						mediaRecorderService: mockRecorder,
 						videoFixService: mockVideoFix,
-						timerService: fakeTimerService,
+						timerService: controllableTimerService,
 					}),
 				{ initialProps: { enabled: true } },
 			);
@@ -504,34 +511,30 @@ describe("useSessionRecorder", () => {
 				rerender({ enabled: false });
 			});
 
-			// Fast-forward to block rotation time
+			// Trigger block rotation manually
 			await act(async () => {
-				await vi.advanceTimersByTimeAsync(BLOCK_DURATION);
+				blockTimeoutCallback?.();
 			});
 
 			// Should NOT have started a new recording block
-			await waitFor(() => {
-				expect(mockRecorder.startRecording.mock.calls.length).toBe(
-					initialRecordingCalls,
-				);
-			});
+			expect(mockRecorder.startRecording.mock.calls.length).toBe(
+				initialRecordingCalls,
+			);
 		});
 
 		it("saves session properly before rotation", async () => {
 			const videoRef = createMockVideoRef(true);
-			const BLOCK_DURATION = 100; // Use short duration for testing
 
-			// Use fake timer service - just track calls, don't actually set timers
-			const fakeTimerService = {
+			// Create a controllable timer service - capture the LAST setTimeout (block rotation)
+			let blockTimeoutCallback: (() => void) | null = null;
+			let timeoutIdCounter = 1;
+			const controllableTimerService = {
 				now: vi.fn(() => Date.now()),
-				setTimeout: vi.fn((cb, delay) => {
-					setTimeout(cb, delay);
-					return 1;
+				setTimeout: vi.fn((cb: () => void) => {
+					blockTimeoutCallback = cb;
+					return timeoutIdCounter++;
 				}),
-				setInterval: vi.fn((cb, delay) => {
-					setInterval(cb, delay);
-					return 2;
-				}),
+				setInterval: vi.fn(() => 2),
 				clearTimeout: vi.fn(),
 				clearInterval: vi.fn(),
 				performanceNow: vi.fn(() => performance.now()),
@@ -541,11 +544,11 @@ describe("useSessionRecorder", () => {
 				useSessionRecorder({
 					videoRef,
 					enabled: true,
-					blockDurationMs: BLOCK_DURATION,
+					blockDurationMs: 100,
 					sessionStorageService: mockStorage,
 					mediaRecorderService: mockRecorder,
 					videoFixService: mockVideoFix,
-					timerService: fakeTimerService,
+					timerService: controllableTimerService,
 				}),
 			);
 
@@ -559,9 +562,9 @@ describe("useSessionRecorder", () => {
 			mockStorage.saveBlob.mockClear();
 			mockStorage.pruneOldSessions.mockClear();
 
-			// Fast-forward to block rotation
+			// Trigger block rotation manually
 			await act(async () => {
-				await vi.advanceTimersByTimeAsync(BLOCK_DURATION);
+				blockTimeoutCallback?.();
 			});
 
 			// Verify session saving sequence

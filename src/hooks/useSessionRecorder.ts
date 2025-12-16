@@ -71,6 +71,14 @@ export function useSessionRecorder({
 	const blockStartTimeRef = useRef<number>(0);
 	const checkReadyIntervalRef = useRef<number | null>(null);
 	const enabledRef = useRef(enabled);
+	const startRecordingBlockRef = useRef<(() => void) | null>(null);
+	const blockRotationRef = useRef<{
+		startRotation: () => void;
+		stopRotation: () => void;
+	}>({
+		startRotation: () => {},
+		stopRotation: () => {},
+	});
 
 	// Use focused hooks
 	const blockRecorder = useBlockRecorder({
@@ -105,7 +113,7 @@ export function useSessionRecorder({
 			}
 
 			// Stop block rotation
-			blockRotation.stopRotation();
+			blockRotationRef.current.stopRotation();
 
 			// Stop thumbnail capture
 			const thumbnails = thumbnailCapture.stopCapture();
@@ -133,8 +141,8 @@ export function useSessionRecorder({
 	const onBlockComplete = useCallback(async () => {
 		const completedSession = await stopCurrentBlock();
 		if (completedSession && enabledRef.current) {
-			// Start a new block
-			startRecordingBlock();
+			// Start a new block using ref to avoid circular dependency
+			startRecordingBlockRef.current?.();
 		}
 	}, [stopCurrentBlock]);
 
@@ -143,6 +151,9 @@ export function useSessionRecorder({
 		onBlockComplete,
 		timerService,
 	});
+
+	// Update blockRotationRef with the latest blockRotation during render
+	blockRotationRef.current = blockRotation;
 
 	// Start a new recording block
 	const startRecordingBlock = useCallback(() => {
@@ -162,8 +173,13 @@ export function useSessionRecorder({
 		}, 1000);
 
 		// Set up block rotation timer
-		blockRotation.startRotation();
-	}, [blockRecorder, thumbnailCapture, blockRotation, timerService]);
+		blockRotationRef.current.startRotation();
+	}, [blockRecorder, thumbnailCapture, timerService]);
+
+	// Keep ref in sync with latest startRecordingBlock
+	useEffect(() => {
+		startRecordingBlockRef.current = startRecordingBlock;
+	}, [startRecordingBlock]);
 
 	// Main recording effect
 	useEffect(() => {

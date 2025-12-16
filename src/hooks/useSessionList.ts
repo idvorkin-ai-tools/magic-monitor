@@ -79,9 +79,16 @@ export function useSessionList({
 
 			try {
 				// Fix WebM metadata for seekability
-				const fixedBlob = videoFixService.needsFix()
-					? await videoFixService.fixDuration(blob)
-					: blob;
+				let fixedBlob = blob;
+				if (videoFixService.needsFix()) {
+					const fixResult = await videoFixService.fixDuration(blob);
+					fixedBlob = fixResult.blob;
+					if (!fixResult.wasFixed) {
+						console.warn(
+							"Video fix failed - exported video may not be seekable",
+						);
+					}
+				}
 
 				// Get first frame as thumbnail
 				const firstThumbnail =
@@ -99,9 +106,11 @@ export function useSessionList({
 					saved: false,
 				};
 
-				// Save to storage
-				const id = await sessionStorageService.saveSession(session);
-				await sessionStorageService.saveBlob(id, fixedBlob);
+				// Save to storage (atomic transaction)
+				const id = await sessionStorageService.saveSessionWithBlob(
+					session,
+					fixedBlob,
+				);
 
 				// Prune old sessions
 				await sessionStorageService.pruneOldSessions();

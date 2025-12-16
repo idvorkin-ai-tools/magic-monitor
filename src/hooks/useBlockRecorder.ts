@@ -89,6 +89,7 @@ export function useBlockRecorder({
 				return result;
 			} catch (err) {
 				console.error("Failed to stop recording:", err);
+				setError("Recording may have been lost - please try again");
 				recordingSessionRef.current = null;
 				setIsRecording(false);
 				return null;

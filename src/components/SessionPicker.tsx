@@ -64,6 +64,7 @@ export function SessionPicker({
 	const [storageUsage, setStorageUsage] = useState({ used: 0, quota: 0 });
 	const [previewSize, setPreviewSize] = useState(50); // 0-100 slider
 	const [showPreviews, setShowPreviews] = useState(true);
+	const [deleteError, setDeleteError] = useState<string | null>(null);
 
 	const { isMobile } = useMobileDetection();
 
@@ -128,6 +129,7 @@ export function SessionPicker({
 	// Handle delete session
 	const handleDelete = useCallback(
 		async (sessionId: string) => {
+			setDeleteError(null);
 			try {
 				await SessionStorageService.deleteSessionWithBlob(sessionId);
 				onRefresh();
@@ -136,6 +138,7 @@ export function SessionPicker({
 				}
 			} catch (err) {
 				console.error("Failed to delete session:", err);
+				setDeleteError("Failed to delete - please try again");
 			}
 		},
 		[selectedSession, onRefresh, handleBack],
@@ -176,6 +179,13 @@ export function SessionPicker({
 
 				{/* Content */}
 				<div className="flex-1 overflow-y-auto p-4">
+					{/* Delete Error */}
+					{deleteError && (
+						<div className="mb-4 p-3 bg-red-900/50 border border-red-600 rounded-lg text-red-200 text-sm">
+							{deleteError}
+						</div>
+					)}
+
 					{view === "list" ? (
 						<div className="space-y-6">
 							{/* Current Recording */}
