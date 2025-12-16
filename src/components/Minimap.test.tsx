@@ -75,6 +75,12 @@ describe("Minimap", () => {
 				height: 480,
 			} as unknown as ImageBitmap;
 
+			// Mock canvas drawImage since jsdom doesn't support ImageBitmap
+			const mockDrawImage = vi.fn();
+			vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+				drawImage: mockDrawImage,
+			} as unknown as CanvasRenderingContext2D);
+
 			render(
 				<Minimap
 					frame={mockFrame}
@@ -85,6 +91,9 @@ describe("Minimap", () => {
 
 			const canvas = document.querySelector("canvas");
 			expect(canvas).not.toBeNull();
+			expect(mockDrawImage).toHaveBeenCalledWith(mockFrame, 0, 0);
+
+			vi.restoreAllMocks();
 		});
 
 		it("prefers video over canvas when no frame provided", () => {
