@@ -25,14 +25,27 @@ export function Minimap({ stream, videoSrc, zoom, pan, frame, onPanTo, isMirror 
 		const miniVideo = miniVideoRef.current;
 		if (!frame && miniVideo) {
 			if (stream) {
+				// Clear any existing src when using stream
+				miniVideo.src = "";
 				miniVideo.srcObject = stream;
 				// Ensure video plays
 				miniVideo.play().catch(() => {
 					// Autoplay blocked - that's okay, video will still show frames
 				});
 			} else if (videoSrc) {
+				// IMPORTANT: Clear srcObject first! srcObject takes precedence over src,
+				// so without this, a leftover stream would still show instead of videoSrc
+				miniVideo.srcObject = null;
 				miniVideo.src = videoSrc;
 				miniVideo.load();
+				// Play the video to show frames
+				miniVideo.play().catch(() => {
+					// Autoplay blocked - that's okay
+				});
+			} else {
+				// No source - clear both
+				miniVideo.srcObject = null;
+				miniVideo.src = "";
 			}
 		}
 	}, [stream, videoSrc, frame, isVisible]); // Re-run when becoming visible
