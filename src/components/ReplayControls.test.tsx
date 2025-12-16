@@ -844,7 +844,8 @@ describe("ReplayControls", () => {
 			);
 
 			const exitButton = screen.getByText(/Exit/);
-			expect(exitButton).toHaveClass("px-2", "py-0.5", "text-xs");
+			// Mobile uses smaller padding
+			expect(exitButton).toHaveClass("px-1.5", "py-0.5", "text-xs");
 		});
 
 		it("applies desktop styling by default", () => {
@@ -858,7 +859,8 @@ describe("ReplayControls", () => {
 			);
 
 			const exitButton = screen.getByText(/Exit/);
-			expect(exitButton).toHaveClass("px-3", "py-1", "text-sm");
+			// Desktop uses compact styling now
+			expect(exitButton).toHaveClass("px-2", "py-0.5", "text-xs");
 		});
 	});
 

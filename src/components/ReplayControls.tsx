@@ -76,12 +76,16 @@ export function ReplayControls({
 	const { isMobile: detectedMobile } = useMobileDetection();
 	const effectiveMobile = isMobile || detectedMobile;
 
-	// Handle drag start for floating control panel
+	// Handle drag start for control panel - enables floating mode on first drag
 	const handleDragStart = useCallback((e: React.PointerEvent) => {
-		if (!isFloating) return;
 		e.preventDefault();
 		const panel = controlPanelRef.current;
 		if (!panel) return;
+
+		// Auto-enable floating mode when dragging starts
+		if (!isFloating) {
+			setIsFloating(true);
+		}
 
 		panel.setPointerCapture(e.pointerId);
 		dragRef.current = {
@@ -157,12 +161,30 @@ export function ReplayControls({
 			onPointerUp={handleDragEnd}
 			onPointerCancel={handleDragEnd}
 		>
-			{/* Drag handle - only when floating */}
-			{isFloating && (
-				<div className="flex items-center justify-center py-1 cursor-move">
-					<div className="w-12 h-1 bg-gray-600 rounded-full" />
+			{/* Drag handle - always visible */}
+			<div
+				className={clsx(
+					"flex items-center justify-center cursor-move select-none",
+					isFloating ? "py-1.5" : "py-1",
+				)}
+				title="Drag to move"
+			>
+				<div className="flex gap-0.5">
+					{/* Grip dots pattern */}
+					<div className="flex flex-col gap-0.5">
+						<div className="w-1 h-1 rounded-full bg-gray-500" />
+						<div className="w-1 h-1 rounded-full bg-gray-500" />
+					</div>
+					<div className="flex flex-col gap-0.5">
+						<div className="w-1 h-1 rounded-full bg-gray-500" />
+						<div className="w-1 h-1 rounded-full bg-gray-500" />
+					</div>
+					<div className="flex flex-col gap-0.5">
+						<div className="w-1 h-1 rounded-full bg-gray-500" />
+						<div className="w-1 h-1 rounded-full bg-gray-500" />
+					</div>
 				</div>
-			)}
+			</div>
 
 			{/* Main control bar */}
 			<div
@@ -241,21 +263,21 @@ export function ReplayControls({
 					/>
 				</div>
 
-				{/* Transport controls */}
+				{/* Transport controls - compact layout */}
 				<div
 					className={clsx(
 						"flex items-center justify-between border-t border-gray-700",
-						isMobile ? "px-2 py-1.5" : "px-4 py-2",
+						isMobile ? "px-2 py-1" : "px-3 py-1",
 					)}
 					onPointerDown={(e) => e.stopPropagation()}
 				>
 					{/* Left: Exit, Sessions, and navigation */}
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1.5">
 						<button
 							onClick={onExit}
 							className={clsx(
-								"rounded font-bold bg-white/20 text-white hover:bg-white/30",
-								isMobile ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm",
+								"rounded font-medium bg-white/20 text-white hover:bg-white/30",
+								isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
 							)}
 						>
 							✕ Exit
@@ -265,15 +287,16 @@ export function ReplayControls({
 							<button
 								onClick={onSessionsClick}
 								className={clsx(
-									"rounded font-bold bg-blue-600 text-white hover:bg-blue-500 flex items-center gap-1",
-									isMobile ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm",
+									"rounded font-medium bg-blue-600 text-white hover:bg-blue-500",
+									isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
 								)}
+								title="Sessions"
 							>
-								<span>📹</span> Sessions
+								📹 Sessions
 							</button>
 						)}
 
-						<div className="h-6 w-px bg-gray-700" />
+						<div className="h-4 w-px bg-gray-700" />
 
 						{/* Frame step buttons */}
 						<button
@@ -281,10 +304,10 @@ export function ReplayControls({
 							disabled={!isReady}
 							className={clsx(
 								"rounded transition-colors",
-								isMobile ? "p-1 text-sm" : "p-1.5 text-lg",
+								isMobile ? "p-0.5 text-xs" : "p-1 text-sm",
 								isReady ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed",
 							)}
-						aria-label="Previous frame"
+							aria-label="Previous frame"
 							title="Previous frame"
 						>
 							◀◀
@@ -296,7 +319,7 @@ export function ReplayControls({
 							disabled={!isReady}
 							className={clsx(
 								"flex items-center justify-center rounded-full text-white transition-colors",
-								isMobile ? "w-8 h-8 text-base" : "w-10 h-10 text-xl",
+								isMobile ? "w-6 h-6 text-sm" : "w-7 h-7 text-base",
 								isReady
 									? "bg-blue-600 hover:bg-blue-500"
 									: "bg-blue-600/50 cursor-not-allowed",
@@ -310,10 +333,10 @@ export function ReplayControls({
 							disabled={!isReady}
 							className={clsx(
 								"rounded transition-colors",
-								isMobile ? "p-1 text-sm" : "p-1.5 text-lg",
+								isMobile ? "p-0.5 text-xs" : "p-1 text-sm",
 								isReady ? "hover:bg-white/10" : "opacity-50 cursor-not-allowed",
 							)}
-						aria-label="Next frame"
+							aria-label="Next frame"
 							title="Next frame"
 						>
 							▶▶
@@ -322,7 +345,7 @@ export function ReplayControls({
 						{/* Smart Zoom Toggle */}
 						{onSmartZoomChange && !isMobile && (
 							<>
-								<div className="h-6 w-px bg-gray-700" />
+								<div className="h-4 w-px bg-gray-700" />
 								<SmartZoomToggle
 									isSmartZoom={isSmartZoom}
 									onSmartZoomChange={onSmartZoomChange}
@@ -338,14 +361,14 @@ export function ReplayControls({
 					<div
 						className={clsx(
 							"font-mono text-white",
-							isMobile ? "text-xs" : "text-sm",
+							isMobile ? "text-[10px]" : "text-xs",
 						)}
 					>
 						{formatTime(currentTime)} / {formatTime(duration)}
 					</div>
 
 					{/* Right: Trim and export */}
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1">
 						{/* Trim controls */}
 						<button
 							onClick={setInPoint}
@@ -357,7 +380,7 @@ export function ReplayControls({
 									: inPoint !== null
 										? "bg-green-600 text-white"
 										: "bg-gray-700 text-gray-300 hover:bg-gray-600",
-								isMobile ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm",
+								isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
 							)}
 							title="Set start point"
 						>
@@ -374,7 +397,7 @@ export function ReplayControls({
 									: outPoint !== null
 										? "bg-green-600 text-white"
 										: "bg-gray-700 text-gray-300 hover:bg-gray-600",
-								isMobile ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm",
+								isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
 							)}
 							title="Set end point"
 						>
@@ -387,7 +410,7 @@ export function ReplayControls({
 									onClick={previewTrim}
 									className={clsx(
 										"rounded font-medium bg-blue-600 text-white hover:bg-blue-500",
-										isMobile ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm",
+										isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
 									)}
 									title="Preview trimmed clip"
 								>
@@ -398,7 +421,7 @@ export function ReplayControls({
 									onClick={clearTrim}
 									className={clsx(
 										"rounded text-gray-400 hover:text-white hover:bg-gray-700",
-										isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-1 text-sm",
+										isMobile ? "px-1 py-0.5 text-xs" : "px-1.5 py-0.5 text-xs",
 									)}
 									title="Clear selection"
 								>
@@ -407,24 +430,24 @@ export function ReplayControls({
 							</>
 						)}
 
-						{!isMobile && <div className="h-6 w-px bg-gray-700" />}
+						{!isMobile && <div className="h-4 w-px bg-gray-700" />}
 
 						{/* Save and export */}
 						{!isMobile && (
 							<>
 								<button
 									onClick={onSaveClick}
-									className="px-3 py-1 rounded font-medium bg-green-600 text-white hover:bg-green-500 text-sm flex items-center gap-1"
+									className="px-2 py-0.5 rounded font-medium bg-green-600 text-white hover:bg-green-500 text-xs"
 									title="Save to library"
 								>
-									<span>⭐</span> Save
+									⭐ Save
 								</button>
 
 								<button
 									onClick={exportVideo}
 									disabled={isExporting}
 									className={clsx(
-										"px-3 py-1 rounded font-medium text-white text-sm",
+										"px-2 py-0.5 rounded font-medium text-white text-xs",
 										isExporting
 											? "bg-yellow-600/80 cursor-wait"
 											: "bg-purple-600 hover:bg-purple-500",
@@ -432,7 +455,7 @@ export function ReplayControls({
 									title="Share or download"
 								>
 									{isExporting
-										? `⏳ ${Math.round(exportProgress * 100)}%`
+										? `${Math.round(exportProgress * 100)}%`
 										: "📤 Share"}
 								</button>
 							</>
