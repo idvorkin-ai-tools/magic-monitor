@@ -97,6 +97,8 @@ export function useSessionRecorder({
 		sessionStorageService,
 		videoFixService,
 	});
+	// Destructure stable callbacks to use in dependency arrays
+	const { saveBlock } = sessionList;
 
 	// Keep enabledRef in sync with enabled prop
 	useEffect(() => {
@@ -126,7 +128,7 @@ export function useSessionRecorder({
 			}
 
 			// Save the block
-			const session = await sessionList.saveBlock(
+			const session = await saveBlock(
 				result.blob,
 				result.duration,
 				thumbnails,
@@ -135,7 +137,7 @@ export function useSessionRecorder({
 
 			setCurrentBlockDuration(0);
 			return session;
-		}, [blockRecorder, thumbnailCapture, sessionList, timerService]);
+		}, [blockRecorder, thumbnailCapture, saveBlock, timerService]);
 
 	// Handle block rotation
 	const onBlockComplete = useCallback(async () => {

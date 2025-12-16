@@ -170,11 +170,16 @@ export function CameraStage() {
 
 	const handleSelectSession = useCallback(
 		async (sessionId: string, startTime?: number) => {
-			await replayPlayer.loadSession(sessionId);
-			if (startTime !== undefined) {
-				replayPlayer.seek(startTime);
+			try {
+				await replayPlayer.loadSession(sessionId);
+				if (startTime !== undefined) {
+					replayPlayer.seek(startTime);
+				}
+				setAppState("replay");
+			} catch (err) {
+				console.error("Failed to load session:", err);
+				// Stay in current state, don't transition to replay
 			}
-			setAppState("replay");
 		},
 		[replayPlayer],
 	);

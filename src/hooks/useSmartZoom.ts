@@ -208,17 +208,15 @@ export function useSmartZoom({
 				// Download complete, now initializing model
 				setLoadingPhase("initializing");
 
-				// Create HandLandmarker from buffer
-				landmarkerRef.current = await HandLandmarker.createFromModelBuffer(
-					vision,
-					modelBuffer,
-				);
-				landmarkerRef.current.setOptions({
-					runningMode: "VIDEO",
-					numHands: 2,
+				// Create HandLandmarker with GPU delegate specified during creation
+				// Note: delegate must be set during creation, not after, for GPU compilation
+				landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
 					baseOptions: {
+						modelAssetBuffer: modelBuffer,
 						delegate: "GPU",
 					},
+					runningMode: "VIDEO",
+					numHands: 2,
 				});
 
 				setIsModelLoading(false);
