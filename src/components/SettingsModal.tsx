@@ -14,6 +14,8 @@ interface SettingsModalProps {
 	devices: MediaDeviceInfo[];
 	selectedDeviceId: string;
 	onDeviceChange: (deviceId: string) => void;
+	videoWidth?: number;
+	videoHeight?: number;
 
 	// Display
 	isMirror: boolean;
@@ -59,6 +61,8 @@ export function SettingsModal({
 	devices,
 	selectedDeviceId,
 	onDeviceChange,
+	videoWidth,
+	videoHeight,
 	isMirror,
 	onMirrorChange,
 	isSmartZoom,
@@ -136,6 +140,11 @@ export function SettingsModal({
 								</option>
 							))}
 						</select>
+						{videoWidth && videoHeight && (
+							<div className="text-xs text-gray-500">
+								{videoWidth}×{videoHeight} ({(videoWidth / videoHeight).toFixed(2)} aspect ratio)
+							</div>
+						)}
 					</div>
 
 					{/* Mirror Video */}

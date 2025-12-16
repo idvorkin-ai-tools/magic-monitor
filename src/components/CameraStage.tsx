@@ -38,6 +38,12 @@ export function CameraStage() {
 	const [isDragging, setIsDragging] = useState(false);
 	const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
+	// Video dimensions (for About dialog)
+	const [videoDimensions, setVideoDimensions] = useState<{
+		width: number;
+		height: number;
+	} | null>(null);
+
 	// Mobile Detection
 	const { isMobile } = useMobileDetection();
 
@@ -247,6 +253,20 @@ export function CameraStage() {
 		}
 	}, [stream]);
 
+	// Update video dimensions when metadata loads (called via onLoadedMetadata prop)
+	const handleVideoMetadataLoaded = useCallback(
+		(e: React.SyntheticEvent<HTMLVideoElement>) => {
+			const video = e.currentTarget;
+			if (video.videoWidth && video.videoHeight) {
+				setVideoDimensions({
+					width: video.videoWidth,
+					height: video.videoHeight,
+				});
+			}
+		},
+		[],
+	);
+
 	// Sync replay video from disk time machine
 	useEffect(() => {
 		if (timeMachine.isReplaying && replayVideoRef.current) {
@@ -432,6 +452,8 @@ export function CameraStage() {
 				devices={devices}
 				selectedDeviceId={selectedDeviceId}
 				onDeviceChange={setSelectedDeviceId}
+				videoWidth={videoDimensions?.width}
+				videoHeight={videoDimensions?.height}
 				isMirror={isMirror}
 				onMirrorChange={setIsMirror}
 				isSmartZoom={isSmartZoom}
@@ -529,6 +551,7 @@ export function CameraStage() {
 				autoPlay
 				playsInline
 				muted
+				onLoadedMetadata={handleVideoMetadataLoaded}
 				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${timeMachine.isReplaying ? "hidden" : "block"}`}
 				style={{
 					// See docs/SMART_ZOOM_SPEC.md for transform details

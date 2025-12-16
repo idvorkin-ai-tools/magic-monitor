@@ -33,7 +33,6 @@ export async function start(deviceId?: string): Promise<MediaStream> {
 		video: {
 			width: { ideal: 3840 },
 			height: { ideal: 2160 },
-			aspectRatio: { ideal: 16 / 9 },
 			frameRate: { ideal: 30 },
 			deviceId: deviceId ? { exact: deviceId } : undefined,
 		},
