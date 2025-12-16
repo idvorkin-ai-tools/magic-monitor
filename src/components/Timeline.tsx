@@ -102,15 +102,18 @@ export function Timeline({
 			}
 		};
 	}, []);
-	// Handle horizontal scroll with mouse wheel on thumbnail strip
+	// Handle horizontal scroll with mouse wheel/trackpad on thumbnail strip
 	const handleThumbWheelScroll = useCallback((e: WheelEvent<HTMLDivElement>) => {
 		const strip = thumbStripRef.current;
 		if (!strip) return;
 
-		// Convert vertical scroll to horizontal
-		if (e.deltaY !== 0) {
+		// Handle both vertical and horizontal scroll gestures
+		// Trackpad horizontal swipe = deltaX, vertical swipe = deltaY
+		// Mouse wheel = deltaY only
+		const scrollAmount = e.deltaX !== 0 ? e.deltaX : e.deltaY;
+		if (scrollAmount !== 0) {
 			e.preventDefault();
-			strip.scrollLeft += e.deltaY;
+			strip.scrollLeft += scrollAmount;
 		}
 	}, []);
 
