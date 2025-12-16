@@ -64,16 +64,37 @@ export const MediaRecorderService = {
 						chunks.push(e.data);
 					}
 				};
-				recorder.start();
+
+				try {
+					recorder.start();
+				} catch (err) {
+					// Provide a meaningful error message when MediaRecorder.start() fails
+					// Common causes: unsupported codec, invalid stream state, no active tracks
+					const errorMessage = err instanceof Error ? err.message : String(err);
+					throw new Error(
+						`Failed to start recording. This may occur if the codec is not supported, the stream is in an invalid state, or there are no active video tracks. Original error: ${errorMessage}`,
+					);
+				}
 			},
 			stop: (): Promise<RecordingChunk> => {
 				return new Promise((resolve, reject) => {
 					recorder.onstop = () => {
 						const blob = new Blob(chunks, { type: mimeType });
 						const duration = Date.now() - startTime;
+						// Clear chunks array to release memory
+						chunks.length = 0;
+						// Clear event handlers to help GC
+						recorder.ondataavailable = null;
+						recorder.onstop = null;
+						recorder.onerror = null;
 						resolve({ blob, duration });
 					};
 					recorder.onerror = () => {
+						// Clear on error too
+						chunks.length = 0;
+						recorder.ondataavailable = null;
+						recorder.onstop = null;
+						recorder.onerror = null;
 						reject(new Error("Recording failed"));
 					};
 					if (recorder.state === "recording") {
@@ -85,56 +106,6 @@ export const MediaRecorderService = {
 			},
 			getState: () => recorder.state,
 		};
-	},
-
-	/**
-	 * Extract first frame of video blob as JPEG data URL.
-	 * Isolated for testability.
-	 */
-	async extractPreviewFrame(blob: Blob): Promise<string> {
-		return new Promise((resolve, reject) => {
-			const video = document.createElement("video");
-			video.muted = true;
-			video.playsInline = true;
-
-			const blobUrl = URL.createObjectURL(blob);
-			video.src = blobUrl;
-
-			video.onloadeddata = () => {
-				video.currentTime = 0;
-			};
-
-			video.onseeked = () => {
-				try {
-					const canvas = document.createElement("canvas");
-					canvas.width = video.videoWidth;
-					canvas.height = video.videoHeight;
-
-					const ctx = canvas.getContext("2d");
-					if (!ctx) {
-						URL.revokeObjectURL(blobUrl);
-						reject(new Error("Could not get canvas context"));
-						return;
-					}
-
-					ctx.drawImage(video, 0, 0);
-					const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-
-					URL.revokeObjectURL(blobUrl);
-					resolve(dataUrl);
-				} catch (err) {
-					URL.revokeObjectURL(blobUrl);
-					reject(err);
-				}
-			};
-
-			video.onerror = () => {
-				URL.revokeObjectURL(blobUrl);
-				reject(new Error("Failed to load video for preview extraction"));
-			};
-
-			video.load();
-		});
 	},
 
 	/**

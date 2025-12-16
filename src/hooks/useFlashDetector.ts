@@ -102,12 +102,10 @@ export function useFlashDetector({
 
 			// If more than 0.5% of pixels match, trigger flash
 			const matchPercentage = (matchCount / (totalPixels / 4)) * 100;
+			const shouldFlash = matchPercentage > 0.5;
 
-			if (matchPercentage > 0.5) {
-				setIsFlashing(true);
-			} else {
-				setIsFlashing(false);
-			}
+			// Only update state when value actually changes to avoid unnecessary re-renders
+			setIsFlashing((prev) => (prev === shouldFlash ? prev : shouldFlash));
 
 			requestRef.current = requestAnimationFrame(checkFrame);
 		};

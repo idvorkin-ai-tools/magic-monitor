@@ -9,6 +9,7 @@ import {
 // Mock MediaPipe
 const mockDetectForVideo = vi.fn();
 const mockClose = vi.fn();
+const mockSetOptions = vi.fn();
 
 vi.mock("@mediapipe/tasks-vision", () => ({
 	FilesetResolver: {
@@ -21,6 +22,13 @@ vi.mock("@mediapipe/tasks-vision", () => ({
 			},
 			close: () => mockClose(),
 		}),
+		createFromModelBuffer: vi.fn().mockResolvedValue({
+			detectForVideo: (...args: unknown[]) => {
+				return mockDetectForVideo(...args);
+			},
+			close: () => mockClose(),
+			setOptions: (...args: unknown[]) => mockSetOptions(...args),
+		}),
 	},
 }));
 
@@ -30,6 +38,24 @@ describe("useSmartZoom", () => {
 
 	beforeEach(() => {
 		vi.useFakeTimers();
+
+		// Mock fetch for model loading
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			headers: {
+				get: vi.fn().mockReturnValue("8192000"), // 8MB
+			},
+			body: {
+				getReader: vi.fn().mockReturnValue({
+					read: vi
+						.fn()
+						.mockResolvedValueOnce({
+							done: false,
+							value: new Uint8Array(1024),
+						})
+						.mockResolvedValueOnce({ done: true }),
+				}),
+			},
+		});
 
 		// Mock Video Element
 		videoElement = document.createElement("video");
@@ -80,6 +106,28 @@ describe("useSmartZoom", () => {
 		});
 
 		expect(result.current.zoom).toBe(1);
+	});
+
+	it("should track loading progress", async () => {
+		const { result } = renderHook(() =>
+			useSmartZoom({
+				videoRef: { current: videoElement },
+				enabled: true,
+			}),
+		);
+
+		// Initially loading
+		expect(result.current.isModelLoading).toBe(true);
+		expect(result.current.loadingProgress).toBe(0);
+
+		// Wait for model load to complete
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		// Should no longer be loading
+		expect(result.current.isModelLoading).toBe(false);
 	});
 
 	it("should smooth movement towards target", async () => {

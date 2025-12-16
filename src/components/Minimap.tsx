@@ -1,24 +1,79 @@
 import { useEffect, useRef } from "react";
 
 interface MinimapProps {
-	stream: MediaStream | null;
+	stream?: MediaStream | null;
+	videoSrc?: string; // For blob URLs in replay mode
 	zoom: number;
 	pan: { x: number; y: number };
 	frame?: ImageBitmap | null;
 	onPanTo?: (targetPan: { x: number; y: number }) => void;
+	isMirror?: boolean;
+	/** Reference to main video for syncing playback time in replay mode */
+	mainVideoRef?: React.RefObject<HTMLVideoElement | null>;
 }
 
-export function Minimap({ stream, zoom, pan, frame, onPanTo }: MinimapProps) {
+export function Minimap({ stream, videoSrc, zoom, pan, frame, onPanTo, isMirror = false, mainVideoRef }: MinimapProps) {
 	const miniVideoRef = useRef<HTMLVideoElement>(null);
 	const miniCanvasRef = useRef<HTMLCanvasElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 
-	// Sync the mini video with the main video stream
+	// Track if we're visible (zoom > 1) to re-run effect when video mounts
+	const isVisible = zoom > 1;
+
+	// Sync the mini video with the main video stream or blob URL
 	useEffect(() => {
-		if (!frame && stream && miniVideoRef.current) {
-			miniVideoRef.current.srcObject = stream;
+		const miniVideo = miniVideoRef.current;
+		if (!frame && miniVideo) {
+			if (stream) {
+				// Clear any existing src when using stream
+				miniVideo.src = "";
+				miniVideo.srcObject = stream;
+				// Ensure video plays
+				miniVideo.play().catch(() => {
+					// Autoplay blocked - that's okay, video will still show frames
+				});
+			} else if (videoSrc) {
+				// IMPORTANT: Clear srcObject first! srcObject takes precedence over src,
+				// so without this, a leftover stream would still show instead of videoSrc
+				miniVideo.srcObject = null;
+				miniVideo.src = videoSrc;
+				miniVideo.load();
+				// Play the video to show frames
+				miniVideo.play().catch(() => {
+					// Autoplay blocked - that's okay
+				});
+			} else {
+				// No source - clear both
+				miniVideo.srcObject = null;
+				miniVideo.src = "";
+			}
 		}
-	}, [stream, frame]);
+	}, [stream, videoSrc, frame, isVisible]); // Re-run when becoming visible
+
+	// Sync minimap video time with main video in replay mode
+	useEffect(() => {
+		const miniVideo = miniVideoRef.current;
+		const mainVideo = mainVideoRef?.current;
+		if (!miniVideo || !mainVideo || !videoSrc) return;
+
+		const syncTime = () => {
+			if (Math.abs(miniVideo.currentTime - mainVideo.currentTime) > 0.5) {
+				miniVideo.currentTime = mainVideo.currentTime;
+			}
+		};
+
+		// Sync on seek and periodically
+		mainVideo.addEventListener("seeked", syncTime);
+		mainVideo.addEventListener("timeupdate", syncTime);
+
+		// Initial sync
+		syncTime();
+
+		return () => {
+			mainVideo.removeEventListener("seeked", syncTime);
+			mainVideo.removeEventListener("timeupdate", syncTime);
+		};
+	}, [videoSrc, mainVideoRef, isVisible]); // Re-run when becoming visible
 
 	// Render frame if provided
 	useEffect(() => {
@@ -32,7 +87,7 @@ export function Minimap({ stream, zoom, pan, frame, onPanTo }: MinimapProps) {
 		}
 	}, [frame]);
 
-	// if (zoom <= 1) return null; // Always show minimap
+	if (zoom <= 1) return null;
 
 	// Calculate overlay size
 	const widthPercent = 100 / zoom;
@@ -81,6 +136,7 @@ export function Minimap({ stream, zoom, pan, frame, onPanTo }: MinimapProps) {
 					playsInline
 					muted
 					className="w-full h-full object-contain opacity-50 pointer-events-none"
+					style={{ transform: isMirror ? "scaleX(-1)" : undefined }}
 				/>
 			)}
 

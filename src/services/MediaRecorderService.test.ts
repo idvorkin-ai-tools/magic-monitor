@@ -192,23 +192,24 @@ describe("MediaRecorderService", () => {
 
 		it("should skip zero-size data chunks", async () => {
 			// Create custom mock that emits empty and valid chunks
-			const originalMockMediaRecorder = (globalThis.MediaRecorder as unknown as typeof MockMediaRecorder);
+			const originalMockMediaRecorder =
+				globalThis.MediaRecorder as unknown as typeof MockMediaRecorder;
 
 			// @ts-expect-error - Override MediaRecorder temporarily
 			globalThis.MediaRecorder = class extends originalMockMediaRecorder {
-				constructor(stream: MediaStream, options: MediaRecorderOptions) {
-					super(stream, options);
-				}
-
 				stop() {
 					this.state = "inactive";
 					// Emit empty chunk followed by valid chunk
 					if (this.ondataavailable) {
 						this.ondataavailable({
-							data: new Blob([], { type: this.options.mimeType || "video/webm" }),
+							data: new Blob([], {
+								type: this.options.mimeType || "video/webm",
+							}),
 						});
 						this.ondataavailable({
-							data: new Blob(["valid data"], { type: this.options.mimeType || "video/webm" }),
+							data: new Blob(["valid data"], {
+								type: this.options.mimeType || "video/webm",
+							}),
 						});
 					}
 					if (this.onstop) {
@@ -230,85 +231,56 @@ describe("MediaRecorderService", () => {
 			// @ts-expect-error - Restore MediaRecorder
 			globalThis.MediaRecorder = originalMockMediaRecorder;
 		});
-	});
 
-	describe("extractPreviewFrame", () => {
-		it("should extract JPEG data URL from video blob", async () => {
-			const blob = new Blob(["fake video"], { type: "video/webm" });
+		it("should throw meaningful error if MediaRecorder.start() fails with NotSupportedError", () => {
+			const originalMockMediaRecorder =
+				globalThis.MediaRecorder as unknown as typeof MockMediaRecorder;
 
-			const dataUrl = await MediaRecorderService.extractPreviewFrame(blob);
-
-			expect(dataUrl).toBe("data:image/jpeg;base64,mockdata");
-			expect(URL.createObjectURL).toHaveBeenCalledWith(blob);
-			expect(URL.revokeObjectURL).toHaveBeenCalled();
-		});
-
-		it("should create video element with correct properties", async () => {
-			const blob = new Blob(["fake video"], { type: "video/webm" });
-
-			await MediaRecorderService.extractPreviewFrame(blob);
-
-			expect(document.createElement).toHaveBeenCalledWith("video");
-		});
-
-		it("should create canvas and draw video frame", async () => {
-			const blob = new Blob(["fake video"], { type: "video/webm" });
-
-			await MediaRecorderService.extractPreviewFrame(blob);
-
-			expect(document.createElement).toHaveBeenCalledWith("canvas");
-		});
-
-		it("should reject if canvas context is not available", async () => {
-			// Mock canvas.getContext to return null
-			const originalCreateElement = document.createElement;
-			document.createElement = vi.fn((tagName: string) => {
-				if (tagName === "canvas") {
-					const canvas = originalCreateElement.call(
-						document,
-						"canvas",
-					) as HTMLCanvasElement;
-					canvas.getContext = vi.fn(() => null);
-					return canvas;
+			// @ts-expect-error - Override MediaRecorder temporarily
+			globalThis.MediaRecorder = class extends originalMockMediaRecorder {
+				start() {
+					throw new DOMException(
+						"Failed to execute 'start' on 'MediaRecorder': There was an error starting the MediaRecorder",
+						"NotSupportedError",
+					);
 				}
-				return originalCreateElement.call(document, tagName);
-			});
+			};
 
-			const blob = new Blob(["fake video"], { type: "video/webm" });
+			const mockStream = new MediaStream();
+			const session = MediaRecorderService.startRecording(mockStream);
 
-			await expect(
-				MediaRecorderService.extractPreviewFrame(blob),
-			).rejects.toThrow("Could not get canvas context");
+			expect(() => session.start()).toThrow(
+				/Failed to start recording.*codec.*stream/i,
+			);
 
-			// Restore
-			document.createElement = originalCreateElement;
+			// Restore original mock
+			// @ts-expect-error - Restore MediaRecorder
+			globalThis.MediaRecorder = originalMockMediaRecorder;
 		});
 
-		it("should reject if video fails to load", async () => {
-			// Mock video to trigger error
-			const originalCreateElement = document.createElement;
-			document.createElement = vi.fn((tagName: string) => {
-				if (tagName === "video") {
-					const video = originalCreateElement.call(
-						document,
-						"video",
-					) as HTMLVideoElement;
-					setTimeout(() => {
-						if (video.onerror) video.onerror(new Event("error"));
-					}, 0);
-					return video;
+		it("should validate stream has active tracks before starting", () => {
+			const originalMockMediaRecorder =
+				globalThis.MediaRecorder as unknown as typeof MockMediaRecorder;
+
+			// @ts-expect-error - Override MediaRecorder temporarily
+			globalThis.MediaRecorder = class extends originalMockMediaRecorder {
+				start() {
+					// Simulate the error when stream has no active tracks
+					throw new DOMException(
+						"Failed to execute 'start' on 'MediaRecorder': The MediaRecorder cannot start because there are no audio or video tracks available.",
+						"NotSupportedError",
+					);
 				}
-				return originalCreateElement.call(document, tagName);
-			});
+			};
 
-			const blob = new Blob(["fake video"], { type: "video/webm" });
+			const mockStream = new MediaStream();
+			const session = MediaRecorderService.startRecording(mockStream);
 
-			await expect(
-				MediaRecorderService.extractPreviewFrame(blob),
-			).rejects.toThrow("Failed to load video for preview extraction");
+			expect(() => session.start()).toThrow(/Failed to start recording/i);
 
-			// Restore
-			document.createElement = originalCreateElement;
+			// Restore original mock
+			// @ts-expect-error - Restore MediaRecorder
+			globalThis.MediaRecorder = originalMockMediaRecorder;
 		});
 	});
 

@@ -1,5 +1,6 @@
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PAN_CONSTANTS, ZOOM_CONSTANTS } from "../constants/zoom";
 import {
 	clampSpeed,
 	createSmoother,
@@ -119,7 +120,11 @@ export function useSmartZoom({
 	smoothingPreset = "ema",
 }: SmartZoomConfig) {
 	const [isModelLoading, setIsModelLoading] = useState(true);
-	const [debugLandmarks, setDebugLandmarks] = useState<HandLandmark[][]>([]);
+	const [loadingProgress, setLoadingProgress] = useState(0);
+	const [loadingPhase, setLoadingPhase] = useState<"downloading" | "initializing">("downloading");
+	// Use ref instead of state for landmarks to avoid 60fps re-renders
+	// HandSkeleton reads from this ref directly in its own rAF loop
+	const debugLandmarksRef = useRef<HandLandmark[][]>([]);
 
 	// Smoother instance (recreated when preset changes)
 	const smootherRef = useRef<Smoother>(createSmoother(smoothingPreset));
@@ -136,12 +141,8 @@ export function useSmartZoom({
 		smootherRef.current.reset();
 	}, [smoothingPreset]);
 
-	// Constants (see docs/SMART_ZOOM_SPEC.md)
-	const MIN_ZOOM = 1;
-	const MAX_ZOOM = 3;
-	const ZOOM_THRESHOLD = 0.1;
-	// Pan threshold in normalized coords (0.025 ≈ 50px on 1920px video)
-	const PAN_THRESHOLD = 0.025;
+	// Use constants directly from imports (not destructured) to avoid useEffect dep issues
+	// See docs/SMART_ZOOM_SPEC.md for constant meanings
 
 	// Output state
 	const [zoom, setZoom] = useState(1);
@@ -152,6 +153,15 @@ export function useSmartZoom({
 		top: false,
 		bottom: false,
 	});
+
+	// Refs for high-frequency updates (60fps) - these drive the actual transform
+	const zoomRef = useRef(1);
+	const panRef = useRef({ x: 0, y: 0 });
+	const clampedEdgesRef = useRef<ClampedEdges>({ left: false, right: false, top: false, bottom: false });
+
+	// Throttle UI state updates to ~10Hz (every 6 frames) to avoid render storms
+	// The refs above always have the real-time value; state is for UI display only
+	const UI_UPDATE_INTERVAL = 6;
 
 	const landmarkerRef = useRef<HandLandmarker | null>(null);
 	const requestRef = useRef<number>(0);
@@ -167,15 +177,62 @@ export function useSmartZoom({
 				// Use local WASM files for offline support
 				const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
 
-				// Use local model file for offline support
+				// Fetch model with progress tracking
+				const response = await fetch("/mediapipe/hand_landmarker.task");
+				const contentLength = response.headers.get("Content-Length");
+				const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+				if (!response.body) {
+					throw new Error("Response body is null");
+				}
+
+				const reader = response.body.getReader();
+				let receivedLength = 0;
+				const chunks: Uint8Array[] = [];
+
+				// Read chunks and track progress
+				while (true) {
+					const { done, value } = await reader.read();
+
+					if (done) break;
+
+					chunks.push(value);
+					receivedLength += value.length;
+
+					// Update progress (0-100%)
+					if (total > 0) {
+						setLoadingProgress(Math.round((receivedLength / total) * 100));
+					}
+				}
+
+				// Combine chunks into single Uint8Array
+				const modelBuffer = new Uint8Array(receivedLength);
+				let position = 0;
+				for (const chunk of chunks) {
+					modelBuffer.set(chunk, position);
+					position += chunk.length;
+				}
+
+				// Download complete, now initializing model
+				setLoadingPhase("initializing");
+
+				// Create HandLandmarker with GPU delegate specified during creation
+				// Note: delegate must be set during creation, not after, for GPU compilation
+				console.log("[SmartZoom] Creating HandLandmarker with GPU delegate...");
 				landmarkerRef.current = await HandLandmarker.createFromOptions(vision, {
 					baseOptions: {
-						modelAssetPath: "/mediapipe/hand_landmarker.task",
+						modelAssetBuffer: modelBuffer,
 						delegate: "GPU",
 					},
 					runningMode: "VIDEO",
 					numHands: 2,
 				});
+
+				// Log WebGL availability for GPU delegate diagnostics
+				const canvas = document.createElement("canvas");
+				const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+				console.log("[SmartZoom] WebGL available:", !!gl, gl ? `(${gl.getParameter(gl.VERSION)})` : "");
+				console.log("[SmartZoom] HandLandmarker initialized successfully");
 
 				setIsModelLoading(false);
 			} catch (error) {
@@ -185,7 +242,21 @@ export function useSmartZoom({
 		}
 
 		loadModel();
+
+		return () => {
+			if (landmarkerRef.current) {
+				landmarkerRef.current.close();
+				landmarkerRef.current = null;
+			}
+		};
 	}, []);
+
+	// Clear debug trace when smart zoom is disabled
+	useEffect(() => {
+		if (!enabled) {
+			debugTraceRef.current = [];
+		}
+	}, [enabled]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: isModelLoading triggers effect re-run when model loads
 	useEffect(() => {
@@ -237,7 +308,7 @@ export function useSmartZoom({
 					let targetZoom = 1 / (maxDim * padding);
 
 					// Clamp zoom (see docs/SMART_ZOOM_SPEC.md)
-					targetZoom = Math.min(Math.max(targetZoom, MIN_ZOOM), MAX_ZOOM);
+					targetZoom = Math.min(Math.max(targetZoom, ZOOM_CONSTANTS.MIN_ZOOM), ZOOM_CONSTANTS.MAX_ZOOM);
 
 					// Determine target pan in NORMALIZED coordinates (0-1 range)
 					// Pan of 0 = centered, positive = shift view left/up
@@ -257,7 +328,7 @@ export function useSmartZoom({
 					// panDist is now in normalized units (0-1), threshold is also normalized
 
 					// Only update committed target if change is significant
-					if (zoomDelta > ZOOM_THRESHOLD || panDist > PAN_THRESHOLD) {
+					if (zoomDelta > ZOOM_CONSTANTS.THRESHOLD || panDist > PAN_CONSTANTS.THRESHOLD) {
 						committedTargetRef.current = {
 							zoom: targetZoom,
 							pan: { x: targetPanX, y: targetPanY },
@@ -316,13 +387,18 @@ export function useSmartZoom({
 						debugTraceRef.current.shift();
 					}
 
-					setZoom(prevPositionRef.current.zoom);
-					setPan({
-						x: prevPositionRef.current.x,
-						y: prevPositionRef.current.y,
-					});
-					setClampedEdges(edges);
-					setDebugLandmarks(result.landmarks);
+					// Always update refs (real-time values for transforms)
+					zoomRef.current = prevPositionRef.current.zoom;
+					panRef.current = { x: prevPositionRef.current.x, y: prevPositionRef.current.y };
+					clampedEdgesRef.current = edges;
+					debugLandmarksRef.current = result.landmarks;
+
+					// Throttle React state updates to ~10Hz to avoid render storms
+					if (frameCountRef.current % UI_UPDATE_INTERVAL === 0) {
+						setZoom(zoomRef.current);
+						setPan(panRef.current);
+						setClampedEdges(clampedEdgesRef.current);
+					}
 				} else {
 					// No hands? Slowly zoom out to 1
 					// For zoom out, we can bypass hysteresis or set target to 1
@@ -380,13 +456,18 @@ export function useSmartZoom({
 						debugTraceRef.current.shift();
 					}
 
-					setZoom(prevPositionRef.current.zoom);
-					setPan({
-						x: prevPositionRef.current.x,
-						y: prevPositionRef.current.y,
-					});
-					setClampedEdges(edges);
-					setDebugLandmarks([]);
+					// Always update refs (real-time values for transforms)
+					zoomRef.current = prevPositionRef.current.zoom;
+					panRef.current = { x: prevPositionRef.current.x, y: prevPositionRef.current.y };
+					clampedEdgesRef.current = edges;
+					debugLandmarksRef.current = [];
+
+					// Throttle React state updates to ~10Hz to avoid render storms
+					if (frameCountRef.current % UI_UPDATE_INTERVAL === 0) {
+						setZoom(zoomRef.current);
+						setPan(panRef.current);
+						setClampedEdges(clampedEdgesRef.current);
+					}
 				}
 			}
 
@@ -418,10 +499,16 @@ export function useSmartZoom({
 
 	return {
 		isModelLoading,
+		loadingProgress,
+		loadingPhase,
 		zoom,
 		pan,
 		clampedEdges,
-		debugLandmarks,
+		// Refs for real-time access (60fps) - use these for transforms
+		zoomRef,
+		panRef,
+		clampedEdgesRef,
+		debugLandmarksRef,
 		getDebugTrace,
 	};
 }
