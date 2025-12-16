@@ -154,13 +154,14 @@ export function useSmartZoom({
 		bottom: false,
 	});
 
-	// Track previous state values to avoid unnecessary setState calls
-	// This prevents re-renders when values haven't actually changed
-	const prevStateRef = useRef({
-		zoom: 1,
-		pan: { x: 0, y: 0 },
-		clampedEdges: { left: false, right: false, top: false, bottom: false },
-	});
+	// Refs for high-frequency updates (60fps) - these drive the actual transform
+	const zoomRef = useRef(1);
+	const panRef = useRef({ x: 0, y: 0 });
+	const clampedEdgesRef = useRef<ClampedEdges>({ left: false, right: false, top: false, bottom: false });
+
+	// Throttle UI state updates to ~10Hz (every 6 frames) to avoid render storms
+	// The refs above always have the real-time value; state is for UI display only
+	const UI_UPDATE_INTERVAL = 6;
 
 	const landmarkerRef = useRef<HandLandmarker | null>(null);
 	const requestRef = useRef<number>(0);
@@ -386,27 +387,18 @@ export function useSmartZoom({
 						debugTraceRef.current.shift();
 					}
 
-					// Only update state when values actually change to avoid unnecessary re-renders
-					const newZoom = prevPositionRef.current.zoom;
-					const newPan = { x: prevPositionRef.current.x, y: prevPositionRef.current.y };
-					const newEdges = edges;
-
-					if (newZoom !== prevStateRef.current.zoom) {
-						prevStateRef.current.zoom = newZoom;
-						setZoom(newZoom);
-					}
-					if (newPan.x !== prevStateRef.current.pan.x || newPan.y !== prevStateRef.current.pan.y) {
-						prevStateRef.current.pan = newPan;
-						setPan(newPan);
-					}
-					if (newEdges.left !== prevStateRef.current.clampedEdges.left ||
-						newEdges.right !== prevStateRef.current.clampedEdges.right ||
-						newEdges.top !== prevStateRef.current.clampedEdges.top ||
-						newEdges.bottom !== prevStateRef.current.clampedEdges.bottom) {
-						prevStateRef.current.clampedEdges = newEdges;
-						setClampedEdges(newEdges);
-					}
+					// Always update refs (real-time values for transforms)
+					zoomRef.current = prevPositionRef.current.zoom;
+					panRef.current = { x: prevPositionRef.current.x, y: prevPositionRef.current.y };
+					clampedEdgesRef.current = edges;
 					debugLandmarksRef.current = result.landmarks;
+
+					// Throttle React state updates to ~10Hz to avoid render storms
+					if (frameCountRef.current % UI_UPDATE_INTERVAL === 0) {
+						setZoom(zoomRef.current);
+						setPan(panRef.current);
+						setClampedEdges(clampedEdgesRef.current);
+					}
 				} else {
 					// No hands? Slowly zoom out to 1
 					// For zoom out, we can bypass hysteresis or set target to 1
@@ -464,27 +456,18 @@ export function useSmartZoom({
 						debugTraceRef.current.shift();
 					}
 
-					// Only update state when values actually change to avoid unnecessary re-renders
-					const newZoom = prevPositionRef.current.zoom;
-					const newPan = { x: prevPositionRef.current.x, y: prevPositionRef.current.y };
-					const newEdges = edges;
-
-					if (newZoom !== prevStateRef.current.zoom) {
-						prevStateRef.current.zoom = newZoom;
-						setZoom(newZoom);
-					}
-					if (newPan.x !== prevStateRef.current.pan.x || newPan.y !== prevStateRef.current.pan.y) {
-						prevStateRef.current.pan = newPan;
-						setPan(newPan);
-					}
-					if (newEdges.left !== prevStateRef.current.clampedEdges.left ||
-						newEdges.right !== prevStateRef.current.clampedEdges.right ||
-						newEdges.top !== prevStateRef.current.clampedEdges.top ||
-						newEdges.bottom !== prevStateRef.current.clampedEdges.bottom) {
-						prevStateRef.current.clampedEdges = newEdges;
-						setClampedEdges(newEdges);
-					}
+					// Always update refs (real-time values for transforms)
+					zoomRef.current = prevPositionRef.current.zoom;
+					panRef.current = { x: prevPositionRef.current.x, y: prevPositionRef.current.y };
+					clampedEdgesRef.current = edges;
 					debugLandmarksRef.current = [];
+
+					// Throttle React state updates to ~10Hz to avoid render storms
+					if (frameCountRef.current % UI_UPDATE_INTERVAL === 0) {
+						setZoom(zoomRef.current);
+						setPan(panRef.current);
+						setClampedEdges(clampedEdgesRef.current);
+					}
 				}
 			}
 
@@ -521,6 +504,10 @@ export function useSmartZoom({
 		zoom,
 		pan,
 		clampedEdges,
+		// Refs for real-time access (60fps) - use these for transforms
+		zoomRef,
+		panRef,
+		clampedEdgesRef,
 		debugLandmarksRef,
 		getDebugTrace,
 	};
