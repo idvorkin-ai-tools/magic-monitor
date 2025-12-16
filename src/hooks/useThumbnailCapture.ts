@@ -10,10 +10,15 @@ export interface ThumbnailCaptureConfig {
 	timerService?: TimerServiceType;
 }
 
+export interface StopCaptureOptions {
+	/** Skip state updates - use during cleanup/unmount */
+	forCleanup?: boolean;
+}
+
 export interface ThumbnailCaptureControls {
 	thumbnails: SessionThumbnail[];
 	startCapture: (blockStartTime: number) => void;
-	stopCapture: () => SessionThumbnail[];
+	stopCapture: (options?: StopCaptureOptions) => SessionThumbnail[];
 	captureNow: (blockStartTime: number) => void;
 }
 
@@ -30,9 +35,13 @@ export function useThumbnailCapture({
 	const thumbnailsRef = useRef<SessionThumbnail[]>([]);
 	const thumbnailTimerRef = useRef<number | null>(null);
 	const blockStartTimeRef = useRef<number>(0);
+	const isCapturingRef = useRef(false); // Track if capture is active to avoid setState after stop
 
 	const captureNow = useCallback(
 		(blockStartTime: number) => {
+			// Skip if capture was stopped (prevents setState after unmount)
+			if (!isCapturingRef.current) return;
+
 			const video = videoRef.current;
 			if (!video || video.readyState < 2) return;
 
@@ -44,7 +53,10 @@ export function useThumbnailCapture({
 				const time = (timerService.now() - blockStartTime) / 1000;
 				const newThumbnail = { time, dataUrl };
 				thumbnailsRef.current = [...thumbnailsRef.current, newThumbnail];
-				setThumbnails((prev) => [...prev, newThumbnail]);
+				// Double-check still capturing before setState
+				if (isCapturingRef.current) {
+					setThumbnails((prev) => [...prev, newThumbnail]);
+				}
 			} catch (err) {
 				console.warn("Failed to capture thumbnail:", err);
 			}
@@ -57,6 +69,7 @@ export function useThumbnailCapture({
 			blockStartTimeRef.current = blockStartTime;
 			thumbnailsRef.current = [];
 			setThumbnails([]);
+			isCapturingRef.current = true;
 
 			// Capture first thumbnail immediately
 			captureNow(blockStartTime);
@@ -69,17 +82,28 @@ export function useThumbnailCapture({
 		[captureNow, thumbnailIntervalMs, timerService],
 	);
 
-	const stopCapture = useCallback(() => {
-		if (thumbnailTimerRef.current) {
-			timerService.clearInterval(thumbnailTimerRef.current);
-			thumbnailTimerRef.current = null;
-		}
+	const stopCapture = useCallback(
+		(options?: StopCaptureOptions) => {
+			const { forCleanup = false } = options ?? {};
 
-		const captured = [...thumbnailsRef.current];
-		thumbnailsRef.current = [];
-		setThumbnails([]);
-		return captured;
-	}, [timerService]);
+			// Mark as not capturing FIRST to prevent any pending interval callbacks from setState
+			isCapturingRef.current = false;
+
+			if (thumbnailTimerRef.current) {
+				timerService.clearInterval(thumbnailTimerRef.current);
+				thumbnailTimerRef.current = null;
+			}
+
+			const captured = [...thumbnailsRef.current];
+			thumbnailsRef.current = [];
+			// Skip state updates during cleanup to avoid setState on unmount
+			if (!forCleanup) {
+				setThumbnails([]);
+			}
+			return captured;
+		},
+		[timerService],
+	);
 
 	return {
 		thumbnails,

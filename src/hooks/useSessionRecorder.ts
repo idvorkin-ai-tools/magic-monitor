@@ -288,9 +288,9 @@ export function useSessionRecorder({
 				timerService.clearInterval(checkReadyIntervalRef.current);
 				checkReadyIntervalRef.current = null;
 			}
-			// Stop active recording session
+			// Stop active recording session (forCleanup: true to skip setState during unmount)
 			if (blockRecorder.getState() === "recording") {
-				blockRecorder.stopRecording().catch(console.error);
+				blockRecorder.stopRecording({ forCleanup: true }).catch(console.error);
 			}
 			// Cleanup duration timer
 			if (durationTimerRef.current) {

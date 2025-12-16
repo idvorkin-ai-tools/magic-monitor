@@ -13,11 +13,16 @@ export interface BlockRecorderConfig {
 	timerService?: TimerServiceType;
 }
 
+export interface StopRecordingOptions {
+	/** Skip state updates - use during cleanup/unmount */
+	forCleanup?: boolean;
+}
+
 export interface BlockRecorderControls {
 	isRecording: boolean;
 	error: string | null;
 	startRecording: () => void;
-	stopRecording: () => Promise<{ blob: Blob; duration: number } | null>;
+	stopRecording: (options?: StopRecordingOptions) => Promise<{ blob: Blob; duration: number } | null>;
 	getState: () => RecordingState;
 }
 
@@ -120,8 +125,9 @@ export function useBlockRecorder({
 		}
 	}, []);
 
-	const stopRecording =
-		useCallback(async (): Promise<{ blob: Blob; duration: number } | null> => {
+	const stopRecording = useCallback(
+		async (options?: StopRecordingOptions): Promise<{ blob: Blob; duration: number } | null> => {
+			const { forCleanup = false } = options ?? {};
 			const session = recordingSessionRef.current;
 			if (!session || session.getState() !== "recording") {
 				cleanupClonedStream();
@@ -132,17 +138,25 @@ export function useBlockRecorder({
 				const result = await session.stop();
 				recordingSessionRef.current = null;
 				cleanupClonedStream(); // Release cloned stream tracks
-				setIsRecording(false);
+				// Skip state updates during cleanup to avoid setState on unmount
+				if (!forCleanup) {
+					setIsRecording(false);
+				}
 				return result;
 			} catch (err) {
 				console.error("Failed to stop recording:", err);
-				setError("Recording may have been lost - please try again");
 				recordingSessionRef.current = null;
 				cleanupClonedStream(); // Cleanup on error too
-				setIsRecording(false);
+				// Skip state updates during cleanup to avoid setState on unmount
+				if (!forCleanup) {
+					setError("Recording may have been lost - please try again");
+					setIsRecording(false);
+				}
 				return null;
 			}
-		}, [cleanupClonedStream]);
+		},
+		[cleanupClonedStream],
+	);
 
 	const getState = useCallback(() => {
 		return recordingSessionRef.current?.getState() ?? "inactive";
