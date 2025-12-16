@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+	SessionRecorderMachine,
+	type SessionRecorderState,
+} from "../machines/SessionRecorderMachine";
+import {
 	MediaRecorderService,
 	type MediaRecorderServiceType,
 } from "../services/MediaRecorderService";
@@ -53,7 +57,8 @@ export interface SessionRecorderControls {
 
 /**
  * Orchestrator hook for Practice Session recording.
- * Coordinates smaller focused hooks following Single Responsibility Principle.
+ * Uses SessionRecorderMachine for state management,
+ * delegates to focused hooks for individual concerns.
  */
 export function useSessionRecorder({
 	videoRef,
@@ -65,261 +70,208 @@ export function useSessionRecorder({
 	videoFixService = VideoFixService,
 	timerService = TimerService,
 }: SessionRecorderConfig): SessionRecorderControls {
-	// Duration tracking
+	// State exposed to consumers
+	const [isRecording, setIsRecording] = useState(false);
 	const [currentBlockDuration, setCurrentBlockDuration] = useState(0);
+	const [lastSavedSession, setLastSavedSession] =
+		useState<PracticeSession | null>(null);
+
+	// Duration tracking
 	const durationTimerRef = useRef<number | null>(null);
 	const blockStartTimeRef = useRef<number>(0);
-	const checkReadyIntervalRef = useRef<number | null>(null);
-	const enabledRef = useRef(enabled);
-	const startRecordingBlockRef = useRef<(() => void) | null>(null);
-	const isStoppingRef = useRef(false); // Track if we're in the middle of stopping
-	const blockRotationRef = useRef<{
-		startRotation: () => void;
-		stopRotation: () => void;
-	}>({
-		startRotation: () => {},
-		stopRotation: () => {},
-	});
 
-	// Use focused hooks
+	// Video readiness polling
+	const videoReadyIntervalRef = useRef<number | null>(null);
+
+	// Use focused hooks for individual concerns
 	const blockRecorder = useBlockRecorder({
 		videoRef,
 		mediaRecorderService,
 		timerService,
 	});
-	// Destructure stable callbacks to use in dependency arrays
-	const {
-		startRecording,
-		stopRecording,
-		getState: getRecordingState,
-		isRecording,
-		error: recordingError,
-	} = blockRecorder;
+	const { startRecording, stopRecording } = blockRecorder;
 
 	const thumbnailCapture = useThumbnailCapture({
 		videoRef,
 		thumbnailIntervalMs,
 		timerService,
 	});
-	// Destructure stable callbacks to use in dependency arrays
 	const { startCapture, stopCapture } = thumbnailCapture;
 
 	const sessionList = useSessionList({
 		sessionStorageService,
 		videoFixService,
 	});
-	// Destructure stable callbacks to use in dependency arrays
-	const { saveBlock } = sessionList;
+	const { saveBlock, refreshSessions } = sessionList;
 
-	// Keep enabledRef in sync with enabled prop
+	// Store callbacks in refs so machine doesn't need to be recreated
+	const startRecordingRef = useRef(startRecording);
+	const stopRecordingRef = useRef(stopRecording);
+	const startCaptureRef = useRef(startCapture);
+	const stopCaptureRef = useRef(stopCapture);
+	const saveBlockRef = useRef(saveBlock);
+
+	// Keep refs up to date
 	useEffect(() => {
-		enabledRef.current = enabled;
-	}, [enabled]);
+		startRecordingRef.current = startRecording;
+		stopRecordingRef.current = stopRecording;
+		startCaptureRef.current = startCapture;
+		stopCaptureRef.current = stopCapture;
+		saveBlockRef.current = saveBlock;
+	}, [startRecording, stopRecording, startCapture, stopCapture, saveBlock]);
 
-	// Stop current recording block
-	const stopCurrentBlock =
-		useCallback(async (): Promise<PracticeSession | null> => {
-			// Mark that we're stopping to prevent concurrent start
-			isStoppingRef.current = true;
+	// Create machine with callbacks that use refs (so they're always current)
+	const machineRef = useRef<SessionRecorderMachine | null>(null);
 
-			try {
-				// Stop duration timer
-				if (durationTimerRef.current) {
-					timerService.clearInterval(durationTimerRef.current);
-					durationTimerRef.current = null;
-				}
-
-				// Stop block rotation
-				blockRotationRef.current.stopRotation();
-
-				// Stop thumbnail capture
-				const thumbnails = stopCapture();
-
-				// Stop recording
-				const result = await stopRecording();
-				if (!result) {
-					setCurrentBlockDuration(0);
-					return null;
-				}
-
-				// Save the block
-				const session = await saveBlock(
-					result.blob,
-					result.duration,
-					thumbnails,
-					blockStartTimeRef.current,
-				);
-
-				setCurrentBlockDuration(0);
-				return session;
-			} finally {
-				// Always clear stopping flag when done
-				isStoppingRef.current = false;
-			}
-		}, [stopRecording, stopCapture, saveBlock, timerService]);
-
-	// Handle block rotation
+	// Block rotation callback
 	const onBlockComplete = useCallback(async () => {
-		const completedSession = await stopCurrentBlock();
-		if (completedSession && enabledRef.current) {
-			// Start a new block using ref to avoid circular dependency
-			startRecordingBlockRef.current?.();
-		}
-	}, [stopCurrentBlock]);
+		machineRef.current?.blockTimerFired();
+	}, []);
 
 	const blockRotation = useBlockRotation({
 		blockDurationMs,
 		onBlockComplete,
 		timerService,
 	});
+	const { startRotation, stopRotation } = blockRotation;
 
-	// Update blockRotationRef with the latest blockRotation during render
-	blockRotationRef.current = blockRotation;
-
-	// Start a new recording block
-	const startRecordingBlock = useCallback(() => {
-		// Don't start if we're in the middle of stopping a previous recording
-		if (isStoppingRef.current) {
-			console.warn("[SessionRecorder] Skipping start - still stopping previous recording");
-			return;
-		}
-
-		blockStartTimeRef.current = timerService.now();
-		setCurrentBlockDuration(0);
-
-		// Start recording
-		startRecording();
-
-		// Start thumbnail capture
-		startCapture(blockStartTimeRef.current);
-
-		// Set up duration update interval
-		durationTimerRef.current = timerService.setInterval(() => {
-			const elapsed = (timerService.now() - blockStartTimeRef.current) / 1000;
-			setCurrentBlockDuration(elapsed);
-		}, 1000);
-
-		// Set up block rotation timer
-		blockRotationRef.current.startRotation();
-	}, [startRecording, startCapture, timerService]);
-
-	// Keep ref in sync with latest startRecordingBlock
+	// Store rotation refs
+	const startRotationRef = useRef(startRotation);
+	const stopRotationRef = useRef(stopRotation);
 	useEffect(() => {
-		startRecordingBlockRef.current = startRecordingBlock;
-	}, [startRecordingBlock]);
+		startRotationRef.current = startRotation;
+		stopRotationRef.current = stopRotation;
+	}, [startRotation, stopRotation]);
 
-	// Main recording effect
+	// Initialize machine once
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	useEffect(() => {
-		if (!enabled) {
-			// Stop recording when disabled
-			if (getRecordingState() === "recording") {
-				stopCurrentBlock();
-			}
-			// Clear any pending ready check
-			if (checkReadyIntervalRef.current) {
-				timerService.clearInterval(checkReadyIntervalRef.current);
-				checkReadyIntervalRef.current = null;
-			}
-			return;
+		if (machineRef.current === null) {
+			machineRef.current = new SessionRecorderMachine({
+				onStartRecording: () => startRecordingRef.current(),
+				onStopRecording: () => stopRecordingRef.current(),
+				onStartThumbnails: (blockStartTime: number) =>
+					startCaptureRef.current(blockStartTime),
+				onStopThumbnails: () => stopCaptureRef.current(),
+				onStartBlockTimer: () => startRotationRef.current(),
+				onStopBlockTimer: () => stopRotationRef.current(),
+				onSaveBlock: async (
+					blob: Blob,
+					duration: number,
+					thumbnails: SessionThumbnail[],
+					blockStartTime: number,
+				) => {
+					const session = await saveBlockRef.current(
+						blob,
+						duration,
+						thumbnails,
+						blockStartTime,
+					);
+					if (session) {
+						setLastSavedSession(session);
+					}
+				},
+				onStateChange: (state: SessionRecorderState) => {
+					setIsRecording(state.type === "recording");
+					if (state.type === "recording") {
+						blockStartTimeRef.current = state.blockStart;
+					}
+				},
+				now: () => timerService.now(),
+			});
 		}
+	}, [timerService]);
 
-		// Wait for video to be ready
-		const video = videoRef.current;
-		if (!video || video.readyState < 3) {
-			// Clear any existing check interval before starting a new one
-			if (checkReadyIntervalRef.current) {
-				timerService.clearInterval(checkReadyIntervalRef.current);
-				checkReadyIntervalRef.current = null;
-			}
-
-			let attempts = 0;
-			const MAX_ATTEMPTS = 50; // 5 seconds
-
-			checkReadyIntervalRef.current = timerService.setInterval(() => {
-				attempts++;
-				// Wait for video to be ready AND any pending stop to complete
-				if (videoRef.current && videoRef.current.readyState >= 3 && !isStoppingRef.current) {
-					// Clear interval before starting recording
-					if (checkReadyIntervalRef.current) {
-						timerService.clearInterval(checkReadyIntervalRef.current);
-						checkReadyIntervalRef.current = null;
-					}
-					// Verify still enabled before starting
-					if (enabledRef.current) {
-						startRecordingBlock();
-					}
-				} else if (attempts >= MAX_ATTEMPTS) {
-					if (checkReadyIntervalRef.current) {
-						timerService.clearInterval(checkReadyIntervalRef.current);
-						checkReadyIntervalRef.current = null;
-					}
-					// Error is handled by blockRecorder
-				}
-			}, 100);
-
-			return () => {
-				if (checkReadyIntervalRef.current) {
-					timerService.clearInterval(checkReadyIntervalRef.current);
-					checkReadyIntervalRef.current = null;
-				}
-			};
-		}
-
-		// Video is ready - but wait if we're still stopping a previous recording
-		if (isStoppingRef.current) {
-			// Use interval to wait for stop to complete
-			let stopWaitAttempts = 0;
-			const MAX_STOP_WAIT = 30; // 3 seconds max wait
-
-			checkReadyIntervalRef.current = timerService.setInterval(() => {
-				stopWaitAttempts++;
-				if (!isStoppingRef.current && enabledRef.current) {
-					if (checkReadyIntervalRef.current) {
-						timerService.clearInterval(checkReadyIntervalRef.current);
-						checkReadyIntervalRef.current = null;
-					}
-					startRecordingBlock();
-				} else if (stopWaitAttempts >= MAX_STOP_WAIT) {
-					if (checkReadyIntervalRef.current) {
-						timerService.clearInterval(checkReadyIntervalRef.current);
-						checkReadyIntervalRef.current = null;
-					}
-					console.warn("[SessionRecorder] Timed out waiting for previous recording to stop");
-				}
-			}, 100);
+	// Duration timer effect - updates display while recording
+	useEffect(() => {
+		if (isRecording) {
+			durationTimerRef.current = timerService.setInterval(() => {
+				const elapsed =
+					(timerService.now() - blockStartTimeRef.current) / 1000;
+				setCurrentBlockDuration(elapsed);
+			}, 1000);
 		} else {
-			// Video is ready and not stopping - start immediately
-			startRecordingBlock();
+			if (durationTimerRef.current) {
+				timerService.clearInterval(durationTimerRef.current);
+				durationTimerRef.current = null;
+			}
+			setCurrentBlockDuration(0);
 		}
 
 		return () => {
-			// Clear check ready interval if still running
-			if (checkReadyIntervalRef.current) {
-				timerService.clearInterval(checkReadyIntervalRef.current);
-				checkReadyIntervalRef.current = null;
-			}
-			// Stop active recording session (forCleanup: true to skip setState during unmount)
-			if (getRecordingState() === "recording") {
-				stopRecording({ forCleanup: true }).catch(console.error);
-			}
-			// Cleanup duration timer
 			if (durationTimerRef.current) {
 				timerService.clearInterval(durationTimerRef.current);
+				durationTimerRef.current = null;
 			}
 		};
-	}, [
-		enabled,
-		videoRef,
-		startRecordingBlock,
-		stopCurrentBlock,
-		timerService,
-		getRecordingState,
-		stopRecording,
-	]);
+	}, [isRecording, timerService]);
+
+	// Storage initialization effect
+	useEffect(() => {
+		// When sessionList finishes init, notify machine
+		// sessionList.error will be set if init failed
+		if (sessionList.error) {
+			machineRef.current?.storageInitFailed();
+		} else {
+			// sessionList calls init in its own useEffect, which sets recentSessions
+			// We can use the presence of recentSessions (even empty) to know init completed
+			machineRef.current?.storageInitialized();
+		}
+	}, [sessionList.error, sessionList.recentSessions]);
+
+	// Video readiness detection effect
+	useEffect(() => {
+		const checkVideoReady = () => {
+			const video = videoRef.current;
+			const isReady = video && video.readyState >= 3;
+
+			if (isReady) {
+				machineRef.current?.videoIsReady();
+			}
+		};
+
+		// Check immediately
+		checkVideoReady();
+
+		// Poll for readiness changes
+		videoReadyIntervalRef.current = timerService.setInterval(
+			checkVideoReady,
+			100,
+		);
+
+		return () => {
+			if (videoReadyIntervalRef.current) {
+				timerService.clearInterval(videoReadyIntervalRef.current);
+				videoReadyIntervalRef.current = null;
+			}
+		};
+	}, [videoRef, timerService]);
+
+	// Enable/disable effect - reacts to prop changes
+	useEffect(() => {
+		if (enabled) {
+			machineRef.current?.enable();
+		} else {
+			machineRef.current?.disable();
+		}
+	}, [enabled]);
+
+	// Cleanup on unmount
+	useEffect(() => {
+		return () => {
+			machineRef.current?.disable();
+		};
+	}, []);
+
+	// Stop current block manually
+	const stopCurrentBlock =
+		useCallback(async (): Promise<PracticeSession | null> => {
+			await machineRef.current?.stopCurrentBlock();
+			return lastSavedSession;
+		}, [lastSavedSession]);
 
 	// Combine errors from all hooks
-	const combinedError =
-		recordingError || sessionList.error || null;
+	const combinedError = blockRecorder.error || sessionList.error || null;
 
 	return {
 		// State
@@ -334,6 +286,6 @@ export function useSessionRecorder({
 
 		// Controls
 		stopCurrentBlock,
-		refreshSessions: sessionList.refreshSessions,
+		refreshSessions,
 	};
 }
