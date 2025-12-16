@@ -3,9 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useMobileDetection } from "../hooks/useMobileDetection";
 import type { ReplayPlayerControls } from "../hooks/useReplayPlayer";
 import { selectThumbnailsForDisplay } from "../utils/thumbnailSelection";
-import { PreviewSizeSlider } from "./PreviewSizeSlider";
 import { SmartZoomToggle } from "./SmartZoomToggle";
-import { ThumbnailGrid } from "./ThumbnailGrid";
 import { Timeline } from "./Timeline";
 
 // ===== Types =====
@@ -67,38 +65,38 @@ export function ReplayControls({
 		exportVideo,
 	} = player;
 
-	// Thumbnail display state
+	// Panel display state
 	const [showThumbnails, setShowThumbnails] = useState(true);
 	const [thumbnailSize, setThumbnailSize] = useState(50); // 0-100 slider
-	const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+	const [panelPosition, setPanelPosition] = useState({ x: 0, y: 0 });
 	const [isFloating, setIsFloating] = useState(false);
 	const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
-	const previewPanelRef = useRef<HTMLDivElement>(null);
+	const controlPanelRef = useRef<HTMLDivElement>(null);
 
 	const { isMobile: detectedMobile } = useMobileDetection();
 	const effectiveMobile = isMobile || detectedMobile;
 
-	// Handle drag start for floating preview panel
+	// Handle drag start for floating control panel
 	const handleDragStart = useCallback((e: React.PointerEvent) => {
 		if (!isFloating) return;
 		e.preventDefault();
-		const panel = previewPanelRef.current;
+		const panel = controlPanelRef.current;
 		if (!panel) return;
 
 		panel.setPointerCapture(e.pointerId);
 		dragRef.current = {
 			startX: e.clientX,
 			startY: e.clientY,
-			startPosX: previewPosition.x,
-			startPosY: previewPosition.y,
+			startPosX: panelPosition.x,
+			startPosY: panelPosition.y,
 		};
-	}, [isFloating, previewPosition]);
+	}, [isFloating, panelPosition]);
 
 	const handleDragMove = useCallback((e: React.PointerEvent) => {
 		if (!dragRef.current) return;
 		const dx = e.clientX - dragRef.current.startX;
 		const dy = e.clientY - dragRef.current.startY;
-		setPreviewPosition({
+		setPanelPosition({
 			x: dragRef.current.startPosX + dx,
 			y: dragRef.current.startPosY + dy,
 		});
@@ -106,7 +104,7 @@ export function ReplayControls({
 
 	const handleDragEnd = useCallback((e: React.PointerEvent) => {
 		if (!dragRef.current) return;
-		const panel = previewPanelRef.current;
+		const panel = controlPanelRef.current;
 		if (panel) {
 			panel.releasePointerCapture(e.pointerId);
 		}
@@ -117,12 +115,12 @@ export function ReplayControls({
 	const toggleFloating = useCallback(() => {
 		if (isFloating) {
 			// Reset position when docking
-			setPreviewPosition({ x: 0, y: 0 });
+			setPanelPosition({ x: 0, y: 0 });
 		}
 		setIsFloating(!isFloating);
 	}, [isFloating]);
 
-	// Select thumbnails for display based on size slider and device
+	// Select thumbnails for display
 	const displayThumbnails = useMemo(() => {
 		if (!showThumbnails || !player.session?.thumbnails) return undefined;
 		return selectThumbnailsForDisplay(
@@ -132,82 +130,54 @@ export function ReplayControls({
 		);
 	}, [showThumbnails, player.session, effectiveMobile]);
 
-	// Calculate thumbnail dimensions for floating panel (same formula as Timeline)
-	const floatingThumbWidth = Math.round(48 + (thumbnailSize / 100) * 152);
-	const floatingThumbHeight = Math.round(floatingThumbWidth * (9 / 16));
-
 	return (
-		<>
-			{/* Floating preview panel */}
-			{isFloating && displayThumbnails && displayThumbnails.length > 0 && (
-				<div
-					ref={previewPanelRef}
-					className="fixed z-[60] bg-gray-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-700"
-					style={{
-						left: `calc(50% + ${previewPosition.x}px)`,
-						top: `calc(30% + ${previewPosition.y}px)`,
-						transform: "translateX(-50%)",
-						maxWidth: "90vw",
-						maxHeight: "50vh",
-						touchAction: "none", // Prevent browser gesture interference during drag
-					}}
-					onPointerDown={handleDragStart}
-					onPointerMove={handleDragMove}
-					onPointerUp={handleDragEnd}
-					onPointerCancel={handleDragEnd}
-				>
-					{/* Header - drag handle */}
-					<div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 cursor-move">
-						<span className="text-xs text-gray-400 select-none">Previews (drag to move)</span>
-						<div className="flex items-center gap-2">
-							<PreviewSizeSlider
-								value={thumbnailSize}
-								onChange={setThumbnailSize}
-								onPointerDown={(e) => e.stopPropagation()}
-							/>
-							<button
-								onClick={toggleFloating}
-								className="ml-2 text-xs text-gray-400 hover:text-white"
-								title="Dock previews"
-								aria-label="Dock previews"
-								onPointerDown={(e) => e.stopPropagation()}
-							>
-								⬋
-							</button>
-						</div>
-					</div>
-					{/* Thumbnails */}
-					<div className="p-2 overflow-auto" style={{ maxHeight: "calc(50vh - 40px)" }}>
-						<ThumbnailGrid
-							thumbnails={displayThumbnails}
-							onSelect={seek}
-							currentTime={currentTime}
-							layout="fixed"
-							thumbWidth={floatingThumbWidth}
-							thumbHeight={floatingThumbHeight}
-							gap={4}
-							onPointerDown={(e) => e.stopPropagation()}
-						/>
-					</div>
+		<div
+			ref={controlPanelRef}
+			className={clsx(
+				"z-50 w-full max-w-4xl",
+				isFloating
+					? "fixed"
+					: clsx(
+							"absolute left-1/2 -translate-x-1/2",
+							isMobile ? "bottom-3 px-2" : "bottom-12 px-4",
+						),
+			)}
+			style={
+				isFloating
+					? {
+							left: `calc(50% + ${panelPosition.x}px)`,
+							bottom: `calc(12% + ${-panelPosition.y}px)`,
+							transform: "translateX(-50%)",
+							touchAction: "none",
+						}
+					: undefined
+			}
+			onPointerDown={handleDragStart}
+			onPointerMove={handleDragMove}
+			onPointerUp={handleDragEnd}
+			onPointerCancel={handleDragEnd}
+		>
+			{/* Drag handle - only when floating */}
+			{isFloating && (
+				<div className="flex items-center justify-center py-1 cursor-move">
+					<div className="w-12 h-1 bg-gray-600 rounded-full" />
 				</div>
 			)}
 
-			<div
-				className={clsx(
-					"absolute left-1/2 -translate-x-1/2 flex flex-col gap-2 items-center z-50 w-full max-w-4xl",
-					isMobile ? "bottom-3 px-2" : "bottom-12 px-4",
-				)}
-			>
-				{/* Main control bar */}
+			{/* Main control bar */}
 			<div
 				className={clsx(
 					"bg-gray-900/95 backdrop-blur-md flex flex-col w-full",
 					isMobile ? "rounded-lg" : "rounded-2xl",
+					isFloating && "shadow-2xl border border-gray-700",
 				)}
 			>
-				{/* Thumbnail controls - when docked */}
-				{!isFloating && player.session?.thumbnails && player.session.thumbnails.length > 0 && (
-					<div className="flex items-center justify-between px-4 pt-2">
+				{/* Thumbnail controls */}
+				{player.session?.thumbnails && player.session.thumbnails.length > 0 && (
+					<div
+						className="flex items-center justify-between px-4 pt-2"
+						onPointerDown={(e) => e.stopPropagation()}
+					>
 						<button
 							onClick={() => setShowThumbnails(!showThumbnails)}
 							className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors"
@@ -222,34 +192,49 @@ export function ReplayControls({
 							</span>
 							Previews
 						</button>
-						{showThumbnails && (
-							<div className="flex items-center gap-2">
-								<PreviewSizeSlider
-									value={thumbnailSize}
-									onChange={setThumbnailSize}
-								/>
-								<button
-									onClick={toggleFloating}
-									className="ml-2 text-xs text-gray-400 hover:text-white"
-									title="Float previews"
-									aria-label="Float previews"
-								>
-									⬈
-								</button>
-							</div>
-						)}
+						<div className="flex items-center gap-2">
+							{showThumbnails && (
+								<>
+									<button
+										onClick={() => setThumbnailSize(Math.max(0, thumbnailSize - 25))}
+										className="text-xs text-gray-400 hover:text-white px-1"
+										title="Smaller thumbnails"
+									>
+										−
+									</button>
+									<button
+										onClick={() => setThumbnailSize(Math.min(100, thumbnailSize + 25))}
+										className="text-xs text-gray-400 hover:text-white px-1"
+										title="Larger thumbnails"
+									>
+										+
+									</button>
+								</>
+							)}
+							<button
+								onClick={toggleFloating}
+								className="ml-2 text-xs text-gray-400 hover:text-white"
+								title={isFloating ? "Dock controls" : "Float controls"}
+								aria-label={isFloating ? "Dock controls" : "Float controls"}
+							>
+								{isFloating ? "⬋" : "⬈"}
+							</button>
+						</div>
 					</div>
 				)}
 
-				{/* Timeline - only show thumbnails when not floating */}
-				<div className={clsx("px-4", isMobile ? "py-2" : "py-3")}>
+				{/* Timeline with thumbnails */}
+				<div
+					className={clsx("px-4", isMobile ? "py-2" : "py-3")}
+					onPointerDown={(e) => e.stopPropagation()}
+				>
 					<Timeline
 						currentTime={currentTime}
 						duration={duration}
 						inPoint={inPoint}
 						outPoint={outPoint}
 						onSeek={seek}
-						thumbnails={isFloating ? undefined : displayThumbnails}
+						thumbnails={displayThumbnails}
 						isMobile={isMobile}
 						disabled={!isReady}
 						thumbnailSize={thumbnailSize}
@@ -262,6 +247,7 @@ export function ReplayControls({
 						"flex items-center justify-between border-t border-gray-700",
 						isMobile ? "px-2 py-1.5" : "px-4 py-2",
 					)}
+					onPointerDown={(e) => e.stopPropagation()}
 				>
 					{/* Left: Exit, Sessions, and navigation */}
 					<div className="flex items-center gap-2">
@@ -455,6 +441,5 @@ export function ReplayControls({
 				</div>
 			</div>
 		</div>
-		</>
 	);
 }

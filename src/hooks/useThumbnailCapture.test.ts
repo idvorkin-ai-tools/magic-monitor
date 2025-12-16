@@ -179,7 +179,7 @@ describe("useThumbnailCapture", () => {
 		act(() => {
 			result.current.startCapture(1000);
 		});
-		let captured: ReturnType<typeof result.current.stopCapture>;
+		let captured: ReturnType<typeof result.current.stopCapture> = [];
 		act(() => {
 			captured = result.current.stopCapture();
 		});

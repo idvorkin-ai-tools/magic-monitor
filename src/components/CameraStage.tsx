@@ -463,7 +463,6 @@ export function CameraStage() {
 					onExit={handleExitReplay}
 					onSessionsClick={handleSessionsFromReplay}
 					isMobile={isMobile}
-					videoTransform={getVideoTransform()}
 					smoothingPreset={smoothingPreset}
 				/>
 			)}

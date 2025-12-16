@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSmartZoom } from "../hooks/useSmartZoom";
+import { useZoomPan } from "../hooks/useZoomPan";
 import type { ReplayPlayerControls } from "../hooks/useReplayPlayer";
 import type { SmoothingPreset } from "../smoothing";
 import { ErrorOverlay } from "./ErrorOverlay";
@@ -14,7 +15,6 @@ interface ReplayViewProps {
 	onExit: () => void;
 	onSessionsClick?: () => void;
 	isMobile?: boolean;
-	videoTransform?: string;
 	smoothingPreset?: SmoothingPreset;
 }
 
@@ -25,7 +25,6 @@ export function ReplayView({
 	onExit,
 	onSessionsClick,
 	isMobile = false,
-	videoTransform,
 	smoothingPreset = "ema",
 }: ReplayViewProps) {
 	// Destructure player state to avoid eslint false positives about refs
@@ -48,6 +47,18 @@ export function ReplayView({
 
 	// Create a ref for smart zoom (since player uses callback ref)
 	const videoRef = useRef<HTMLVideoElement | null>(null);
+	const containerRef = useRef<HTMLDivElement | null>(null);
+
+	// Manual zoom/pan - disables smart zoom when user manually zooms
+	const handleManualZoom = useCallback(() => {
+		if (isSmartZoom) setIsSmartZoom(false);
+	}, [isSmartZoom]);
+
+	const zoomPan = useZoomPan({
+		videoRef,
+		containerRef,
+		onZoomChange: handleManualZoom,
+	});
 
 	// Callback ref that syncs both refs
 	const handleVideoRef = useCallback(
@@ -88,10 +99,12 @@ export function ReplayView({
 		smoothingPreset,
 	});
 
-	// Compute effective transform: use smartZoom when enabled, else passed transform
-	const effectiveTransform = isSmartZoom
-		? `scale(${smartZoom.zoom}) translate(${(smartZoom.pan.x * 100).toFixed(2)}%, ${(smartZoom.pan.y * 100).toFixed(2)}%)`
-		: videoTransform;
+	// Compute effective zoom/pan: use smartZoom when enabled, else manual zoom/pan
+	const effectiveZoom = isSmartZoom ? smartZoom.zoom : zoomPan.zoom;
+	const effectivePan = isSmartZoom ? smartZoom.pan : zoomPan.pan;
+
+	// Build transform string
+	const effectiveTransform = `scale(${effectiveZoom}) translate(${(effectivePan.x * 100).toFixed(2)}%, ${(effectivePan.y * 100).toFixed(2)}%)`;
 
 	// Handle save clip
 	const handleSaveClip = useCallback(async () => {
@@ -147,7 +160,15 @@ export function ReplayView({
 	}, [isReady, isPlaying, play, pause, stepFrame, onSessionsClick]);
 
 	return (
-		<div className="absolute inset-0 flex flex-col">
+		<div
+			ref={containerRef}
+			className="absolute inset-0 flex flex-col"
+			onMouseDown={zoomPan.handleMouseDown}
+			onMouseMove={zoomPan.handleMouseMove}
+			onMouseUp={zoomPan.handleMouseUp}
+			onMouseLeave={zoomPan.handleMouseUp}
+			style={{ cursor: effectiveZoom > 1 ? (zoomPan.isDragging ? "grabbing" : "grab") : "default" }}
+		>
 			{/* Replay indicator */}
 			<div className="absolute top-8 right-8 z-40 bg-blue-600/80 backdrop-blur text-white px-4 py-2 rounded-lg font-mono text-xl font-bold animate-pulse border border-blue-400">
 				REPLAY MODE
@@ -165,14 +186,22 @@ export function ReplayView({
 				/>
 			)}
 
-			{/* Minimap (zoom indicator) - only when smart zoom is active */}
-			{isSmartZoom && (
+			{/* Minimap (zoom indicator) - shows when zoomed in (smart or manual) */}
+			{effectiveZoom > 1 && (
 				<Minimap
 					videoSrc={videoSrc}
-					zoom={smartZoom.zoom}
-					pan={smartZoom.pan}
+					zoom={effectiveZoom}
+					pan={effectivePan}
 					mainVideoRef={videoRef}
+					onPanTo={isSmartZoom ? undefined : zoomPan.setPan}
 				/>
+			)}
+
+			{/* Zoom level indicator */}
+			{effectiveZoom > 1 && (
+				<div className="absolute top-8 left-8 z-40 bg-gray-900/80 backdrop-blur text-white px-3 py-1.5 rounded-lg font-mono text-sm">
+					{effectiveZoom.toFixed(1)}x
+				</div>
 			)}
 
 			{/* Video element (managed by player hook) */}

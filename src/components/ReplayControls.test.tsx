@@ -786,7 +786,7 @@ describe("ReplayControls", () => {
 			expect(images.length).toBe(0);
 		});
 
-		it("renders thumbnail size slider when thumbnails visible", () => {
+		it("renders thumbnail size buttons when thumbnails visible", () => {
 			render(
 				<ReplayControls
 					player={mockPlayer}
@@ -795,9 +795,11 @@ describe("ReplayControls", () => {
 				/>,
 			);
 
-			// Check for range input
-			const sliders = screen.getAllByRole("slider");
-			expect(sliders.length).toBeGreaterThan(0);
+			// Check for +/- buttons for thumbnail size
+			const smallerButton = screen.getByTitle("Smaller thumbnails");
+			const largerButton = screen.getByTitle("Larger thumbnails");
+			expect(smallerButton).toBeTruthy();
+			expect(largerButton).toBeTruthy();
 		});
 
 		it("renders float/dock button", () => {
@@ -809,7 +811,7 @@ describe("ReplayControls", () => {
 				/>,
 			);
 
-			const floatButton = screen.getByLabelText("Float previews");
+			const floatButton = screen.getByLabelText("Float controls");
 			expect(floatButton).toBeTruthy();
 		});
 
@@ -822,11 +824,11 @@ describe("ReplayControls", () => {
 				/>,
 			);
 
-			const floatButton = screen.getByLabelText("Float previews");
+			const floatButton = screen.getByLabelText("Float controls");
 			fireEvent.click(floatButton);
 
 			// Should show dock button instead
-			expect(screen.getByLabelText("Dock previews")).toBeTruthy();
+			expect(screen.getByLabelText("Dock controls")).toBeTruthy();
 		});
 	});
 

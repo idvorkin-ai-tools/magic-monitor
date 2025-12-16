@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	SessionRecorderMachine,
-	type SessionRecorderCallbacks,
+	type SessionRecorderState,
 } from "./SessionRecorderMachine";
 
-function createMockCallbacks(): SessionRecorderCallbacks {
+function createMockCallbacks() {
 	return {
 		onStartRecording: vi.fn(),
 		onStopRecording: vi.fn().mockResolvedValue({
@@ -284,7 +284,7 @@ describe("SessionRecorderMachine", () => {
 	describe("state transitions sequence", () => {
 		it("full lifecycle: enable -> init -> video -> record -> stop -> idle", async () => {
 			const states: string[] = [];
-			callbacks.onStateChange.mockImplementation((state) => {
+			callbacks.onStateChange.mockImplementation((state: SessionRecorderState) => {
 				states.push(state.type);
 			});
 
