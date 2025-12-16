@@ -36,8 +36,8 @@ export function CameraStage() {
 	// App state: live (recording), picker (viewing sessions), replay (playing back)
 	const [appState, setAppState] = useState<AppState>("live");
 
-	// Recording pause state (default: paused for better performance)
-	const [isRecordingPaused, setIsRecordingPaused] = useState(true);
+	// Recording pause state
+	const [isRecordingPaused, setIsRecordingPaused] = useState(false);
 
 	// Settings (persisted to localStorage)
 	const { settings, setters } = useSettings();
@@ -102,9 +102,13 @@ export function CameraStage() {
 		videoRef,
 		enabled: appState === "live" && !isRecordingPaused,
 	});
+	// Destructure stable callbacks to avoid render loops in dependency arrays
+	const { stopCurrentBlock, isRecording } = sessionRecorder;
 
 	// Replay Player
 	const replayPlayer = useReplayPlayer();
+	// Destructure stable callbacks to avoid render loops in dependency arrays
+	const { loadSession, seek: seekReplay, unloadSession, session: replaySession } = replayPlayer;
 
 	const isFlashing = useFlashDetector({
 		videoRef,
@@ -162,25 +166,29 @@ export function CameraStage() {
 	}, [stream]);
 
 	// App state transitions
-	const handleOpenPicker = useCallback(() => {
+	const handleOpenPicker = useCallback(async () => {
+		// Stop any active recording so it appears in the session list
+		if (isRecording) {
+			await stopCurrentBlock();
+		}
 		setAppState("picker");
-	}, []);
+	}, [isRecording, stopCurrentBlock]);
 
 	const handleClosePicker = useCallback(() => {
 		// If we have an active session, return to replay; otherwise go to live
-		if (replayPlayer.session) {
+		if (replaySession) {
 			setAppState("replay");
 		} else {
 			setAppState("live");
 		}
-	}, [replayPlayer.session]);
+	}, [replaySession]);
 
 	const handleSelectSession = useCallback(
 		async (sessionId: string, startTime?: number) => {
 			try {
-				await replayPlayer.loadSession(sessionId);
+				await loadSession(sessionId);
 				if (startTime !== undefined) {
-					replayPlayer.seek(startTime);
+					seekReplay(startTime);
 				}
 				setAppState("replay");
 			} catch (err) {
@@ -188,18 +196,27 @@ export function CameraStage() {
 				// Stay in current state, don't transition to replay
 			}
 		},
-		[replayPlayer],
+		[loadSession, seekReplay],
 	);
 
 	const handleExitReplay = useCallback(() => {
-		replayPlayer.unloadSession();
+		unloadSession();
 		setAppState("live");
-	}, [replayPlayer]);
+	}, [unloadSession]);
 
 	const handleSessionsFromReplay = useCallback(() => {
 		// Go to picker without unloading the session (so it shows as active)
 		setAppState("picker");
 	}, []);
+
+	const handleStopAndViewRecording = useCallback(async () => {
+		// Stop current recording and immediately view it
+		const session = await stopCurrentBlock();
+		if (session) {
+			await loadSession(session.id);
+			setAppState("replay");
+		}
+	}, [stopCurrentBlock, loadSession]);
 
 	// Escape key handler
 	useEscapeKey({
@@ -361,6 +378,7 @@ export function CameraStage() {
 				isRecording={sessionRecorder.isRecording}
 				onRefresh={sessionRecorder.refreshSessions}
 				activeSessionId={replayPlayer.session?.id}
+				onStopAndViewRecording={handleStopAndViewRecording}
 			/>
 
 			{/* Minimap (Only when zoomed) */}

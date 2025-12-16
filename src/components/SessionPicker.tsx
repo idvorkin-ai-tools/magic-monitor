@@ -24,6 +24,8 @@ interface SessionPickerProps {
 	isRecording?: boolean;
 	onRefresh: () => void;
 	activeSessionId?: string;
+	/** Stop current recording and view it immediately */
+	onStopAndViewRecording?: () => void;
 }
 
 type PickerView = "list" | "timeline";
@@ -58,6 +60,7 @@ export function SessionPicker({
 	isRecording = false,
 	onRefresh,
 	activeSessionId,
+	onStopAndViewRecording,
 }: SessionPickerProps) {
 	const containerRef = useFocusTrap({ isOpen, onClose });
 
@@ -197,9 +200,11 @@ export function SessionPicker({
 										Recording Now
 									</h3>
 									<div className="flex gap-4">
-										<div
-											className="relative cursor-default"
-											title="Recording in progress"
+										<button
+											type="button"
+											onClick={onStopAndViewRecording}
+											className="relative cursor-pointer hover:opacity-80 transition-opacity text-left"
+											title="Stop recording and view"
 										>
 											<div className="w-32 h-20 rounded-lg overflow-hidden bg-gray-800 relative">
 												<img
@@ -215,7 +220,7 @@ export function SessionPicker({
 											<p className="text-xs text-gray-400 mt-1 text-center">
 												{formatDuration(currentRecordingDuration)}
 											</p>
-										</div>
+										</button>
 									</div>
 								</div>
 							)}
