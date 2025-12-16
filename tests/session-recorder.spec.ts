@@ -405,6 +405,87 @@ test.describe("Session Recorder with Counter Video", () => {
 		await page.locator("button", { hasText: "✕" }).click();
 	});
 
+	test("Scrubber drag updates playback position", async ({ page }) => {
+		// Navigate first, then seed sessions
+		await page.goto("/");
+		await seedSessionBuffer(page, 1);
+		await page.reload();
+		await waitForSessionsLoaded(page, 1);
+
+		// Wait for app to load
+		await page.waitForSelector('[data-testid="main-video"]', { state: "visible", timeout: 30000 });
+
+		// Enter replay mode
+		await page.getByRole("button", { name: "Sessions" }).click();
+		const sessionThumbnails = page.locator('[data-testid="session-thumbnail"]');
+		await sessionThumbnails.first().click();
+		const timelineThumbs = page.locator('img[alt^="Frame at"]');
+		await expect(timelineThumbs.first()).toBeVisible({ timeout: 5000 });
+		await timelineThumbs.first().click();
+		await expect(page.getByText("REPLAY MODE")).toBeVisible();
+
+		// Find the timeline track (the gray progress bar area)
+		const timelineTrack = page.locator(".bg-gray-700.rounded-full").first();
+		await expect(timelineTrack).toBeVisible();
+
+		// Get the time display to monitor position changes
+		const timeDisplay = page.locator(".font-mono").first();
+		await expect(timeDisplay).toBeVisible();
+
+		// Get initial time
+		const initialTime = await timeDisplay.textContent();
+
+		// Get track bounds for calculating positions
+		const trackBounds = await timelineTrack.boundingBox();
+		expect(trackBounds).toBeTruthy();
+		if (!trackBounds) return;
+
+		// Click at 10% position
+		const clickX = trackBounds.x + trackBounds.width * 0.1;
+		const clickY = trackBounds.y + trackBounds.height / 2;
+		await page.mouse.click(clickX, clickY);
+
+		// Wait for UI update
+		await page.waitForTimeout(100);
+
+		// Get time after click
+		const timeAfterClick = await timeDisplay.textContent();
+
+		// Now test dragging: start at 10%, drag to 90%
+		const startX = trackBounds.x + trackBounds.width * 0.1;
+		const endX = trackBounds.x + trackBounds.width * 0.9;
+		const midY = trackBounds.y + trackBounds.height / 2;
+
+		// Perform drag operation
+		await page.mouse.move(startX, midY);
+		await page.mouse.down();
+
+		// Drag across in small increments to simulate real drag
+		for (let i = 0; i <= 5; i++) {
+			const x = startX + (endX - startX) * (i / 5);
+			await page.mouse.move(x, midY);
+			await page.waitForTimeout(50);
+		}
+
+		await page.mouse.up();
+
+		// Wait for UI update
+		await page.waitForTimeout(200);
+
+		// Get time after drag
+		const timeAfterDrag = await timeDisplay.textContent();
+
+		// The time should have changed from click to drag
+		// If drag works, the final time should be near end (90%)
+		// If drag doesn't work, it would stay at click position (10%)
+		expect(timeAfterDrag).not.toBe(initialTime);
+		expect(timeAfterDrag).not.toBe(timeAfterClick);
+
+		// Exit replay
+		await page.locator("button", { hasText: "✕" }).click();
+		await expect(page.getByText("REPLAY MODE")).toBeHidden({ timeout: 5000 });
+	});
+
 	test("Trim controls set in/out points", async ({ page }) => {
 		// Navigate first, then seed sessions
 		await page.goto("/");

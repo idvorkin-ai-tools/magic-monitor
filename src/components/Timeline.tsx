@@ -33,6 +33,9 @@ export function Timeline({
 	// Width ranges from 48px to 200px, height maintains 16:9 aspect
 	const thumbWidth = Math.round(48 + (thumbnailSize / 100) * 152);
 	const thumbHeight = Math.round(thumbWidth * (9 / 16));
+	// containerRef is for the entire draggable area (including thumbnails)
+	// trackRef is for the visual progress bar (used for position calculations)
+	const containerRef = useRef<HTMLDivElement>(null);
 	const trackRef = useRef<HTMLDivElement>(null);
 	const thumbStripRef = useRef<HTMLDivElement>(null);
 	const activeHandlersRef = useRef<{
@@ -40,7 +43,7 @@ export function Timeline({
 		up: ((e: PointerEvent) => void) | null;
 	}>({ move: null, up: null });
 
-	// Calculate time from click position
+	// Calculate time from click position (uses trackRef for accurate positioning)
 	const getTimeFromPosition = useCallback(
 		(clientX: number): number => {
 			if (!trackRef.current || duration <= 0) return 0;
@@ -53,15 +56,22 @@ export function Timeline({
 		[duration],
 	);
 
-	// Handle click/drag on timeline
+	// Handle click/drag on timeline (entire area including thumbnails)
 	const handlePointerDown = useCallback(
 		(e: React.PointerEvent) => {
 			// Don't call preventDefault - causes issues with passive event listeners
-			const track = trackRef.current;
-			if (!track || disabled) return;
+			const container = containerRef.current;
+			if (!container || disabled) return;
 
-			// Capture pointer for drag tracking
-			track.setPointerCapture(e.pointerId);
+			// Store the pointerId for use in handlers (to ensure we capture/release the same pointer)
+			const pointerId = e.pointerId;
+
+			// Capture pointer for drag tracking on the container
+			try {
+				container.setPointerCapture(pointerId);
+			} catch {
+				// Ignore pointer capture failures (can happen in some browsers)
+			}
 
 			// Seek to click position
 			const time = getTimeFromPosition(e.clientX);
@@ -74,17 +84,21 @@ export function Timeline({
 			};
 
 			const handleUp = (upEvent: PointerEvent) => {
-				track.releasePointerCapture(upEvent.pointerId);
-				track.removeEventListener("pointermove", handleMove);
-				track.removeEventListener("pointerup", handleUp);
-				track.removeEventListener("pointercancel", handleUp);
+				try {
+					container.releasePointerCapture(upEvent.pointerId);
+				} catch {
+					// Ignore release failures
+				}
+				container.removeEventListener("pointermove", handleMove);
+				container.removeEventListener("pointerup", handleUp);
+				container.removeEventListener("pointercancel", handleUp);
 				activeHandlersRef.current = { move: null, up: null };
 			};
 
 			activeHandlersRef.current = { move: handleMove, up: handleUp };
-			track.addEventListener("pointermove", handleMove);
-			track.addEventListener("pointerup", handleUp);
-			track.addEventListener("pointercancel", handleUp);
+			container.addEventListener("pointermove", handleMove);
+			container.addEventListener("pointerup", handleUp);
+			container.addEventListener("pointercancel", handleUp);
 		},
 		[getTimeFromPosition, onSeek, disabled],
 	);
@@ -92,16 +106,17 @@ export function Timeline({
 
 	// Cleanup effect to remove event listeners if component unmounts during drag
 	useEffect(() => {
-		const track = trackRef.current;
+		const container = containerRef.current;
 		return () => {
 			const handlers = activeHandlersRef.current;
-			if (track && handlers.move) {
-				track.removeEventListener("pointermove", handlers.move);
-				track.removeEventListener("pointerup", handlers.up!);
-				track.removeEventListener("pointercancel", handlers.up!);
+			if (container && handlers.move) {
+				container.removeEventListener("pointermove", handlers.move);
+				container.removeEventListener("pointerup", handlers.up!);
+				container.removeEventListener("pointercancel", handlers.up!);
 			}
 		};
 	}, []);
+
 	// Handle horizontal scroll with mouse wheel/trackpad on thumbnail strip
 	// Use useEffect to add listener with { passive: false } to allow preventDefault
 	useEffect(() => {
@@ -129,21 +144,27 @@ export function Timeline({
 	const outPercent = outPoint !== null && duration > 0 ? (outPoint / duration) * 100 : null;
 
 	return (
-		<div className="w-full">
+		<div
+			ref={containerRef}
+			data-testid="timeline-container"
+			className={clsx(
+				"w-full touch-none",
+				disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+			)}
+			onPointerDown={handlePointerDown}
+		>
 			{/* Thumbnail strip (if available) */}
 			{thumbnails && thumbnails.length > 0 && (
 				<div
 					ref={thumbStripRef}
-					className="flex gap-1 mb-2 overflow-x-auto pb-1"
+					className="flex gap-1 mb-2 overflow-x-auto pb-1 pointer-events-none"
 				>
 					{thumbnails.map((thumb, index) => (
-						<button
+						<div
 							key={index}
-							onClick={() => onSeek(thumb.time)}
 							style={{ width: thumbWidth, height: thumbHeight }}
 							className={clsx(
 								"flex-shrink-0 rounded overflow-hidden",
-								"hover:ring-2 hover:ring-blue-500 transition-all",
 								currentTime >= thumb.time &&
 									(index === thumbnails.length - 1 ||
 										currentTime < thumbnails[index + 1]?.time) &&
@@ -152,10 +173,10 @@ export function Timeline({
 						>
 							<img
 								src={thumb.dataUrl}
-								alt=""
+								alt={`Frame at ${thumb.time.toFixed(1)}s`}
 								className="w-full h-full object-cover"
 							/>
-						</button>
+						</div>
 					))}
 				</div>
 			)}
@@ -163,12 +184,11 @@ export function Timeline({
 			{/* Timeline track */}
 			<div
 				ref={trackRef}
+				data-testid="timeline-track"
 				className={clsx(
-					"relative w-full bg-gray-700 rounded-full touch-none",
+					"relative w-full bg-gray-700 rounded-full",
 					isMobile ? "h-2" : "h-3",
-					disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
 				)}
-				onPointerDown={handlePointerDown}
 			>
 				{/* Trim selection highlight */}
 				{inPercent !== null && outPercent !== null && (

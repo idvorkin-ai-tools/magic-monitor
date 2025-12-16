@@ -4,6 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionThumbnail } from "../types/sessions";
 import { Timeline } from "./Timeline";
 
+// Helper to get the timeline container (the draggable area)
+const getContainer = (container: HTMLElement) =>
+	container.querySelector('[data-testid="timeline-container"]') as HTMLElement;
+
+// Helper to get the timeline track (the visual progress bar)
+const getTrack = (container: HTMLElement) =>
+	container.querySelector('[data-testid="timeline-track"]') as HTMLElement;
+
 describe("Timeline", () => {
 	const mockOnSeek = vi.fn();
 
@@ -281,8 +289,8 @@ describe("Timeline", () => {
 			expect(thumbnailImages[2]).toHaveAttribute("src", "data:image/jpeg;base64,thumb10");
 		});
 
-		it("clicking thumbnail seeks to that time", () => {
-			render(
+		it("clicking over thumbnail area seeks to position (thumbnails have pointer-events-none)", () => {
+			const { container } = render(
 				<Timeline
 					currentTime={0}
 					duration={10}
@@ -293,11 +301,27 @@ describe("Timeline", () => {
 				/>,
 			);
 
-			const thumbnailButtons = screen.getAllByRole("button");
-			// Click second thumbnail (time: 5)
-			fireEvent.click(thumbnailButtons[1]);
+			// Thumbnails now have pointer-events-none, clicks pass through to container
+			// The seek position is based on click X relative to track, not thumbnail time
+			const timelineContainer = getContainer(container);
+			const track = getTrack(container);
 
-			expect(mockOnSeek).toHaveBeenCalledWith(5);
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			// Click at 50% position
+			fireEvent.pointerDown(timelineContainer, { clientX: 500, pointerId: 1 });
+
+			expect(mockOnSeek).toHaveBeenCalledWith(5); // 50% of 10 duration
 		});
 
 		it("highlights current thumbnail", () => {
@@ -313,8 +337,9 @@ describe("Timeline", () => {
 			);
 
 			// Current time is 6, which falls in the second thumbnail's range (5-10)
-			const thumbnailButtons = container.querySelectorAll("button");
-			expect(thumbnailButtons[1]).toHaveClass("ring-2", "ring-blue-500");
+			// Thumbnails are now divs with flex-shrink-0 class
+			const thumbnailDivs = container.querySelectorAll(".flex-shrink-0");
+			expect(thumbnailDivs[1]).toHaveClass("ring-2", "ring-blue-500");
 		});
 
 		it("scales thumbnails based on thumbnailSize prop", () => {
@@ -330,10 +355,10 @@ describe("Timeline", () => {
 				/>,
 			);
 
-			const thumbnailButtons = container.querySelectorAll("button");
+			const thumbnailDivs = container.querySelectorAll(".flex-shrink-0");
 			// At size 0: width = 48 + (0/100) * 152 = 48
 			// height = 48 * (9/16) = 27
-			expect(thumbnailButtons[0]).toHaveStyle({ width: "48px", height: "27px" });
+			expect(thumbnailDivs[0]).toHaveStyle({ width: "48px", height: "27px" });
 		});
 
 		it("scales thumbnails to maximum size", () => {
@@ -349,10 +374,10 @@ describe("Timeline", () => {
 				/>,
 			);
 
-			const thumbnailButtons = container.querySelectorAll("button");
+			const thumbnailDivs = container.querySelectorAll(".flex-shrink-0");
 			// At size 100: width = 48 + (100/100) * 152 = 200
 			// height = Math.round(200 * (9/16)) = Math.round(112.5) = 113 (rounds up)
-			expect(thumbnailButtons[0]).toHaveStyle({ width: "200px", height: "113px" });
+			expect(thumbnailDivs[0]).toHaveStyle({ width: "200px", height: "113px" });
 		});
 	});
 
@@ -516,8 +541,9 @@ describe("Timeline", () => {
 				/>,
 			);
 
-			const track = container.querySelector(".bg-gray-700");
-			expect(track).toHaveClass("cursor-not-allowed", "opacity-50");
+			// Cursor styling is now on the container, not the track
+			const timelineContainer = getContainer(container);
+			expect(timelineContainer).toHaveClass("cursor-not-allowed", "opacity-50");
 		});
 
 		it("applies normal cursor when not disabled", () => {
@@ -532,15 +558,16 @@ describe("Timeline", () => {
 				/>,
 			);
 
-			const track = container.querySelector(".bg-gray-700");
-			expect(track).toHaveClass("cursor-pointer");
-			expect(track).not.toHaveClass("opacity-50");
+			// Cursor styling is now on the container, not the track
+			const timelineContainer = getContainer(container);
+			expect(timelineContainer).toHaveClass("cursor-pointer");
+			expect(timelineContainer).not.toHaveClass("opacity-50");
 		});
 	});
 
-	describe("cleanup", () => {
-		it("removes event listeners on unmount during drag", () => {
-			const { container, unmount } = render(
+	describe("drag behavior diagnosis", () => {
+		it("drag calls onSeek multiple times as pointer moves", () => {
+			const { container } = render(
 				<Timeline
 					currentTime={0}
 					duration={100}
@@ -564,10 +591,183 @@ describe("Timeline", () => {
 				toJSON: () => ({}),
 			});
 
-			const removeEventListenerSpy = vi.spyOn(track, "removeEventListener");
+			// Start drag at 25%
+			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledTimes(1);
+			expect(mockOnSeek).toHaveBeenLastCalledWith(25);
+
+			// Move to 50%
+			fireEvent.pointerMove(track, { clientX: 500, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledTimes(2);
+			expect(mockOnSeek).toHaveBeenLastCalledWith(50);
+
+			// Move to 75%
+			fireEvent.pointerMove(track, { clientX: 750, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledTimes(3);
+			expect(mockOnSeek).toHaveBeenLastCalledWith(75);
+
+			// Release
+			fireEvent.pointerUp(track, { clientX: 750, pointerId: 1 });
+
+			// Verify no more calls after release
+			fireEvent.pointerMove(track, { clientX: 500, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledTimes(3);
+		});
+
+		it("native event listeners are added on pointerdown", () => {
+			const { container } = render(
+				<Timeline
+					currentTime={0}
+					duration={100}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+				/>,
+			);
+
+			const timelineContainer = getContainer(container);
+			const track = getTrack(container);
+
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			// Event listeners are now added to the container, not the track
+			const addEventListenerSpy = vi.spyOn(timelineContainer, "addEventListener");
+
+			// Start drag on container
+			fireEvent.pointerDown(timelineContainer, { clientX: 250, pointerId: 1 });
+
+			// Verify native event listeners were added
+			expect(addEventListenerSpy).toHaveBeenCalledWith(
+				"pointermove",
+				expect.any(Function),
+			);
+			expect(addEventListenerSpy).toHaveBeenCalledWith(
+				"pointerup",
+				expect.any(Function),
+			);
+			expect(addEventListenerSpy).toHaveBeenCalledWith(
+				"pointercancel",
+				expect.any(Function),
+			);
+		});
+
+		it("dispatching native pointermove event triggers seek", () => {
+			const { container } = render(
+				<Timeline
+					currentTime={0}
+					duration={100}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+				/>,
+			);
+
+			const track = container.querySelector(".bg-gray-700") as HTMLElement;
+
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
 
 			// Start drag
 			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+			expect(mockOnSeek).toHaveBeenCalledWith(25);
+			mockOnSeek.mockClear();
+
+			// Dispatch a native PointerEvent directly
+			const moveEvent = new PointerEvent("pointermove", {
+				clientX: 500,
+				pointerId: 1,
+				bubbles: true,
+			});
+			track.dispatchEvent(moveEvent);
+
+			// Should have called onSeek with 50%
+			expect(mockOnSeek).toHaveBeenCalledWith(50);
+		});
+
+		it("pointer capture is called on pointerdown", () => {
+			const { container } = render(
+				<Timeline
+					currentTime={0}
+					duration={100}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+				/>,
+			);
+
+			const track = container.querySelector(".bg-gray-700") as HTMLElement;
+
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			const setPointerCaptureSpy = vi.spyOn(track, "setPointerCapture");
+
+			fireEvent.pointerDown(track, { clientX: 250, pointerId: 1 });
+
+			expect(setPointerCaptureSpy).toHaveBeenCalledWith(1);
+		});
+	});
+
+	describe("cleanup", () => {
+		it("removes event listeners on unmount during drag", () => {
+			const { container, unmount } = render(
+				<Timeline
+					currentTime={0}
+					duration={100}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+				/>,
+			);
+
+			const timelineContainer = getContainer(container);
+			const track = getTrack(container);
+
+			track.getBoundingClientRect = vi.fn().mockReturnValue({
+				left: 0,
+				width: 1000,
+				top: 0,
+				right: 1000,
+				bottom: 20,
+				height: 20,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			});
+
+			// Event listeners are now on the container, not the track
+			const removeEventListenerSpy = vi.spyOn(timelineContainer, "removeEventListener");
+
+			// Start drag on container
+			fireEvent.pointerDown(timelineContainer, { clientX: 250, pointerId: 1 });
 
 			// Unmount while dragging
 			unmount();
