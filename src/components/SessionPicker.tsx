@@ -158,12 +158,20 @@ export function SessionPicker({
 		[selectedSession, onRefresh, handleBack],
 	);
 
+	// Stop wheel events from propagating to parent zoom handler
+	const handleWheel = useCallback((e: React.WheelEvent) => {
+		e.stopPropagation();
+	}, []);
+
 	if (!isOpen) return null;
 
 	const isStorageWarning = storageUsage.used > SESSION_CONFIG.STORAGE_WARNING_BYTES;
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+		<div
+			className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+			onWheel={handleWheel}
+		>
 			<div ref={containerRef} className="bg-gray-900 rounded-2xl w-full max-w-4xl max-h-[90vh] mx-4 overflow-hidden flex flex-col">
 				{/* Header */}
 				<div className="flex items-center justify-between p-4 border-b border-gray-700">
