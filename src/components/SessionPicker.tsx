@@ -315,9 +315,9 @@ export function SessionPicker({
 						<div className="space-y-4">
 							{selectedSession && (
 								<>
-									{/* Preview controls */}
+									{/* Preview controls and actions */}
 									<div className="flex items-center justify-between gap-4">
-										{/* Hide/Show toggle */}
+										{/* Left: Hide/Show toggle */}
 										<button
 											onClick={() => setShowPreviews(!showPreviews)}
 											className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
@@ -333,15 +333,49 @@ export function SessionPicker({
 											{displayThumbnails.length} previews
 										</button>
 
-										{/* Size slider */}
-										{showPreviews && (
-											<PreviewSizeSlider
-												value={previewSize}
-												onChange={setPreviewSize}
-												width="w-24"
-												title="Thumbnail size"
-											/>
-										)}
+										{/* Right: Size slider and action buttons */}
+										<div className="flex items-center gap-3">
+											{showPreviews && (
+												<PreviewSizeSlider
+													value={previewSize}
+													onChange={setPreviewSize}
+													width="w-24"
+													title="Thumbnail size"
+												/>
+											)}
+
+											{/* Save button (only for unsaved sessions) */}
+											{!selectedSession.saved && (
+												<button
+													onClick={async () => {
+														const name = prompt("Name this clip:");
+														if (name) {
+															await SessionStorageService.markAsSaved(
+																selectedSession.id,
+																name,
+															);
+															await onRefresh();
+															handleBack();
+														}
+													}}
+													className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium flex items-center gap-1.5"
+												>
+													<span>⭐</span> Save
+												</button>
+											)}
+
+											{/* Delete button */}
+											<button
+												onClick={() => {
+													if (confirm("Delete this recording?")) {
+														handleDelete(selectedSession.id);
+													}
+												}}
+												className="px-3 py-1.5 bg-red-600/80 hover:bg-red-500 text-white rounded-lg text-sm font-medium flex items-center gap-1.5"
+											>
+												🗑 Delete
+											</button>
+										</div>
 									</div>
 
 									{/* Thumbnail grid - resizable via slider */}
@@ -358,34 +392,6 @@ export function SessionPicker({
 											isMobile={isMobile}
 										/>
 									)}
-
-									{/* Actions */}
-									<div className="flex justify-between items-center pt-4 border-t border-gray-700">
-										<button
-											onClick={() => onSelectSession(selectedSession.id, 0)}
-											className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium"
-										>
-											Play from Start
-										</button>
-										{!selectedSession.saved && (
-											<button
-												onClick={async () => {
-													const name = prompt("Name this clip:");
-													if (name) {
-														await SessionStorageService.markAsSaved(
-															selectedSession.id,
-															name,
-														);
-														await onRefresh();
-														handleBack();
-													}
-												}}
-												className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-											>
-												<span>⭐</span> Save
-											</button>
-										)}
-									</div>
 								</>
 							)}
 						</div>
