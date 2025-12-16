@@ -102,8 +102,9 @@ export function useReplayPlayer({
 	const blobUrlRef = useRef<string | null>(null);
 	const currentVideoElementRef = useRef<HTMLVideoElement | null>(null);
 	const isTrimPreviewRef = useRef(false);
-	const pendingSeekRef = useRef<{ time: number; sessionId: string } | null>(null);
+	const pendingSeekRef = useRef<{ time: number; requestId: number } | null>(null);
 	const loadTimeoutRef = useRef<number | null>(null);
+	const loadRequestIdRef = useRef(0); // For ignoring stale load completions
 
 	// Computed
 	const hasTrimSelection = inPoint !== null && outPoint !== null;
@@ -158,41 +159,55 @@ export function useReplayPlayer({
 	// Load a session for playback
 	const loadSession = useCallback(
 		async (sessionId: string) => {
-			// Cleanup previous session
-			cleanupBlobUrl();
+			// Increment request ID to track this specific load request
+			// If another loadSession is called before this completes, we'll ignore this result
+			const requestId = ++loadRequestIdRef.current;
+
 			clearLoadTimeout();
 			setIsLoading(true);
 			setIsReady(false);
 			setIsPlaying(false);
-			setCurrentTime(0);
-			setDuration(0);
-			setInPointState(null);
-			setOutPointState(null);
 			setError(null);
 			isTrimPreviewRef.current = false;
-			pendingSeekRef.current = null;
 
 			try {
-				// Load session metadata
+				// Load session metadata and blob BEFORE cleaning up old session
+				// This way if load fails, we still have the old session intact
 				const sessionData = await sessionStorageService.getSession(sessionId);
 				if (!sessionData) {
 					throw new Error("Session not found");
 				}
 
-				// Load video blob
 				const blob = await sessionStorageService.getBlob(sessionId);
 				if (!blob) {
 					throw new Error("Video not found");
 				}
 
-				// Create blob URL
+				// Check if this request is still current (another load may have started)
+				if (requestId !== loadRequestIdRef.current) {
+					// Another load started - ignore this result and cleanup the blob we created
+					return;
+				}
+
+				// NOW cleanup old session - new one loaded successfully
+				cleanupBlobUrl();
+
+				// Create blob URL for new session
 				const blobUrl = URL.createObjectURL(blob);
 				blobUrlRef.current = blobUrl;
 
+				// Reset playback state for new session
+				setCurrentTime(0);
+				setDuration(0);
+				setInPointState(null);
+				setOutPointState(null);
+				pendingSeekRef.current = null;
+
 				// If video element already exists, initialize it
-				if (videoElement) {
-					videoElement.src = blobUrl;
-					videoElement.load();
+				// Use ref instead of state to avoid stale closure and dependency issues
+				if (currentVideoElementRef.current) {
+					currentVideoElementRef.current.src = blobUrl;
+					currentVideoElementRef.current.load();
 				}
 				// Otherwise, callback ref will handle it when element mounts
 
@@ -215,20 +230,24 @@ export function useReplayPlayer({
 					}
 				}, loadTimeoutMs);
 			} catch (err) {
-				console.error("Failed to load session:", err);
-				setError(err instanceof Error ? err.message : "Failed to load session");
-				setSession(null);
-				setIsLoading(false);
+				// Only set error if this is still the current request
+				if (requestId === loadRequestIdRef.current) {
+					console.error("Failed to load session:", err);
+					setError(err instanceof Error ? err.message : "Failed to load session");
+					// Don't clear session - keep old one if load failed
+					setIsLoading(false);
+				}
 			}
 		},
-		[sessionStorageService, timerService, cleanupBlobUrl, clearLoadTimeout, videoElement, loadTimeoutMs],
+		[sessionStorageService, timerService, cleanupBlobUrl, clearLoadTimeout, loadTimeoutMs],
 	);
 
 	// Unload session
 	const unloadSession = useCallback(() => {
-		if (videoElement) {
-			videoElement.pause();
-			videoElement.src = "";
+		// Use ref instead of state to avoid stale closure and dependency issues
+		if (currentVideoElementRef.current) {
+			currentVideoElementRef.current.pause();
+			currentVideoElementRef.current.src = "";
 		}
 		cleanupBlobUrl();
 		clearLoadTimeout();
@@ -243,7 +262,7 @@ export function useReplayPlayer({
 		setError(null);
 		isTrimPreviewRef.current = false;
 		pendingSeekRef.current = null;
-	}, [videoElement, cleanupBlobUrl, clearLoadTimeout]);
+	}, [cleanupBlobUrl, clearLoadTimeout]);
 
 	// Playback controls
 	const play = useCallback(() => {
@@ -272,8 +291,9 @@ export function useReplayPlayer({
 				videoElement.currentTime = clampedTime;
 				setCurrentTime(clampedTime);
 			} else if (session) {
-				// Video not ready yet, store pending seek with session ID
-				pendingSeekRef.current = { time, sessionId: session.id };
+				// Video not ready yet, store pending seek with request ID (not session ID)
+				// This avoids stale closure issues since we check against the ref
+				pendingSeekRef.current = { time, requestId: loadRequestIdRef.current };
 			}
 		},
 		[videoElement, isReady, session],
@@ -355,8 +375,9 @@ export function useReplayPlayer({
 			setIsLoading(false);
 			setIsReady(true);
 
-			// Apply pending seek only if it's for the current session
-			if (pendingSeekRef.current && pendingSeekRef.current.sessionId === session?.id) {
+			// Apply pending seek only if it's for the current load request
+			// Using requestId ref avoids stale closure issues with session state
+			if (pendingSeekRef.current && pendingSeekRef.current.requestId === loadRequestIdRef.current) {
 				const clampedTime = Math.max(0, Math.min(pendingSeekRef.current.time, videoElement.duration));
 				videoElement.currentTime = clampedTime;
 				setCurrentTime(clampedTime);
@@ -436,7 +457,6 @@ export function useReplayPlayer({
 			videoElement.removeEventListener("pause", handlePause);
 			videoElement.removeEventListener("error", handleError);
 		};
-	// eslint-disable-next-line react-hooks/exhaustive-deps -- session?.id is accessed via ref
 	}, [videoElement, outPoint, clearLoadTimeout]);
 
 	// Save clip (create new saved session from trim)
@@ -448,9 +468,17 @@ export function useReplayPlayer({
 				// Update the session to mark it as saved
 				await sessionStorageService.markAsSaved(session.id, name);
 
-				// If we have trim points, save them too
+				// If we have trim points, validate and save them
 				if (inPoint !== null && outPoint !== null) {
-					await sessionStorageService.setTrimPoints(session.id, inPoint, outPoint);
+					// Validate trim points before saving
+					const validInPoint = Math.max(0, inPoint);
+					const validOutPoint = Math.min(outPoint, duration || outPoint);
+
+					// Only save if in < out and minimum duration met
+					if (validInPoint < validOutPoint && validOutPoint - validInPoint >= MIN_CLIP_DURATION) {
+						await sessionStorageService.setTrimPoints(session.id, validInPoint, validOutPoint);
+					}
+					// If validation fails, save without trim points (full clip)
 				}
 
 				// Refresh and return updated session
@@ -464,7 +492,7 @@ export function useReplayPlayer({
 				return null;
 			}
 		},
-		[session, sessionStorageService, inPoint, outPoint],
+		[session, sessionStorageService, inPoint, outPoint, duration],
 	);
 
 	// Export video

@@ -16,6 +16,7 @@ import { useZoomPan } from "../hooks/useZoomPan";
 import type { AppState } from "../types/sessions";
 import { AboutModal } from "./AboutModal";
 import { BugReportModal } from "./BugReportModal";
+import { EdgeIndicator } from "./EdgeIndicator";
 import { ErrorOverlay } from "./ErrorOverlay";
 import { HandSkeleton } from "./HandSkeleton";
 import { Minimap } from "./Minimap";
@@ -259,7 +260,10 @@ export function CameraStage() {
 	return (
 		<div
 			ref={containerRef}
-			className={`relative w-full h-full bg-black overflow-hidden flex items-center justify-center ${isPickingColor ? "cursor-crosshair" : "cursor-move"}`}
+			className={clsx(
+				"relative w-full h-full bg-black overflow-hidden flex items-center justify-center",
+				isPickingColor ? "cursor-crosshair" : "cursor-move",
+			)}
 			onWheel={handleWheel}
 			onMouseDown={handleMouseDownWithColorPicking}
 			onMouseMove={handleMouseMove}
@@ -268,24 +272,19 @@ export function CameraStage() {
 		>
 			{/* Flash Warning Overlay */}
 			<div
-				className={`absolute inset-0 border-[20px] border-red-600 z-40 pointer-events-none transition-opacity duration-100 ${isFlashing ? "opacity-100" : "opacity-0"}`}
+				className={clsx(
+					"absolute inset-0 border-[20px] border-red-600 z-40 pointer-events-none transition-opacity duration-100",
+					isFlashing ? "opacity-100" : "opacity-0",
+				)}
 			/>
 
 			{/* Pan Boundary Debug Overlay (see docs/SMART_ZOOM_SPEC.md) */}
 			{isSmartZoom && (
 				<>
-					<div
-						className={`absolute left-0 top-0 bottom-0 w-2 bg-red-500 z-40 pointer-events-none transition-opacity duration-150 ${smartZoom.clampedEdges.left ? "opacity-100" : "opacity-0"}`}
-					/>
-					<div
-						className={`absolute right-0 top-0 bottom-0 w-2 bg-red-500 z-40 pointer-events-none transition-opacity duration-150 ${smartZoom.clampedEdges.right ? "opacity-100" : "opacity-0"}`}
-					/>
-					<div
-						className={`absolute top-0 left-0 right-0 h-2 bg-red-500 z-40 pointer-events-none transition-opacity duration-150 ${smartZoom.clampedEdges.top ? "opacity-100" : "opacity-0"}`}
-					/>
-					<div
-						className={`absolute bottom-0 left-0 right-0 h-2 bg-red-500 z-40 pointer-events-none transition-opacity duration-150 ${smartZoom.clampedEdges.bottom ? "opacity-100" : "opacity-0"}`}
-					/>
+					<EdgeIndicator edge="left" visible={smartZoom.clampedEdges.left} />
+					<EdgeIndicator edge="right" visible={smartZoom.clampedEdges.right} />
+					<EdgeIndicator edge="top" visible={smartZoom.clampedEdges.top} />
+					<EdgeIndicator edge="bottom" visible={smartZoom.clampedEdges.bottom} />
 				</>
 			)}
 
@@ -414,7 +413,10 @@ export function CameraStage() {
 				autoPlay
 				playsInline
 				muted
-				className={`max-w-full max-h-full object-contain transition-transform duration-75 ease-out ${appState === "replay" ? "hidden" : "block"}`}
+				className={clsx(
+					"max-w-full max-h-full object-contain transition-transform duration-75 ease-out",
+					appState === "replay" ? "hidden" : "block",
+				)}
 				style={{
 					// See docs/SMART_ZOOM_SPEC.md for transform details
 					transform: getVideoTransform(),
@@ -445,7 +447,10 @@ export function CameraStage() {
 			{/* Controls Overlay (shown only in live mode) */}
 			{appState === "live" && (
 				<div
-					className={`absolute left-1/2 -translate-x-1/2 flex flex-col gap-4 items-center z-50 w-full max-w-4xl ${isMobile ? "bottom-3 px-0" : "bottom-12 px-4"}`}
+					className={clsx(
+						"absolute left-1/2 -translate-x-1/2 flex flex-col gap-4 items-center z-50 w-full max-w-4xl",
+						isMobile ? "bottom-3 px-0" : "bottom-12 px-4",
+					)}
 				>
 					<div className="bg-black/50 backdrop-blur-md p-3 rounded-2xl flex items-center gap-3">
 						{/* Sessions Button */}
