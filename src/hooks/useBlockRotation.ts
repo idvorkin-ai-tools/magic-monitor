@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { TimerService, type TimerServiceType } from "../services/TimerService";
 import { SESSION_CONFIG } from "../types/sessions";
 
@@ -42,6 +42,16 @@ export function useBlockRotation({
 			timerService.clearTimeout(blockTimerRef.current);
 			blockTimerRef.current = null;
 		}
+	}, [timerService]);
+
+	// Cleanup on unmount to prevent calling onBlockComplete after unmount
+	useEffect(() => {
+		return () => {
+			if (blockTimerRef.current) {
+				timerService.clearTimeout(blockTimerRef.current);
+				blockTimerRef.current = null;
+			}
+		};
 	}, [timerService]);
 
 	return {
