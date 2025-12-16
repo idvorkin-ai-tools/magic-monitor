@@ -71,6 +71,11 @@ export function CameraStage() {
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const [isAboutOpen, setIsAboutOpen] = useState(false);
 
+	// Stable callbacks for modal close handlers
+	// These must be stable to prevent useFocusTrap from re-running and stealing focus
+	const handleCloseSettings = useCallback(() => setIsSettingsOpen(false), []);
+	const handleCloseAbout = useCallback(() => setIsAboutOpen(false), []);
+
 	// Manual zoom/pan callback - disables smart zoom when user manually zooms
 	// Wrapped in useCallback to prevent effect re-runs in useZoomPan
 	const handleManualZoom = useCallback(() => {
@@ -357,7 +362,7 @@ export function CameraStage() {
 
 			<SettingsModal
 				isOpen={isSettingsOpen}
-				onClose={() => setIsSettingsOpen(false)}
+				onClose={handleCloseSettings}
 				devices={devices}
 				selectedDeviceId={selectedDeviceId}
 				onDeviceChange={setSelectedDeviceId}
@@ -396,7 +401,7 @@ export function CameraStage() {
 
 			<AboutModal
 				isOpen={isAboutOpen}
-				onClose={() => setIsAboutOpen(false)}
+				onClose={handleCloseAbout}
 				githubRepoUrl={bugReporter.githubRepoUrl}
 				onReportBug={bugReporter.open}
 				bugReportShortcut={bugReportShortcut}

@@ -364,4 +364,183 @@ describe("useCamera", () => {
 			);
 		});
 	});
+
+	describe("resolution handling", () => {
+		it("starts with default 4k resolution", async () => {
+			// Set up devices to avoid auto-selection triggering extra renders
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+
+			const { result } = renderHook(() => useCamera("device-1"));
+
+			await waitFor(() => {
+				expect(CameraService.start).toHaveBeenCalled();
+			});
+
+			expect(result.current.resolution).toBe("4k");
+		});
+
+		it("passes resolution to CameraService.start", async () => {
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+
+			renderHook(() => useCamera("device-1"));
+
+			await waitFor(() => {
+				expect(CameraService.start).toHaveBeenCalledWith(
+					"device-1",
+					"4k",
+					"landscape",
+				);
+			});
+		});
+
+		it("restarts stream when resolution changes", async () => {
+			const stream1 = createMockStream("device-1");
+			const stream2 = createMockStream("device-1");
+
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+			vi.mocked(CameraService.start)
+				.mockResolvedValueOnce(stream1)
+				.mockResolvedValueOnce(stream2);
+
+			const { result } = renderHook(() => useCamera("device-1"));
+
+			await waitFor(() => {
+				expect(result.current.stream).toBe(stream1);
+			});
+
+			act(() => {
+				result.current.setResolution("1080p");
+			});
+
+			await waitFor(() => {
+				expect(result.current.stream).toBe(stream2);
+			});
+
+			// Verify CameraService.start was called with new resolution
+			expect(CameraService.start).toHaveBeenCalledWith(
+				"device-1",
+				"1080p",
+				"landscape",
+			);
+		});
+
+		it("updates resolution state when setResolution is called", async () => {
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+
+			const { result } = renderHook(() => useCamera("device-1"));
+
+			await waitFor(() => {
+				expect(CameraService.start).toHaveBeenCalled();
+			});
+
+			act(() => {
+				result.current.setResolution("720p");
+			});
+
+			expect(result.current.resolution).toBe("720p");
+		});
+
+		it("stops previous stream when resolution changes", async () => {
+			const stream1 = createMockStream("device-1");
+			const stream2 = createMockStream("device-1");
+
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+			vi.mocked(CameraService.start)
+				.mockResolvedValueOnce(stream1)
+				.mockResolvedValueOnce(stream2);
+
+			const { result } = renderHook(() => useCamera("device-1"));
+
+			await waitFor(() => {
+				expect(result.current.stream).toBe(stream1);
+			});
+
+			act(() => {
+				result.current.setResolution("1080p");
+			});
+
+			await waitFor(() => {
+				expect(result.current.stream).toBe(stream2);
+			});
+
+			expect(CameraService.stop).toHaveBeenCalledWith(stream1);
+		});
+	});
+
+	describe("orientation handling", () => {
+		it("starts with default landscape orientation", async () => {
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+
+			const { result } = renderHook(() => useCamera("device-1"));
+
+			await waitFor(() => {
+				expect(CameraService.start).toHaveBeenCalled();
+			});
+
+			expect(result.current.orientation).toBe("landscape");
+		});
+
+		it("restarts stream when orientation changes", async () => {
+			const stream1 = createMockStream("device-1");
+			const stream2 = createMockStream("device-1");
+
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+			vi.mocked(CameraService.start)
+				.mockResolvedValueOnce(stream1)
+				.mockResolvedValueOnce(stream2);
+
+			const { result } = renderHook(() => useCamera("device-1"));
+
+			await waitFor(() => {
+				expect(result.current.stream).toBe(stream1);
+			});
+
+			act(() => {
+				result.current.setOrientation("portrait");
+			});
+
+			await waitFor(() => {
+				expect(result.current.stream).toBe(stream2);
+			});
+
+			// Verify CameraService.start was called with new orientation
+			expect(CameraService.start).toHaveBeenCalledWith(
+				"device-1",
+				"4k",
+				"portrait",
+			);
+		});
+
+		it("updates orientation state when setOrientation is called", async () => {
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+
+			const { result } = renderHook(() => useCamera("device-1"));
+
+			await waitFor(() => {
+				expect(CameraService.start).toHaveBeenCalled();
+			});
+
+			act(() => {
+				result.current.setOrientation("portrait");
+			});
+
+			expect(result.current.orientation).toBe("portrait");
+		});
+	});
 });
