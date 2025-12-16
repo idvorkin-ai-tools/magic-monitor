@@ -83,11 +83,11 @@ export function SessionPicker({
 		}
 	}, [isOpen, onRefresh]);
 
-	// Show up to 12 thumbnails, evenly distributed across the video
+	// Show up to 15 thumbnails, evenly distributed across the video
 	const displayThumbnails = useMemo(() => {
 		if (!selectedSession) return [];
 		const all = selectedSession.thumbnails;
-		const maxThumbnails = 12;
+		const maxThumbnails = 15;
 
 		if (all.length <= maxThumbnails) {
 			return all;

@@ -227,11 +227,12 @@ test.describe("Magic Monitor E2E", () => {
 		);
 		await sessionThumbnails.first().click();
 
-		// Timeline view should show "Play from Start" button
-		await expect(page.getByText("Play from Start")).toBeVisible();
+		// Timeline view should show thumbnails (previews)
+		const timelineThumbs = page.locator('img[alt^="Frame at"]');
+		await expect(timelineThumbs.first()).toBeVisible({ timeout: 5000 });
 
-		// Click "Play from Start" to enter replay mode
-		await page.getByText("Play from Start").click();
+		// Click first thumbnail to enter replay mode
+		await timelineThumbs.first().click();
 
 		// Verify Replay UI is shown
 		await expect(page.getByText("REPLAY MODE")).toBeVisible();
@@ -308,8 +309,10 @@ test.describe("Magic Monitor E2E", () => {
 		);
 		await sessionThumbnails.first().click();
 
-		// Play from start to enter replay mode
-		await page.getByText("Play from Start").click();
+		// Click first thumbnail to enter replay mode
+		const timelineThumbs = page.locator('img[alt^="Frame at"]');
+		await expect(timelineThumbs.first()).toBeVisible({ timeout: 5000 });
+		await timelineThumbs.first().click();
 		await expect(page.getByText("REPLAY MODE")).toBeVisible();
 
 		// Set up download listener before clicking share

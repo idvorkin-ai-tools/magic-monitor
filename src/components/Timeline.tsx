@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useCallback, useEffect, useRef, type WheelEvent } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { SessionThumbnail } from "../types/sessions";
 
 // ===== Types =====
@@ -103,19 +103,25 @@ export function Timeline({
 		};
 	}, []);
 	// Handle horizontal scroll with mouse wheel/trackpad on thumbnail strip
-	const handleThumbWheelScroll = useCallback((e: WheelEvent<HTMLDivElement>) => {
+	// Use useEffect to add listener with { passive: false } to allow preventDefault
+	useEffect(() => {
 		const strip = thumbStripRef.current;
 		if (!strip) return;
 
-		// Handle both vertical and horizontal scroll gestures
-		// Trackpad horizontal swipe = deltaX, vertical swipe = deltaY
-		// Mouse wheel = deltaY only
-		const scrollAmount = e.deltaX !== 0 ? e.deltaX : e.deltaY;
-		if (scrollAmount !== 0) {
-			e.preventDefault();
-			strip.scrollLeft += scrollAmount;
-		}
-	}, []);
+		const handleWheel = (e: globalThis.WheelEvent) => {
+			// Handle both vertical and horizontal scroll gestures
+			// Trackpad horizontal swipe = deltaX, vertical swipe = deltaY
+			// Mouse wheel = deltaY only
+			const scrollAmount = e.deltaX !== 0 ? e.deltaX : e.deltaY;
+			if (scrollAmount !== 0) {
+				e.preventDefault();
+				strip.scrollLeft += scrollAmount;
+			}
+		};
+
+		strip.addEventListener("wheel", handleWheel, { passive: false });
+		return () => strip.removeEventListener("wheel", handleWheel);
+	}, [thumbnails]); // Re-attach when thumbnails change (strip might remount)
 
 	// Calculate positions as percentages
 	const currentPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -129,7 +135,6 @@ export function Timeline({
 				<div
 					ref={thumbStripRef}
 					className="flex gap-1 mb-2 overflow-x-auto pb-1"
-					onWheel={handleThumbWheelScroll}
 				>
 					{thumbnails.map((thumb, index) => (
 						<button
