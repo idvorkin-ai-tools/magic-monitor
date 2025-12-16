@@ -7,7 +7,9 @@ import type { PracticeSession } from "../types/sessions";
 import { SESSION_CONFIG } from "../types/sessions";
 import { formatDuration } from "../utils/formatters";
 import { selectThumbnailsForDisplay } from "../utils/thumbnailSelection";
+import { PreviewSizeSlider } from "./PreviewSizeSlider";
 import { SessionThumbnail } from "./SessionThumbnail";
+import { ThumbnailGrid } from "./ThumbnailGrid";
 
 // ===== Types =====
 
@@ -328,54 +330,28 @@ export function SessionPicker({
 
 										{/* Size slider */}
 										{showPreviews && (
-											<div className="flex items-center gap-2">
-												<span className="text-xs text-gray-500">-</span>
-												<input
-													type="range"
-													min="0"
-													max="100"
-													value={previewSize}
-													onChange={(e) => setPreviewSize(Number(e.target.value))}
-													className="w-24 h-1 accent-blue-500 cursor-pointer"
-													title="Thumbnail size"
-												/>
-												<span className="text-xs text-gray-500">+</span>
-											</div>
+											<PreviewSizeSlider
+												value={previewSize}
+												onChange={setPreviewSize}
+												width="w-24"
+												title="Thumbnail size"
+											/>
 										)}
 									</div>
 
 									{/* Thumbnail grid - resizable via slider */}
 									{showPreviews && (
-										<div
-											className="grid gap-2"
-											style={{
-												// Dynamic columns: slider 0=many small, 100=few large
-												// Mobile: 1-4 columns, Desktop: 2-10 columns
-												gridTemplateColumns: `repeat(${
-													isMobile
-														? Math.max(1, Math.round(4 - (previewSize / 100) * 3))
-														: Math.max(2, Math.round(10 - (previewSize / 100) * 8))
-												}, minmax(0, 1fr))`,
-											}}
-										>
-											{displayThumbnails.map((thumb, index) => (
-												<button
-													key={index}
-													onClick={() => handleTimelineSelect(thumb.time)}
-													className="relative aspect-video rounded-lg overflow-hidden bg-gray-800 hover:ring-2 hover:ring-blue-500 transition-all group"
-												>
-													<img
-														src={thumb.dataUrl}
-														alt={`Frame at ${formatDuration(thumb.time)}`}
-														className="w-full h-full object-cover"
-													/>
-													<div className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded font-mono">
-														{formatDuration(thumb.time)}
-													</div>
-													<div className="absolute inset-0 bg-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-												</button>
-											))}
-										</div>
+										<ThumbnailGrid
+											thumbnails={displayThumbnails}
+											onSelect={handleTimelineSelect}
+											layout="aspect"
+											columns={
+												isMobile
+													? Math.max(1, Math.round(4 - (previewSize / 100) * 3))
+													: Math.max(2, Math.round(10 - (previewSize / 100) * 8))
+											}
+											isMobile={isMobile}
+										/>
 									)}
 
 									{/* Actions */}

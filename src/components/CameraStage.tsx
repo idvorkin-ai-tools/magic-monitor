@@ -21,6 +21,7 @@ import { Minimap } from "./Minimap";
 import { ReplayView } from "./ReplayView";
 import { SessionPicker } from "./SessionPicker";
 import { SettingsModal } from "./SettingsModal";
+import { SmartZoomToggle } from "./SmartZoomToggle";
 import { StatusButton } from "./StatusButton";
 
 export function CameraStage() {
@@ -486,21 +487,13 @@ export function CameraStage() {
 						<div className="h-6 w-px bg-white/20" />
 
 						{/* Status Toggles */}
-						<StatusButton
-							onClick={() => setIsSmartZoom(!isSmartZoom)}
-							disabled={smartZoom.isModelLoading}
-							active={isSmartZoom && !smartZoom.isModelLoading}
-							color="green"
-							title="Smart Zoom - Auto-follow movement"
-						>
-							{smartZoom.isModelLoading
-								? smartZoom.loadingPhase === "initializing"
-									? "Initializing..."
-									: `Downloading ${smartZoom.loadingProgress}%`
-								: isSmartZoom
-									? "Smart ✓"
-									: "Smart"}
-						</StatusButton>
+						<SmartZoomToggle
+							isSmartZoom={isSmartZoom}
+							onSmartZoomChange={setIsSmartZoom}
+							isModelLoading={smartZoom.isModelLoading}
+							loadingProgress={smartZoom.loadingProgress}
+							loadingPhase={smartZoom.loadingPhase}
+						/>
 
 						<StatusButton
 							onClick={() => setFlashEnabled(!flashEnabled)}

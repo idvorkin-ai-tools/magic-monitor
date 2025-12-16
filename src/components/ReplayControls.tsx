@@ -3,7 +3,9 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useMobileDetection } from "../hooks/useMobileDetection";
 import type { ReplayPlayerControls } from "../hooks/useReplayPlayer";
 import { selectThumbnailsForDisplay } from "../utils/thumbnailSelection";
-import { StatusButton } from "./StatusButton";
+import { PreviewSizeSlider } from "./PreviewSizeSlider";
+import { SmartZoomToggle } from "./SmartZoomToggle";
+import { ThumbnailGrid } from "./ThumbnailGrid";
 import { Timeline } from "./Timeline";
 
 // ===== Types =====
@@ -158,22 +160,16 @@ export function ReplayControls({
 					<div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 cursor-move">
 						<span className="text-xs text-gray-400 select-none">Previews (drag to move)</span>
 						<div className="flex items-center gap-2">
-							<span className="text-xs text-gray-500">-</span>
-							<input
-								type="range"
-								min="0"
-								max="100"
+							<PreviewSizeSlider
 								value={thumbnailSize}
-								onChange={(e) => setThumbnailSize(Number(e.target.value))}
-								className="w-20 h-1 accent-blue-500 cursor-pointer"
+								onChange={setThumbnailSize}
 								onPointerDown={(e) => e.stopPropagation()}
 							/>
-							<span className="text-xs text-gray-500">+</span>
 							<button
 								onClick={toggleFloating}
 								className="ml-2 text-xs text-gray-400 hover:text-white"
 								title="Dock previews"
-							aria-label="Dock previews"
+								aria-label="Dock previews"
 								onPointerDown={(e) => e.stopPropagation()}
 							>
 								⬋
@@ -182,33 +178,16 @@ export function ReplayControls({
 					</div>
 					{/* Thumbnails */}
 					<div className="p-2 overflow-auto" style={{ maxHeight: "calc(50vh - 40px)" }}>
-						<div className="flex flex-wrap gap-1 justify-center">
-							{displayThumbnails.map((thumb, index) => (
-								<button
-									key={index}
-									onClick={() => seek(thumb.time)}
-									onPointerDown={(e) => e.stopPropagation()}
-									style={{ width: floatingThumbWidth, height: floatingThumbHeight }}
-									className={clsx(
-										"flex-shrink-0 rounded overflow-hidden relative",
-										"hover:ring-2 hover:ring-blue-500 transition-all",
-										currentTime >= thumb.time &&
-											(index === displayThumbnails.length - 1 ||
-												currentTime < displayThumbnails[index + 1]?.time) &&
-											"ring-2 ring-blue-500",
-									)}
-								>
-									<img
-										src={thumb.dataUrl}
-										alt=""
-										className="w-full h-full object-cover"
-									/>
-									<div className="absolute bottom-0.5 left-0.5 bg-black/70 text-white text-[10px] px-1 rounded font-mono">
-										{Math.floor(thumb.time / 60)}:{Math.floor(thumb.time % 60).toString().padStart(2, "0")}
-									</div>
-								</button>
-							))}
-						</div>
+						<ThumbnailGrid
+							thumbnails={displayThumbnails}
+							onSelect={seek}
+							currentTime={currentTime}
+							layout="fixed"
+							thumbWidth={floatingThumbWidth}
+							thumbHeight={floatingThumbHeight}
+							gap={4}
+							onPointerDown={(e) => e.stopPropagation()}
+						/>
 					</div>
 				</div>
 			)}
@@ -245,21 +224,15 @@ export function ReplayControls({
 						</button>
 						{showThumbnails && (
 							<div className="flex items-center gap-2">
-								<span className="text-xs text-gray-500">-</span>
-								<input
-									type="range"
-									min="0"
-									max="100"
+								<PreviewSizeSlider
 									value={thumbnailSize}
-									onChange={(e) => setThumbnailSize(Number(e.target.value))}
-									className="w-20 h-1 accent-blue-500 cursor-pointer"
+									onChange={setThumbnailSize}
 								/>
-								<span className="text-xs text-gray-500">+</span>
 								<button
 									onClick={toggleFloating}
 									className="ml-2 text-xs text-gray-400 hover:text-white"
 									title="Float previews"
-							aria-label="Float previews"
+									aria-label="Float previews"
 								>
 									⬈
 								</button>
@@ -364,21 +337,13 @@ export function ReplayControls({
 						{onSmartZoomChange && !isMobile && (
 							<>
 								<div className="h-6 w-px bg-gray-700" />
-								<StatusButton
-									onClick={() => onSmartZoomChange(!isSmartZoom)}
-									disabled={isModelLoading}
-									active={isSmartZoom && !isModelLoading}
-									color="green"
-									title="Smart Zoom - Auto-follow movement"
-								>
-									{isModelLoading
-										? loadingPhase === "initializing"
-											? "Initializing..."
-											: `Downloading ${loadingProgress}%`
-										: isSmartZoom
-											? "Smart ✓"
-											: "Smart"}
-								</StatusButton>
+								<SmartZoomToggle
+									isSmartZoom={isSmartZoom}
+									onSmartZoomChange={onSmartZoomChange}
+									isModelLoading={isModelLoading}
+									loadingProgress={loadingProgress}
+									loadingPhase={loadingPhase}
+								/>
 							</>
 						)}
 					</div>

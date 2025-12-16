@@ -3,8 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RecordingSession } from "../services/MediaRecorderService";
 import { useBlockRecorder } from "./useBlockRecorder";
 
-// Mock MediaStream for jsdom
-class MockMediaStream {}
+// Mock MediaStream for jsdom with stream health properties
+class MockMediaStream {
+	active = true;
+	getVideoTracks() {
+		return [{ readyState: "live" }];
+	}
+	getAudioTracks() {
+		return [];
+	}
+}
 // @ts-expect-error - jsdom doesn't have MediaStream
 globalThis.MediaStream = MockMediaStream;
 
