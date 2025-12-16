@@ -34,6 +34,7 @@ export function useThumbnailCapture({
 	const [thumbnails, setThumbnails] = useState<SessionThumbnail[]>([]);
 	const thumbnailsRef = useRef<SessionThumbnail[]>([]);
 	const thumbnailTimerRef = useRef<number | null>(null);
+	const firstFrameRetryRef = useRef<number | null>(null);
 	const blockStartTimeRef = useRef<number>(0);
 	const isCapturingRef = useRef(false); // Track if capture is active to avoid setState after stop
 
@@ -71,15 +72,43 @@ export function useThumbnailCapture({
 			setThumbnails([]);
 			isCapturingRef.current = true;
 
-			// Capture first thumbnail immediately
-			captureNow(blockStartTime);
+			// Clear any existing first frame retry
+			if (firstFrameRetryRef.current) {
+				timerService.clearInterval(firstFrameRetryRef.current);
+				firstFrameRetryRef.current = null;
+			}
+
+			// Try to capture first thumbnail immediately
+			const video = videoRef.current;
+			const videoReady = video && video.readyState >= 2;
+
+			if (videoReady) {
+				captureNow(blockStartTime);
+			} else {
+				// Video not ready - retry until we get the first frame
+				let retryCount = 0;
+				const MAX_RETRIES = 50; // 5 seconds max
+				firstFrameRetryRef.current = timerService.setInterval(() => {
+					retryCount++;
+					// Stop retrying if we got a thumbnail, stopped capturing, or hit max
+					if (thumbnailsRef.current.length > 0 || !isCapturingRef.current || retryCount >= MAX_RETRIES) {
+						if (firstFrameRetryRef.current) {
+							timerService.clearInterval(firstFrameRetryRef.current);
+							firstFrameRetryRef.current = null;
+						}
+						return;
+					}
+					// Try to capture
+					captureNow(blockStartTimeRef.current);
+				}, 100);
+			}
 
 			// Set up interval for subsequent captures
 			thumbnailTimerRef.current = timerService.setInterval(() => {
 				captureNow(blockStartTimeRef.current);
 			}, thumbnailIntervalMs);
 		},
-		[captureNow, thumbnailIntervalMs, timerService],
+		[captureNow, thumbnailIntervalMs, timerService, videoRef],
 	);
 
 	const stopCapture = useCallback(
@@ -92,6 +121,11 @@ export function useThumbnailCapture({
 			if (thumbnailTimerRef.current) {
 				timerService.clearInterval(thumbnailTimerRef.current);
 				thumbnailTimerRef.current = null;
+			}
+
+			if (firstFrameRetryRef.current) {
+				timerService.clearInterval(firstFrameRetryRef.current);
+				firstFrameRetryRef.current = null;
 			}
 
 			const captured = [...thumbnailsRef.current];
