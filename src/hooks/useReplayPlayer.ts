@@ -4,6 +4,10 @@ import {
 	type SessionStorageServiceType,
 } from "../services/SessionStorageService";
 import { ShareService, type ShareServiceType } from "../services/ShareService";
+import {
+	TimerService,
+	type TimerServiceType,
+} from "../services/TimerService";
 import type { PracticeSession } from "../types/sessions";
 
 // ===== Types =====
@@ -12,6 +16,7 @@ export interface ReplayPlayerConfig {
 	// Dependency injection for testing
 	sessionStorageService?: SessionStorageServiceType;
 	shareService?: ShareServiceType;
+	timerService?: TimerServiceType;
 	loadTimeoutMs?: number;
 }
 
@@ -68,6 +73,7 @@ const DEFAULT_LOAD_TIMEOUT_MS = 10000; // 10 seconds
 export function useReplayPlayer({
 	sessionStorageService = SessionStorageService,
 	shareService = ShareService,
+	timerService = TimerService,
 	loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS,
 }: ReplayPlayerConfig = {}): ReplayPlayerControls {
 	// Session state
@@ -118,10 +124,10 @@ export function useReplayPlayer({
 	// Clear load timeout
 	const clearLoadTimeout = useCallback(() => {
 		if (loadTimeoutRef.current !== null) {
-			clearTimeout(loadTimeoutRef.current);
+			timerService.clearTimeout(loadTimeoutRef.current);
 			loadTimeoutRef.current = null;
 		}
-	}, []);
+	}, [timerService]);
 
 	// Callback ref for video element - triggers initialization when element mounts
 	const videoRef = useCallback(
@@ -201,7 +207,7 @@ export function useReplayPlayer({
 				}
 
 				// Set timeout for loading
-				loadTimeoutRef.current = window.setTimeout(() => {
+				loadTimeoutRef.current = timerService.setTimeout(() => {
 					// Check actual video state using ref, not stale closure
 					if (currentVideoElementRef.current && currentVideoElementRef.current.readyState < 1) {
 						setError("Video loading timed out - please try again");
@@ -215,7 +221,7 @@ export function useReplayPlayer({
 				setIsLoading(false);
 			}
 		},
-		[sessionStorageService, cleanupBlobUrl, clearLoadTimeout, videoElement, loadTimeoutMs],
+		[sessionStorageService, timerService, cleanupBlobUrl, clearLoadTimeout, videoElement, loadTimeoutMs],
 	);
 
 	// Unload session

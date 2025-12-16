@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import type { ReplayPlayerControls } from "../hooks/useReplayPlayer";
 import type { SmoothingPreset } from "../smoothing";
+import { ErrorOverlay } from "./ErrorOverlay";
+import { LoadingOverlay } from "./LoadingOverlay";
 import { Minimap } from "./Minimap";
 import { ReplayControls } from "./ReplayControls";
 
@@ -152,33 +154,15 @@ export function ReplayView({
 			</div>
 
 			{/* Loading overlay */}
-			{isLoading && (
-				<div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60">
-					<div className="flex flex-col items-center gap-3">
-						<div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-						<span className="text-white text-sm">Loading video...</span>
-					</div>
-				</div>
-			)}
+			{isLoading && <LoadingOverlay message="Loading video..." />}
 
 			{/* Error overlay */}
 			{error && (
-				<div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80">
-					<div className="flex flex-col items-center gap-4 text-center px-4">
-						<div className="w-12 h-12 rounded-full bg-red-600/20 flex items-center justify-center">
-							<span className="text-red-500 text-2xl">!</span>
-						</div>
-						<span className="text-white text-lg font-medium">
-							{error}
-						</span>
-						<button
-							onClick={onExit}
-							className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
-						>
-							Go Back
-						</button>
-					</div>
-				</div>
+				<ErrorOverlay
+					message={error}
+					onAction={onExit}
+					actionLabel="Go Back"
+				/>
 			)}
 
 			{/* Minimap (zoom indicator) - only when smart zoom is active */}

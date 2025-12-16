@@ -48,3 +48,18 @@ export function stop(stream: MediaStream | null): void {
 		track.stop();
 	});
 }
+
+/**
+ * Add a listener for device changes (cameras connected/disconnected).
+ * Returns a cleanup function to remove the listener.
+ */
+export function addDeviceChangeListener(callback: () => void): () => void {
+	if (!isSecureContext()) {
+		// Return no-op cleanup if not in secure context
+		return () => {};
+	}
+	navigator.mediaDevices.addEventListener("devicechange", callback);
+	return () => {
+		navigator.mediaDevices.removeEventListener("devicechange", callback);
+	};
+}

@@ -16,6 +16,7 @@ import { useZoomPan } from "../hooks/useZoomPan";
 import type { AppState } from "../types/sessions";
 import { AboutModal } from "./AboutModal";
 import { BugReportModal } from "./BugReportModal";
+import { ErrorOverlay } from "./ErrorOverlay";
 import { HandSkeleton } from "./HandSkeleton";
 import { Minimap } from "./Minimap";
 import { ReplayView } from "./ReplayView";
@@ -392,25 +393,18 @@ export function CameraStage() {
 			</div>
 
 			{error && (
-				<div className="absolute inset-0 flex items-center justify-center z-50 bg-black/80">
-					<div className="flex flex-col items-center gap-4 max-w-md mx-4 text-center">
-						<p className="text-xl font-bold text-red-500">{error}</p>
-						<button
-							onClick={retry}
-							className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-lg transition-colors"
-						>
-							Try Again
-						</button>
-						<p className="text-white/60 text-sm">
-							If camera access was denied, you may need to enable it in your browser settings:
-						</p>
-						<ul className="text-white/50 text-xs text-left list-disc pl-4 space-y-1">
-							<li><strong>iOS Safari:</strong> Settings → Safari → Camera → Allow</li>
-							<li><strong>Chrome/Edge:</strong> Click the lock icon in the address bar → Camera → Allow</li>
-							<li><strong>Firefox:</strong> Click the lock icon → Connection secure → More information → Permissions</li>
-						</ul>
-					</div>
-				</div>
+				<ErrorOverlay
+					message={error}
+					onAction={retry}
+					actionLabel="Try Again"
+					helpText="If camera access was denied, you may need to enable it in your browser settings:"
+					tips={[
+						"<strong>iOS Safari:</strong> Settings → Safari → Camera → Allow",
+						"<strong>Chrome/Edge:</strong> Click the lock icon in the address bar → Camera → Allow",
+						"<strong>Firefox:</strong> Click the lock icon → Connection secure → More information → Permissions",
+					]}
+					zIndex={50}
+				/>
 			)}
 
 			{/* Live Video */}

@@ -30,22 +30,12 @@ export function useCamera(initialDeviceId?: string) {
 		// eslint-disable-next-line react-hooks/set-state-in-effect -- Syncing with external device list
 		getDevices();
 
-		// Skip event listener if mediaDevices unavailable (insecure context)
-		if (!navigator.mediaDevices) {
-			return;
-		}
-
-		const handleDeviceChange = () => {
+		// Use CameraService for device change listener (handles insecure context internally)
+		const cleanup = CameraService.addDeviceChangeListener(() => {
 			getDevices();
-		};
+		});
 
-		navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
-		return () => {
-			navigator.mediaDevices.removeEventListener(
-				"devicechange",
-				handleDeviceChange,
-			);
-		};
+		return cleanup;
 	}, [getDevices]);
 
 	// Handle stream lifecycle
