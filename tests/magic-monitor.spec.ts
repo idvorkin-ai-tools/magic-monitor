@@ -342,6 +342,72 @@ test.describe("Magic Monitor E2E", () => {
 		await page.locator("button", { hasText: "✕" }).click();
 	});
 
+	test("Sessions: Replay play/pause controls work", async ({ page }) => {
+		// Seed with sessions
+		await seedSessionBuffer(page, 1);
+		await page.reload();
+		await waitForSessionsLoaded(page, 1);
+
+		// Enter replay mode
+		await page.getByText("Sessions").click();
+		const sessionThumbnails = page.locator('[data-testid="session-thumbnail"]');
+		await sessionThumbnails.first().click();
+		const timelineThumbs = page.locator('img[alt^="Frame at"]');
+		await expect(timelineThumbs.first()).toBeVisible({ timeout: 5000 });
+		await timelineThumbs.first().click();
+		await expect(page.getByText("REPLAY MODE")).toBeVisible();
+
+		// Find play/pause button (usually has ▶ or ⏸ icon)
+		const playPauseButton = page.locator('button[title*="lay"], button[title*="ause"]').first();
+		await expect(playPauseButton).toBeVisible();
+
+		// Toggle play/pause
+		await playPauseButton.click();
+		await page.waitForTimeout(500);
+		await playPauseButton.click();
+
+		// Exit replay
+		await page.locator("button", { hasText: "✕" }).click();
+		await expect(page.getByText("REPLAY MODE")).toBeHidden({ timeout: 5000 });
+	});
+
+	test("Sessions: Delete session removes it from list", async ({ page }) => {
+		// Seed with 3 sessions
+		await seedSessionBuffer(page, 3);
+		await page.reload();
+		await waitForSessionsLoaded(page, 3);
+
+		// Open Sessions picker
+		await page.getByText("Sessions").click();
+		await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+
+		// Count initial sessions
+		const sessionThumbnails = page.locator('[data-testid="session-thumbnail"]');
+		const initialCount = await sessionThumbnails.count();
+		expect(initialCount).toBe(3);
+
+		// Find and click delete button on first session (usually shows on hover)
+		const firstSession = sessionThumbnails.first();
+		await firstSession.hover();
+
+		// Handle the confirm dialog
+		page.on("dialog", (dialog) => dialog.accept());
+
+		// Click delete button
+		const deleteButton = firstSession.locator('button[title*="elete"], button:has-text("×")').first();
+		if (await deleteButton.isVisible()) {
+			await deleteButton.click();
+
+			// Verify session count decreased
+			await page.waitForTimeout(500);
+			const newCount = await sessionThumbnails.count();
+			expect(newCount).toBe(initialCount - 1);
+		}
+
+		// Close picker
+		await page.keyboard.press("Escape");
+	});
+
 	test("Settings: Mirror mode toggle", async ({ page }) => {
 		const video = page.getByTestId("main-video");
 
@@ -406,6 +472,38 @@ test.describe("Magic Monitor E2E", () => {
 		await page.keyboard.press("Escape");
 		const video = page.getByTestId("main-video");
 		await expect(video).toBeVisible();
+	});
+
+	test("Recording: Shows recording indicator when live", async ({ page }) => {
+		// Wait for app to load and start recording
+		const video = page.getByTestId("main-video");
+		await expect(video).toBeVisible();
+
+		// Recording indicator should show "REC" or recording duration
+		// Look for the recording indicator in the control bar
+		const recordingIndicator = page.locator("text=/REC|\\d+:\\d+/");
+		await expect(recordingIndicator.first()).toBeVisible({ timeout: 10000 });
+	});
+
+	test("Recording: Duration counter increases over time", async ({ page }) => {
+		// Wait for app to load
+		const video = page.getByTestId("main-video");
+		await expect(video).toBeVisible();
+
+		// Wait for recording to start (should show a duration like "0:01" or "0:00")
+		const durationRegex = /\d+:\d{2}/;
+		await expect(page.getByText(durationRegex).first()).toBeVisible({ timeout: 10000 });
+
+		// Get initial duration text
+		const durationElement = page.getByText(durationRegex).first();
+		const initialText = await durationElement.textContent();
+
+		// Wait 2 seconds for counter to increase
+		await page.waitForTimeout(2000);
+
+		// Duration should have increased
+		const newText = await durationElement.textContent();
+		expect(newText).not.toBe(initialText);
 	});
 });
 

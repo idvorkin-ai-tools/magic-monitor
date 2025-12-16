@@ -135,25 +135,40 @@ describe("useThumbnailCapture", () => {
 
 	it("handles capture errors gracefully", () => {
 		const videoRef = createMockVideoRef();
+
+		const { result } = renderHook(() =>
+			useThumbnailCapture({
+				videoRef,
+				timerService: mockTimer,
+			}),
+		);
+
+		// Start capture to enable isCapturingRef (so captureNow doesn't return early)
+		act(() => {
+			result.current.startCapture(1000);
+		});
+
+		// First thumbnail captured successfully
+		expect(result.current.thumbnails).toHaveLength(1);
+
+		// Now set up error for next capture
 		(ThumbnailCaptureService.captureFromVideo as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
 			throw new Error("Capture failed");
 		});
 
-		const { result } = renderHook(() =>
-			useThumbnailCapture({
-				videoRef,
-				timerService: mockTimer,
-			}),
-		);
+		// Trigger another capture - should not throw
+		act(() => {
+			result.current.captureNow(mockTimer.now());
+		});
 
-		// Should not throw
-		result.current.captureNow(1000);
-
-		expect(result.current.thumbnails).toHaveLength(0);
+		// Still only 1 thumbnail (error was caught, new one not added)
+		expect(result.current.thumbnails).toHaveLength(1);
 	});
 
 	it("stops capture and returns thumbnails", () => {
 		const videoRef = createMockVideoRef();
+		mockTimer.now.mockReturnValue(1000); // Use consistent mock time
+
 		const { result } = renderHook(() =>
 			useThumbnailCapture({
 				videoRef,
@@ -161,8 +176,13 @@ describe("useThumbnailCapture", () => {
 			}),
 		);
 
-		result.current.startCapture(1000);
-		const captured = result.current.stopCapture();
+		act(() => {
+			result.current.startCapture(1000);
+		});
+		let captured: ReturnType<typeof result.current.stopCapture>;
+		act(() => {
+			captured = result.current.stopCapture();
+		});
 
 		expect(mockTimer.clearInterval).toHaveBeenCalled();
 		expect(captured).toHaveLength(1);

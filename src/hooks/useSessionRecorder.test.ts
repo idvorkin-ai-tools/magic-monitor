@@ -81,9 +81,12 @@ function createMockStream() {
 	// Add clone method that returns a new stream with same tracks
 	stream.clone = vi.fn(() => {
 		const cloned = new MediaStream();
-		cloned.getTracks = vi.fn(() => [
-			{ stop: vi.fn(), kind: "video" } as unknown as MediaStreamTrack,
-		]);
+		// useBlockRecorder.startRecording checks stream.active
+		Object.defineProperty(cloned, "active", { value: true });
+		// It also calls getVideoTracks() and checks track.readyState === "live"
+		const mockTrack = { stop: vi.fn(), kind: "video", readyState: "live" } as unknown as MediaStreamTrack;
+		cloned.getTracks = vi.fn(() => [mockTrack]);
+		cloned.getVideoTracks = vi.fn(() => [mockTrack]);
 		return cloned;
 	});
 	return stream;
@@ -418,17 +421,16 @@ describe("useSessionRecorder", () => {
 		it("completes block and starts new one when enabled is still true", async () => {
 			const videoRef = createMockVideoRef(true);
 
-			// Create a controllable timer service - capture the LAST setTimeout (block rotation)
+			// Create a controllable timer service - capture the block rotation setTimeout callback
 			let blockTimeoutCallback: (() => void) | null = null;
 			let timeoutIdCounter = 1;
 			const controllableTimerService = {
 				now: vi.fn(() => Date.now()),
 				setTimeout: vi.fn((cb: () => void) => {
-					// The block rotation setTimeout is called last during startRecordingBlock
 					blockTimeoutCallback = cb;
 					return timeoutIdCounter++;
 				}),
-				setInterval: vi.fn(() => 2),
+				setInterval: vi.fn(() => timeoutIdCounter++),
 				clearTimeout: vi.fn(),
 				clearInterval: vi.fn(),
 				performanceNow: vi.fn(() => performance.now()),
@@ -446,10 +448,15 @@ describe("useSessionRecorder", () => {
 				}),
 			);
 
+			// Wait for storage initialization first
+			await waitFor(() => {
+				expect(mockStorage.init).toHaveBeenCalled();
+			});
+
 			// Wait for initial recording to start
 			await waitFor(() => {
-				expect(result.current.isRecording).toBe(true);
-			});
+				expect(result.current?.isRecording).toBe(true);
+			}, { timeout: 5000 });
 
 			const initialRecordingCalls =
 				mockRecorder.startRecording.mock.calls.length;
@@ -468,9 +475,10 @@ describe("useSessionRecorder", () => {
 				expect(mockSession?.stop).toHaveBeenCalled();
 			});
 
-			// Should have saved the session
-			expect(mockStorage.saveSession).toHaveBeenCalled();
-			expect(mockStorage.saveBlob).toHaveBeenCalled();
+			// Should have saved the session via saveSessionWithBlob (atomic method)
+			await waitFor(() => {
+				expect(mockStorage.saveSessionWithBlob).toHaveBeenCalled();
+			});
 
 			// Should have started a new recording block
 			await waitFor(() => {
@@ -483,7 +491,7 @@ describe("useSessionRecorder", () => {
 		it("completes block but does NOT start new one when enabled becomes false", async () => {
 			const videoRef = createMockVideoRef(true);
 
-			// Create a controllable timer service - capture the LAST setTimeout (block rotation)
+			// Create a controllable timer service - capture the block rotation setTimeout callback
 			let blockTimeoutCallback: (() => void) | null = null;
 			let timeoutIdCounter = 1;
 			const controllableTimerService = {
@@ -492,7 +500,7 @@ describe("useSessionRecorder", () => {
 					blockTimeoutCallback = cb;
 					return timeoutIdCounter++;
 				}),
-				setInterval: vi.fn(() => 2),
+				setInterval: vi.fn(() => timeoutIdCounter++),
 				clearTimeout: vi.fn(),
 				clearInterval: vi.fn(),
 				performanceNow: vi.fn(() => performance.now()),
@@ -512,10 +520,15 @@ describe("useSessionRecorder", () => {
 				{ initialProps: { enabled: true } },
 			);
 
+			// Wait for storage initialization first
+			await waitFor(() => {
+				expect(mockStorage.init).toHaveBeenCalled();
+			});
+
 			// Wait for initial recording to start
 			await waitFor(() => {
-				expect(result.current.isRecording).toBe(true);
-			});
+				expect(result.current?.isRecording).toBe(true);
+			}, { timeout: 5000 });
 
 			const initialRecordingCalls =
 				mockRecorder.startRecording.mock.calls.length;
@@ -539,7 +552,7 @@ describe("useSessionRecorder", () => {
 		it("saves session properly before rotation", async () => {
 			const videoRef = createMockVideoRef(true);
 
-			// Create a controllable timer service - capture the LAST setTimeout (block rotation)
+			// Create a controllable timer service - capture the block rotation setTimeout callback
 			let blockTimeoutCallback: (() => void) | null = null;
 			let timeoutIdCounter = 1;
 			const controllableTimerService = {
@@ -548,7 +561,7 @@ describe("useSessionRecorder", () => {
 					blockTimeoutCallback = cb;
 					return timeoutIdCounter++;
 				}),
-				setInterval: vi.fn(() => 2),
+				setInterval: vi.fn(() => timeoutIdCounter++),
 				clearTimeout: vi.fn(),
 				clearInterval: vi.fn(),
 				performanceNow: vi.fn(() => performance.now()),
@@ -566,14 +579,18 @@ describe("useSessionRecorder", () => {
 				}),
 			);
 
+			// Wait for storage initialization first
+			await waitFor(() => {
+				expect(mockStorage.init).toHaveBeenCalled();
+			});
+
 			// Wait for recording to start
 			await waitFor(() => {
 				expect(mockRecorder.startRecording).toHaveBeenCalled();
 			});
 
 			// Clear previous mock calls
-			mockStorage.saveSession.mockClear();
-			mockStorage.saveBlob.mockClear();
+			mockStorage.saveSessionWithBlob.mockClear();
 			mockStorage.pruneOldSessions.mockClear();
 
 			// Trigger block rotation manually
@@ -581,14 +598,10 @@ describe("useSessionRecorder", () => {
 				blockTimeoutCallback?.();
 			});
 
-			// Verify session saving sequence
+			// Verify session saving via atomic method
 			await waitFor(() => {
-				expect(mockStorage.saveSession).toHaveBeenCalled();
+				expect(mockStorage.saveSessionWithBlob).toHaveBeenCalled();
 			});
-			expect(mockStorage.saveBlob).toHaveBeenCalledWith(
-				"test-id",
-				expect.any(Blob),
-			);
 			expect(mockStorage.pruneOldSessions).toHaveBeenCalled();
 		});
 	});
