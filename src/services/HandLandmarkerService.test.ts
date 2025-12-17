@@ -1,32 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HandLandmarkerService } from "./HandLandmarkerService";
+
+// Track mock calls via closure
+let mockCloseCalls = 0;
 
 // Mock functions must be defined inside the mock factory to avoid hoisting issues
 vi.mock("@mediapipe/tasks-vision", () => {
-	const mockDetectForVideo = vi.fn();
-	const mockClose = vi.fn();
 	return {
 		FilesetResolver: {
 			forVisionTasks: vi.fn().mockResolvedValue("mock-vision-source"),
 		},
 		HandLandmarker: {
-			createFromOptions: vi.fn().mockResolvedValue({
-				detectForVideo: mockDetectForVideo,
-				close: mockClose,
+			createFromOptions: vi.fn().mockImplementation(() => {
+				return Promise.resolve({
+					detectForVideo: vi.fn().mockReturnValue({ landmarks: [] }),
+					close: vi.fn().mockImplementation(() => {
+						mockCloseCalls++;
+					}),
+				});
 			}),
 		},
-		// Export for test access
-		__mockClose: mockClose,
-		__mockDetectForVideo: mockDetectForVideo,
 	};
 });
 
-// Import after mock setup
-import { HandLandmarkerService } from "./HandLandmarkerService";
-import { __mockClose, __mockDetectForVideo } from "@mediapipe/tasks-vision";
-
 describe("HandLandmarkerService", () => {
 	beforeEach(() => {
+		// Reset service first (might call close on leftover model), then reset counters
 		HandLandmarkerService._reset();
+		mockCloseCalls = 0;
 
 		// Mock fetch for model loading
 		globalThis.fetch = vi.fn().mockResolvedValue({
@@ -141,7 +142,7 @@ describe("HandLandmarkerService", () => {
 
 		HandLandmarkerService._reset();
 
-		expect(__mockClose).toHaveBeenCalled();
+		expect(mockCloseCalls).toBe(1);
 		expect(HandLandmarkerService.isReady()).toBe(false);
 		expect(HandLandmarkerService.getModel()).toBeNull();
 	});
@@ -188,7 +189,7 @@ describe("HandLandmarkerService", () => {
 		await HandLandmarkerService.load();
 		const model = HandLandmarkerService.getModel();
 		expect(model).not.toBeNull();
-		expect(model?.detectForVideo).toBe(__mockDetectForVideo);
+		expect(typeof model?.detectForVideo).toBe("function");
 	});
 
 	it("isLoading returns true during load", async () => {
