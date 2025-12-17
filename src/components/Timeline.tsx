@@ -138,6 +138,13 @@ export function Timeline({
 		return () => strip.removeEventListener("wheel", handleWheel);
 	}, [thumbnails]); // Re-attach when thumbnails change (strip might remount)
 
+	// Format time for thumbnail labels
+	const formatThumbTime = (seconds: number): string => {
+		const mins = Math.floor(seconds / 60);
+		const secs = Math.floor(seconds % 60);
+		return mins > 0 ? `${mins}:${secs.toString().padStart(2, "0")}` : `${secs}s`;
+	};
+
 	// Calculate positions as percentages
 	const currentPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 	const inPercent = inPoint !== null && duration > 0 ? (inPoint / duration) * 100 : null;
@@ -157,14 +164,17 @@ export function Timeline({
 			{thumbnails && thumbnails.length > 0 && (
 				<div
 					ref={thumbStripRef}
-					className="flex gap-1 mb-2 overflow-x-auto pb-1 pointer-events-none"
+					className="flex gap-1 mb-2 overflow-x-auto pb-1 touch-pan-x"
+					onPointerDown={(e) => e.stopPropagation()}
 				>
 					{thumbnails.map((thumb, index) => (
-						<div
+						<button
 							key={index}
+							type="button"
+							onClick={() => onSeek(thumb.time)}
 							style={{ width: thumbWidth, height: thumbHeight }}
 							className={clsx(
-								"flex-shrink-0 rounded overflow-hidden",
+								"flex-shrink-0 rounded overflow-hidden relative cursor-pointer hover:ring-2 hover:ring-white/50 transition-all",
 								currentTime >= thumb.time &&
 									(index === thumbnails.length - 1 ||
 										currentTime < thumbnails[index + 1]?.time) &&
@@ -175,8 +185,12 @@ export function Timeline({
 								src={thumb.dataUrl}
 								alt={`Frame at ${thumb.time.toFixed(1)}s`}
 								className="w-full h-full object-cover"
+								draggable={false}
 							/>
-						</div>
+							<span className="absolute bottom-0 right-0 bg-black/70 text-white text-[10px] px-1 rounded-tl">
+								{formatThumbTime(thumb.time)}
+							</span>
+						</button>
 					))}
 				</div>
 			)}
