@@ -31,12 +31,31 @@ export const MediaRecorderService = {
 
 	/**
 	 * Get the best supported video codec.
+	 * iOS Safari requires MP4 (doesn't support WebM at all).
+	 * Other browsers prefer WebM with VP9 for better compression.
 	 */
 	getBestCodec(): string {
+		// Try WebM with VP9 first (best compression, works on Chrome/Firefox/Edge)
 		if (this.isTypeSupported("video/webm;codecs=vp9")) {
 			return "video/webm;codecs=vp9";
 		}
-		return "video/webm";
+		// Try plain WebM (broader browser support)
+		if (this.isTypeSupported("video/webm")) {
+			return "video/webm";
+		}
+		// Try MP4 with H.264 baseline profile (required for iOS Safari)
+		// avc1.42E01E = H.264 Baseline Profile Level 3.0 (widely compatible)
+		if (this.isTypeSupported("video/mp4;codecs=avc1.42E01E")) {
+			return "video/mp4;codecs=avc1.42E01E";
+		}
+		if (this.isTypeSupported("video/mp4;codecs=avc1")) {
+			return "video/mp4;codecs=avc1";
+		}
+		if (this.isTypeSupported("video/mp4")) {
+			return "video/mp4";
+		}
+		// Last resort - let browser pick
+		return "";
 	},
 
 	/**
