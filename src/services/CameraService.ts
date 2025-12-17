@@ -48,20 +48,19 @@ export async function start(
 	}
 
 	const preset = RESOLUTION_PRESETS[resolution];
-	// Swap width/height for portrait orientation
-	const width = orientation === "portrait" ? preset.height : preset.width;
-	const height = orientation === "portrait" ? preset.width : preset.height;
+	// Only request width - let camera use its native aspect ratio
+	const targetWidth = orientation === "portrait" ? preset.height : preset.width;
 
 	const constraints: MediaStreamConstraints = {
 		video: {
-			width: { ideal: width },
-			height: { ideal: height },
+			width: { ideal: targetWidth },
+			// No height constraint - camera picks based on native aspect ratio
 			frameRate: { ideal: 30 },
 			deviceId: deviceId ? { exact: deviceId } : undefined,
 		},
 	};
 
-	console.log("Requesting camera with constraints:", constraints);
+	console.log(`[Camera] Requesting width: ${targetWidth} (camera picks height)`);
 	return navigator.mediaDevices.getUserMedia(constraints);
 }
 
