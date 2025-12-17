@@ -6,6 +6,7 @@ import { useCamera } from "../hooks/useCamera";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
+import { useRecorderDebugInfo } from "../hooks/useRecorderDebugInfo";
 import { useReplayPlayer } from "../hooks/useReplayPlayer";
 import { useSessionRecorder } from "../hooks/useSessionRecorder";
 import { useSettings } from "../hooks/useSettings";
@@ -153,6 +154,9 @@ export function CameraStage() {
 
 	// Bug Reporter
 	const bugReporter = useBugReporter();
+
+	// Debug Info for MediaRecorder troubleshooting
+	const recorderDebugInfo = useRecorderDebugInfo();
 
 	// Shake detector for bug reporting
 	const {
@@ -397,6 +401,8 @@ export function CameraStage() {
 				onShakeEnabledChange={bugReporter.setShakeEnabled}
 				isShakeSupported={isShakeSupported}
 				onOpenAbout={() => setIsAboutOpen(true)}
+				debugInfo={recorderDebugInfo}
+				recordingError={sessionRecorder.error}
 			/>
 
 			<AboutModal

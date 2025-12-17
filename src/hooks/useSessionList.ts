@@ -86,7 +86,7 @@ export function useSessionList({
 			try {
 				// Fix WebM metadata for seekability
 				let fixedBlob = blob;
-				if (videoFixService.needsFix()) {
+				if (videoFixService.needsFix(blob)) {
 					const fixResult = await videoFixService.fixDuration(blob);
 					fixedBlob = fixResult.blob;
 					if (!fixResult.wasFixed) {
