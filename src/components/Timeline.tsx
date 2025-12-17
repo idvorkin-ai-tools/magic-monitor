@@ -157,14 +157,15 @@ export function Timeline({
 			{thumbnails && thumbnails.length > 0 && (
 				<div
 					ref={thumbStripRef}
-					className="flex gap-1 mb-2 overflow-x-auto pb-1 pointer-events-none"
+					className="flex gap-1 mb-2 overflow-x-auto pb-1"
+					onPointerDown={(e) => e.stopPropagation()}
 				>
 					{thumbnails.map((thumb, index) => (
 						<div
 							key={index}
 							style={{ width: thumbWidth, height: thumbHeight }}
 							className={clsx(
-								"flex-shrink-0 rounded overflow-hidden",
+								"flex-shrink-0 rounded overflow-hidden relative bg-black",
 								currentTime >= thumb.time &&
 									(index === thumbnails.length - 1 ||
 										currentTime < thumbnails[index + 1]?.time) &&
@@ -174,8 +175,12 @@ export function Timeline({
 							<img
 								src={thumb.dataUrl}
 								alt={`Frame at ${thumb.time.toFixed(1)}s`}
-								className="w-full h-full object-cover"
+								className="w-full h-full object-contain"
 							/>
+							{/* Timestamp overlay */}
+							<div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5">
+								{Math.floor(thumb.time / 60)}:{String(Math.floor(thumb.time % 60)).padStart(2, "0")}
+							</div>
 						</div>
 					))}
 				</div>
