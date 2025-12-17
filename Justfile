@@ -5,15 +5,15 @@ default:
 
 # Run the development server
 dev:
-    npm run dev
+    npm run dev-called-from-just
 
 # Build the project (generates version info via npm script)
 build:
-    npm run build
+    npm run build-called-from-just
 
 # Run unit tests (builds first to ensure version info is current)
 test: build
-    npm run test
+    npm run test-called-from-just
 
 # Run E2E tests (Playwright) - all projects
 e2e:
