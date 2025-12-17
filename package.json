@@ -8,10 +8,10 @@
 		"url": "https://github.com/idvorkin/magic-monitor"
 	},
 	"scripts": {
-		"dev": "vite",
-		"build": "bash scripts/generate-version.sh && tsc -b && vite build",
+		"dev": "echo '💡 Prefer: just dev' && vite",
+		"build": "echo '💡 Prefer: just build' && bash scripts/generate-version.sh && tsc -b && vite build",
 		"lint": "eslint .",
-		"test": "vitest run",
+		"test": "echo '💡 Prefer: just test (builds first)' && vitest run",
 		"preview": "vite preview",
 		"prepare": "husky"
 	},
