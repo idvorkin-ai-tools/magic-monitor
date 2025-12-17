@@ -28,6 +28,7 @@ function createMockMediaRecorder() {
 
 	return {
 		isTypeSupported: vi.fn().mockReturnValue(true),
+		isIOSSafari: vi.fn().mockReturnValue(false),
 		getBestCodec: vi.fn().mockReturnValue("video/webm"),
 		startRecording: vi.fn().mockReturnValue(mockSession),
 		createPlaybackElement: vi.fn(),

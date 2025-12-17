@@ -50,7 +50,7 @@ export function SessionThumbnail({
 					<img
 						src={session.thumbnail}
 						alt={session.name || "Session thumbnail"}
-						className="w-full h-full object-cover"
+						className="w-full h-full object-contain"
 					/>
 				) : (
 					<div className="w-full h-full flex items-center justify-center text-gray-600">

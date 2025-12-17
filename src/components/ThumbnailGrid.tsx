@@ -123,7 +123,7 @@ export function ThumbnailGrid({
 						<img
 							src={thumb.dataUrl}
 							alt={`Frame at ${formatDuration(thumb.time)}`}
-							className="w-full h-full object-cover"
+							className="w-full h-full object-contain"
 						/>
 						<div
 							className={clsx(

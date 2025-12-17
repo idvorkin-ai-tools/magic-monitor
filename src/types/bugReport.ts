@@ -5,6 +5,13 @@ export interface BugReportData {
 	screenshot?: string;
 }
 
+export interface MediaRecorderInfo {
+	available: boolean;
+	isIOSSafari: boolean;
+	selectedCodec: string;
+	supportedCodecs: string[];
+}
+
 export interface BugReportMetadata {
 	route: string;
 	userAgent: string;
@@ -20,4 +27,5 @@ export interface BugReportMetadata {
 	displayMode: string;
 	isTouchDevice: boolean;
 	isMobile: boolean;
+	mediaRecorder: MediaRecorderInfo;
 }

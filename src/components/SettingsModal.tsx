@@ -1,5 +1,7 @@
-import { ExternalLink, Github, Smartphone } from "lucide-react";
+import { Bug, ChevronDown, ChevronRight, ExternalLink, Github, Smartphone } from "lucide-react";
+import { useState } from "react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import type { RecorderDebugInfo } from "../hooks/useRecorderDebugInfo";
 import { RESOLUTION_PRESETS, type Orientation, type Resolution } from "../services/CameraService";
 import {
 	SMOOTHING_PRESET_DESCRIPTIONS,
@@ -59,6 +61,10 @@ interface SettingsModalProps {
 
 	// About
 	onOpenAbout: () => void;
+
+	// Debug
+	debugInfo?: RecorderDebugInfo;
+	recordingError?: string | null;
 }
 
 export function SettingsModal({
@@ -98,8 +104,11 @@ export function SettingsModal({
 	onShakeEnabledChange,
 	isShakeSupported,
 	onOpenAbout,
+	debugInfo,
+	recordingError,
 }: SettingsModalProps) {
 	const containerRef = useFocusTrap({ isOpen, onClose });
+	const [isDebugExpanded, setIsDebugExpanded] = useState(false);
 
 	if (!isOpen) return null;
 
@@ -451,6 +460,95 @@ export function SettingsModal({
 							<ExternalLink className="w-4 h-4 text-gray-500" />
 						</button>
 					</div>
+
+					{/* Debug Section */}
+					{debugInfo && (
+						<>
+							<div className="h-px bg-white/10 my-4" />
+							<div className="space-y-3">
+								<button
+									onClick={() => setIsDebugExpanded(!isDebugExpanded)}
+									className="w-full flex items-center gap-2 text-left"
+								>
+									{isDebugExpanded ? (
+										<ChevronDown className="w-4 h-4 text-gray-400" />
+									) : (
+										<ChevronRight className="w-4 h-4 text-gray-400" />
+									)}
+									<Bug className="w-4 h-4 text-gray-400" />
+									<span className="text-white font-medium">Debug Info</span>
+									{recordingError && (
+										<span className="ml-auto text-xs text-red-400">Error</span>
+									)}
+								</button>
+
+								{isDebugExpanded && (
+									<div className="space-y-3 p-3 bg-black/30 border border-white/10 rounded-lg text-xs font-mono">
+										{/* Recording Error */}
+										{recordingError && (
+											<div className="p-2 bg-red-600/20 border border-red-500/30 rounded text-red-300">
+												<div className="font-bold mb-1">Recording Error:</div>
+												{recordingError}
+											</div>
+										)}
+
+										{/* Platform Info */}
+										<div>
+											<div className="text-gray-400 mb-1">Platform:</div>
+											<div className="text-white">
+												{debugInfo.isIOS ? `iOS ${debugInfo.iosVersion || ""} ` : ""}
+												{debugInfo.isSafari ? "Safari" : "Other browser"}
+											</div>
+										</div>
+
+										{/* MediaRecorder Status */}
+										<div>
+											<div className="text-gray-400 mb-1">MediaRecorder:</div>
+											<div className={debugInfo.hasMediaRecorder ? "text-green-400" : "text-red-400"}>
+												{debugInfo.hasMediaRecorder ? "Available" : "Not Available"}
+											</div>
+											{debugInfo.hasMediaRecorder && (
+												<div className={debugInfo.hasIsTypeSupported ? "text-green-400/70" : "text-yellow-400"}>
+													isTypeSupported: {debugInfo.hasIsTypeSupported ? "Yes" : "No (older Safari)"}
+												</div>
+											)}
+										</div>
+
+										{/* Selected Codec */}
+										<div>
+											<div className="text-gray-400 mb-1">Selected Codec:</div>
+											<div className="text-yellow-300 break-all">
+												{debugInfo.selectedCodec || "(none)"}
+											</div>
+										</div>
+
+										{/* Codec Support */}
+										<div>
+											<div className="text-gray-400 mb-1">Codec Support:</div>
+											<div className="space-y-1">
+												{debugInfo.codecTests.map((test) => (
+													<div key={test.mimeType} className="flex items-center gap-2">
+														<span className={test.supported ? "text-green-400" : "text-red-400"}>
+															{test.supported ? "✓" : "✗"}
+														</span>
+														<span className="text-white/70 break-all">{test.mimeType}</span>
+													</div>
+												))}
+											</div>
+										</div>
+
+										{/* User Agent (collapsible) */}
+										<div>
+											<div className="text-gray-400 mb-1">User Agent:</div>
+											<div className="text-white/50 break-all text-[10px]">
+												{debugInfo.userAgent}
+											</div>
+										</div>
+									</div>
+								)}
+							</div>
+						</>
+					)}
 				</div>
 			</div>
 		</div>
