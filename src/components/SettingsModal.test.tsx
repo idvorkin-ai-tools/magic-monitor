@@ -72,9 +72,9 @@ describe("SettingsModal", () => {
 			// Check all options are present
 			const options = resolutionSelect.querySelectorAll("option");
 			expect(options).toHaveLength(3);
-			expect(options[0]).toHaveTextContent("720p (HD)");
-			expect(options[1]).toHaveTextContent("1080p (Full HD)");
-			expect(options[2]).toHaveTextContent("4K (Ultra HD)");
+			expect(options[0]).toHaveTextContent("1280 wide (720p)");
+			expect(options[1]).toHaveTextContent("1920 wide (1080p)");
+			expect(options[2]).toHaveTextContent("3840 wide (4k)");
 		});
 
 		it("shows current resolution as selected", () => {
