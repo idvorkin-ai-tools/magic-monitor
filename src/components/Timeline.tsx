@@ -2,6 +2,14 @@ import clsx from "clsx";
 import { useCallback, useEffect, useRef } from "react";
 import type { SessionThumbnail } from "../types/sessions";
 
+// ===== Helpers =====
+
+function formatThumbTime(seconds: number): string {
+	const mins = Math.floor(seconds / 60);
+	const secs = Math.floor(seconds % 60);
+	return mins > 0 ? `${mins}:${secs.toString().padStart(2, "0")}` : `${secs}s`;
+}
+
 // ===== Types =====
 
 interface TimelineProps {
@@ -103,7 +111,6 @@ export function Timeline({
 		[getTimeFromPosition, onSeek, disabled],
 	);
 
-
 	// Cleanup effect to remove event listeners if component unmounts during drag
 	useEffect(() => {
 		const container = containerRef.current;
@@ -137,13 +144,6 @@ export function Timeline({
 		strip.addEventListener("wheel", handleWheel, { passive: false });
 		return () => strip.removeEventListener("wheel", handleWheel);
 	}, [thumbnails]); // Re-attach when thumbnails change (strip might remount)
-
-	// Format time for thumbnail labels
-	const formatThumbTime = (seconds: number): string => {
-		const mins = Math.floor(seconds / 60);
-		const secs = Math.floor(seconds % 60);
-		return mins > 0 ? `${mins}:${secs.toString().padStart(2, "0")}` : `${secs}s`;
-	};
 
 	// Calculate positions as percentages
 	const currentPercent = duration > 0 ? (currentTime / duration) * 100 : 0;

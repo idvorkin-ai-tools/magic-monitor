@@ -142,7 +142,6 @@ export function useSessionRecorder({
 	}, [startRotation, stopRotation]);
 
 	// Initialize machine once
-	// eslint-disable-next-line react-hooks/exhaustive-deps
 	useEffect(() => {
 		if (machineRef.current === null) {
 			machineRef.current = new SessionRecorderMachine({
@@ -190,6 +189,8 @@ export function useSessionRecorder({
 				timerService.clearInterval(durationTimerRef.current);
 				durationTimerRef.current = null;
 			}
+			// Reset duration display when recording stops - intentional synchronous setState
+			// eslint-disable-next-line react-hooks/set-state-in-effect
 			setCurrentBlockDuration(0);
 		}
 

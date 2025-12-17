@@ -139,20 +139,11 @@ export function ReplayControls({
 				onPointerUp={handleDragEnd}
 				onPointerCancel={handleDragEnd}
 			>
-				<div className="flex gap-0.5">
-					{/* Grip dots pattern */}
-					<div className="flex flex-col gap-0.5">
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-					</div>
-					<div className="flex flex-col gap-0.5">
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-					</div>
-					<div className="flex flex-col gap-0.5">
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-					</div>
+				{/* Grip dots pattern - 3 columns x 2 rows */}
+				<div className="grid grid-cols-3 gap-0.5">
+					{Array.from({ length: 6 }).map((_, i) => (
+						<div key={i} className="w-1 h-1 rounded-full bg-gray-500" />
+					))}
 				</div>
 			</div>
 
@@ -326,12 +317,10 @@ export function ReplayControls({
 							disabled={!isReady}
 							className={clsx(
 								"rounded font-medium transition-colors",
-								!isReady
-									? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-									: inPoint !== null
-										? "bg-green-600 text-white"
-										: "bg-gray-700 text-gray-300 hover:bg-gray-600",
 								isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
+								!isReady && "bg-gray-700/50 text-gray-500 cursor-not-allowed",
+								isReady && inPoint !== null && "bg-green-600 text-white",
+								isReady && inPoint === null && "bg-gray-700 text-gray-300 hover:bg-gray-600",
 							)}
 							title="Set start point"
 						>
@@ -343,12 +332,10 @@ export function ReplayControls({
 							disabled={!isReady}
 							className={clsx(
 								"rounded font-medium transition-colors",
-								!isReady
-									? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-									: outPoint !== null
-										? "bg-green-600 text-white"
-										: "bg-gray-700 text-gray-300 hover:bg-gray-600",
 								isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
+								!isReady && "bg-gray-700/50 text-gray-500 cursor-not-allowed",
+								isReady && outPoint !== null && "bg-green-600 text-white",
+								isReady && outPoint === null && "bg-gray-700 text-gray-300 hover:bg-gray-600",
 							)}
 							title="Set end point"
 						>
