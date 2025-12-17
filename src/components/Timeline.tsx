@@ -155,7 +155,7 @@ export function Timeline({
 			ref={containerRef}
 			data-testid="timeline-container"
 			className={clsx(
-				"w-full touch-none",
+				"w-full",
 				disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
 			)}
 			onPointerDown={handlePointerDown}
@@ -200,7 +200,7 @@ export function Timeline({
 				ref={trackRef}
 				data-testid="timeline-track"
 				className={clsx(
-					"relative w-full bg-gray-700 rounded-full",
+					"relative w-full bg-gray-700 rounded-full touch-none",
 					isMobile ? "h-2" : "h-3",
 				)}
 			>
