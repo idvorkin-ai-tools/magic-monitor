@@ -60,6 +60,9 @@ export const MediaRecorderService = {
 				return "video/mp4";
 			}
 			// Let iOS pick - it will use MP4
+			console.warn(
+				"[MediaRecorder] No specific MP4 codec detected as supported on iOS, letting browser pick",
+			);
 			return "";
 		}
 
@@ -83,6 +86,9 @@ export const MediaRecorderService = {
 			return "video/mp4";
 		}
 		// Last resort - let browser pick
+		console.warn(
+			"[MediaRecorder] No supported codec detected, letting browser pick",
+		);
 		return "";
 	},
 

@@ -127,29 +127,40 @@ export interface DeviceInfoGetters {
 
 /**
  * Collect MediaRecorder debug info for bug reports.
+ * Wrapped in try-catch to ensure bug reporting never fails due to detection errors.
  */
 export function getMediaRecorderInfo(): MediaRecorderInfo {
-	const available = typeof MediaRecorder !== "undefined";
-	const isIOSSafari = available ? MediaRecorderService.isIOSSafari() : false;
-	const selectedCodec = available ? MediaRecorderService.getBestCodec() : "";
+	try {
+		const available = typeof MediaRecorder !== "undefined";
+		const isIOSSafari = available ? MediaRecorderService.isIOSSafari() : false;
+		const selectedCodec = available ? MediaRecorderService.getBestCodec() : "";
 
-	// Test codecs
-	const codecsToTest = [
-		"video/webm;codecs=vp9",
-		"video/webm",
-		"video/mp4;codecs=avc1.42E01E",
-		"video/mp4",
-	];
-	const supportedCodecs = available
-		? codecsToTest.filter((codec) => MediaRecorderService.isTypeSupported(codec))
-		: [];
+		// Test codecs
+		const codecsToTest = [
+			"video/webm;codecs=vp9",
+			"video/webm",
+			"video/mp4;codecs=avc1.42E01E",
+			"video/mp4",
+		];
+		const supportedCodecs = available
+			? codecsToTest.filter((codec) => MediaRecorderService.isTypeSupported(codec))
+			: [];
 
-	return {
-		available,
-		isIOSSafari,
-		selectedCodec: selectedCodec || "(browser picks)",
-		supportedCodecs,
-	};
+		return {
+			available,
+			isIOSSafari,
+			selectedCodec: selectedCodec || "(browser picks)",
+			supportedCodecs,
+		};
+	} catch (err) {
+		console.error("[BugReport] Failed to collect MediaRecorder info:", err);
+		return {
+			available: false,
+			isIOSSafari: false,
+			selectedCodec: "(error during detection)",
+			supportedCodecs: [],
+		};
+	}
 }
 
 export function getMetadata(
