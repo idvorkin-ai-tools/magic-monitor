@@ -165,16 +165,19 @@ export function Timeline({
 				<div
 					ref={thumbStripRef}
 					className="flex gap-1 mb-2 overflow-x-auto pb-1 touch-pan-x"
-					onPointerDown={(e) => e.stopPropagation()}
 				>
 					{thumbnails.map((thumb, index) => (
 						<button
 							key={index}
 							type="button"
+							aria-label={`Seek to ${formatThumbTime(thumb.time)}`}
 							onClick={() => onSeek(thumb.time)}
+							onPointerDown={(e) => e.stopPropagation()}
 							style={{ width: thumbWidth, height: thumbHeight }}
 							className={clsx(
-								"flex-shrink-0 rounded overflow-hidden relative cursor-pointer hover:ring-2 hover:ring-white/50 transition-all",
+								"flex-shrink-0 rounded overflow-hidden relative cursor-pointer transition-all",
+								"hover:ring-2 hover:ring-white/50 focus-visible:ring-2 focus-visible:ring-blue-400 focus:outline-none",
+								"active:brightness-90 active:ring-blue-400",
 								currentTime >= thumb.time &&
 									(index === thumbnails.length - 1 ||
 										currentTime < thumbnails[index + 1]?.time) &&
@@ -186,6 +189,7 @@ export function Timeline({
 								alt={`Frame at ${thumb.time.toFixed(1)}s`}
 								className="w-full h-full object-cover"
 								draggable={false}
+								loading="lazy"
 							/>
 							<span className="absolute bottom-0 right-0 bg-black/70 text-white text-[10px] px-1 rounded-tl">
 								{formatThumbTime(thumb.time)}
