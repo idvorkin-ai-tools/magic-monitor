@@ -7,12 +7,12 @@ default:
 dev:
     npm run dev
 
-# Build the project (generates version info first)
+# Build the project (generates version info via npm script)
 build:
-    bash scripts/generate-version.sh && npm run build
+    npm run build
 
-# Run unit tests
-test:
+# Run unit tests (builds first to ensure version info is current)
+test: build
     npm run test
 
 # Run E2E tests (Playwright) - all projects
