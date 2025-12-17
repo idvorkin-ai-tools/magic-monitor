@@ -289,7 +289,32 @@ describe("Timeline", () => {
 			expect(thumbnailImages[2]).toHaveAttribute("src", "data:image/jpeg;base64,thumb10");
 		});
 
-		it("clicking over thumbnail area seeks to position (thumbnails have pointer-events-none)", () => {
+		it("clicking a thumbnail seeks to that thumbnail's time", () => {
+			render(
+				<Timeline
+					currentTime={0}
+					duration={10}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+					thumbnails={mockThumbnails}
+				/>,
+			);
+
+			// Thumbnails are now buttons that seek to their specific time
+			const thumbnailButtons = screen.getAllByRole("button");
+			expect(thumbnailButtons).toHaveLength(3);
+
+			// Click second thumbnail (time: 5)
+			fireEvent.click(thumbnailButtons[1]);
+			expect(mockOnSeek).toHaveBeenCalledWith(5);
+
+			// Click third thumbnail (time: 10)
+			fireEvent.click(thumbnailButtons[2]);
+			expect(mockOnSeek).toHaveBeenCalledWith(10);
+		});
+
+		it("thumbnail pointerdown does not propagate to container", () => {
 			const { container } = render(
 				<Timeline
 					currentTime={0}
@@ -301,11 +326,7 @@ describe("Timeline", () => {
 				/>,
 			);
 
-			// Thumbnails now have pointer-events-none, clicks pass through to container
-			// The seek position is based on click X relative to track, not thumbnail time
-			const timelineContainer = getContainer(container);
 			const track = getTrack(container);
-
 			track.getBoundingClientRect = vi.fn().mockReturnValue({
 				left: 0,
 				width: 1000,
@@ -318,10 +339,35 @@ describe("Timeline", () => {
 				toJSON: () => ({}),
 			});
 
-			// Click at 50% position
-			fireEvent.pointerDown(timelineContainer, { clientX: 500, pointerId: 1 });
+			// Get a thumbnail button
+			const thumbnailButtons = screen.getAllByRole("button");
+			expect(thumbnailButtons.length).toBeGreaterThan(0);
 
-			expect(mockOnSeek).toHaveBeenCalledWith(5); // 50% of 10 duration
+			// PointerDown on thumbnail should not trigger container's seek
+			// because stopPropagation is called on the button
+			mockOnSeek.mockClear();
+			fireEvent.pointerDown(thumbnailButtons[0], { clientX: 500, pointerId: 1 });
+
+			// onSeek should NOT be called from pointerDown (only from click)
+			expect(mockOnSeek).not.toHaveBeenCalled();
+		});
+
+		it("thumbnail buttons have aria-labels for accessibility", () => {
+			render(
+				<Timeline
+					currentTime={0}
+					duration={10}
+					inPoint={null}
+					outPoint={null}
+					onSeek={mockOnSeek}
+					thumbnails={mockThumbnails}
+				/>,
+			);
+
+			// Check aria-labels exist
+			expect(screen.getByLabelText("Seek to 0s")).toBeTruthy();
+			expect(screen.getByLabelText("Seek to 5s")).toBeTruthy();
+			expect(screen.getByLabelText("Seek to 10s")).toBeTruthy();
 		});
 
 		it("highlights current thumbnail", () => {

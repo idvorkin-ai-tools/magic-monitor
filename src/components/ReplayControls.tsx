@@ -69,32 +69,26 @@ export function ReplayControls({
 	const [showThumbnails, setShowThumbnails] = useState(true);
 	const [thumbnailSize, setThumbnailSize] = useState(50); // 0-100 slider
 	const [panelPosition, setPanelPosition] = useState({ x: 0, y: 0 });
-	const [isFloating, setIsFloating] = useState(false);
 	const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
-	const controlPanelRef = useRef<HTMLDivElement>(null);
+	const dragHandleRef = useRef<HTMLDivElement>(null);
 
 	const { isMobile: detectedMobile } = useMobileDetection();
 	const effectiveMobile = isMobile || detectedMobile;
 
-	// Handle drag start for control panel - enables floating mode on first drag
+	// Handle drag start for control panel (only from drag handle)
 	const handleDragStart = useCallback((e: React.PointerEvent) => {
 		e.preventDefault();
-		const panel = controlPanelRef.current;
-		if (!panel) return;
+		const handle = dragHandleRef.current;
+		if (!handle) return;
 
-		// Auto-enable floating mode when dragging starts
-		if (!isFloating) {
-			setIsFloating(true);
-		}
-
-		panel.setPointerCapture(e.pointerId);
+		handle.setPointerCapture(e.pointerId);
 		dragRef.current = {
 			startX: e.clientX,
 			startY: e.clientY,
 			startPosX: panelPosition.x,
 			startPosY: panelPosition.y,
 		};
-	}, [isFloating, panelPosition]);
+	}, [panelPosition]);
 
 	const handleDragMove = useCallback((e: React.PointerEvent) => {
 		if (!dragRef.current) return;
@@ -108,21 +102,12 @@ export function ReplayControls({
 
 	const handleDragEnd = useCallback((e: React.PointerEvent) => {
 		if (!dragRef.current) return;
-		const panel = controlPanelRef.current;
-		if (panel) {
-			panel.releasePointerCapture(e.pointerId);
+		const handle = dragHandleRef.current;
+		if (handle) {
+			handle.releasePointerCapture(e.pointerId);
 		}
 		dragRef.current = null;
 	}, []);
-
-	// Toggle floating mode
-	const toggleFloating = useCallback(() => {
-		if (isFloating) {
-			// Reset position when docking
-			setPanelPosition({ x: 0, y: 0 });
-		}
-		setIsFloating(!isFloating);
-	}, [isFloating]);
 
 	// Select thumbnails for display
 	const displayThumbnails = useMemo(() => {
@@ -136,120 +121,41 @@ export function ReplayControls({
 
 	return (
 		<div
-			ref={controlPanelRef}
 			className={clsx(
-				"z-50 w-full max-w-4xl",
-				isFloating
-					? "fixed"
-					: clsx(
-							"absolute left-1/2 -translate-x-1/2",
-							isMobile ? "bottom-3 px-2" : "bottom-12 px-4",
-						),
+				"z-50 w-full max-w-4xl absolute left-1/2",
+				isMobile ? "bottom-3 px-2" : "bottom-12 px-4",
 			)}
-			style={
-				isFloating
-					? {
-							left: `calc(50% + ${panelPosition.x}px)`,
-							bottom: `calc(12% + ${-panelPosition.y}px)`,
-							transform: "translateX(-50%)",
-							touchAction: "none",
-						}
-					: undefined
-			}
-			onPointerDown={handleDragStart}
-			onPointerMove={handleDragMove}
-			onPointerUp={handleDragEnd}
-			onPointerCancel={handleDragEnd}
+			style={{
+				transform: `translate(calc(-50% + ${panelPosition.x}px), ${panelPosition.y}px)`,
+			}}
 		>
-			{/* Drag handle - always visible */}
+			{/* Drag handle - only element that initiates panel drag */}
 			<div
-				className={clsx(
-					"flex items-center justify-center cursor-move select-none",
-					isFloating ? "py-1.5" : "py-1",
-				)}
+				ref={dragHandleRef}
+				className="flex items-center justify-center cursor-move select-none py-1 touch-none"
 				title="Drag to move"
+				onPointerDown={handleDragStart}
+				onPointerMove={handleDragMove}
+				onPointerUp={handleDragEnd}
+				onPointerCancel={handleDragEnd}
 			>
-				<div className="flex gap-0.5">
-					{/* Grip dots pattern */}
-					<div className="flex flex-col gap-0.5">
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-					</div>
-					<div className="flex flex-col gap-0.5">
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-					</div>
-					<div className="flex flex-col gap-0.5">
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-						<div className="w-1 h-1 rounded-full bg-gray-500" />
-					</div>
+				{/* Grip dots pattern - 3 columns x 2 rows */}
+				<div className="grid grid-cols-3 gap-0.5">
+					{Array.from({ length: 6 }).map((_, i) => (
+						<div key={i} className="w-1 h-1 rounded-full bg-gray-500" />
+					))}
 				</div>
 			</div>
 
 			{/* Main control bar */}
 			<div
 				className={clsx(
-					"bg-gray-900/95 backdrop-blur-md flex flex-col w-full",
+					"bg-gray-900/95 backdrop-blur-md flex flex-col w-full shadow-xl",
 					isMobile ? "rounded-lg" : "rounded-2xl",
-					isFloating && "shadow-2xl border border-gray-700",
 				)}
 			>
-				{/* Thumbnail controls */}
-				{player.session?.thumbnails && player.session.thumbnails.length > 0 && (
-					<div
-						className="flex items-center justify-between px-4 pt-2"
-						onPointerDown={(e) => e.stopPropagation()}
-					>
-						<button
-							onClick={() => setShowThumbnails(!showThumbnails)}
-							className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors"
-						>
-							<span
-								className={clsx(
-									"transition-transform duration-200",
-									showThumbnails ? "rotate-90" : "rotate-0",
-								)}
-							>
-								▶
-							</span>
-							Previews
-						</button>
-						<div className="flex items-center gap-2">
-							{showThumbnails && (
-								<>
-									<button
-										onClick={() => setThumbnailSize(Math.max(0, thumbnailSize - 25))}
-										className="text-xs text-gray-400 hover:text-white px-1"
-										title="Smaller thumbnails"
-									>
-										−
-									</button>
-									<button
-										onClick={() => setThumbnailSize(Math.min(100, thumbnailSize + 25))}
-										className="text-xs text-gray-400 hover:text-white px-1"
-										title="Larger thumbnails"
-									>
-										+
-									</button>
-								</>
-							)}
-							<button
-								onClick={toggleFloating}
-								className="ml-2 text-xs text-gray-400 hover:text-white"
-								title={isFloating ? "Dock controls" : "Float controls"}
-								aria-label={isFloating ? "Dock controls" : "Float controls"}
-							>
-								{isFloating ? "⬋" : "⬈"}
-							</button>
-						</div>
-					</div>
-				)}
-
 				{/* Timeline with thumbnails */}
-				<div
-					className={clsx("px-4", isMobile ? "py-2" : "py-3")}
-					onPointerDown={(e) => e.stopPropagation()}
-				>
+				<div className={clsx("px-4", isMobile ? "py-2" : "py-3")}>
 					<Timeline
 						currentTime={currentTime}
 						duration={duration}
@@ -269,7 +175,6 @@ export function ReplayControls({
 						"flex items-center justify-between border-t border-gray-700",
 						isMobile ? "px-2 py-1" : "px-3 py-1",
 					)}
-					onPointerDown={(e) => e.stopPropagation()}
 				>
 					{/* Left: Exit, Sessions, and navigation */}
 					<div className="flex items-center gap-1.5">
@@ -294,6 +199,43 @@ export function ReplayControls({
 							>
 								📹 Sessions
 							</button>
+						)}
+
+						{/* Preview thumbnails toggle */}
+						{player.session?.thumbnails && player.session.thumbnails.length > 0 && (
+							<>
+								<button
+									onClick={() => setShowThumbnails(!showThumbnails)}
+									className={clsx(
+										"rounded font-medium transition-colors",
+										showThumbnails
+											? "bg-blue-600 text-white hover:bg-blue-500"
+											: "bg-gray-700 text-gray-300 hover:bg-gray-600",
+										isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
+									)}
+									title="Toggle previews"
+								>
+									🖼
+								</button>
+								{showThumbnails && (
+									<div className="flex items-center">
+										<button
+											onClick={() => setThumbnailSize(Math.max(0, thumbnailSize - 25))}
+											className="text-xs text-gray-400 hover:text-white w-5 h-5 flex items-center justify-center"
+											title="Smaller thumbnails"
+										>
+											−
+										</button>
+										<button
+											onClick={() => setThumbnailSize(Math.min(100, thumbnailSize + 25))}
+											className="text-xs text-gray-400 hover:text-white w-5 h-5 flex items-center justify-center"
+											title="Larger thumbnails"
+										>
+											+
+										</button>
+									</div>
+								)}
+							</>
 						)}
 
 						<div className="h-4 w-px bg-gray-700" />
@@ -375,12 +317,10 @@ export function ReplayControls({
 							disabled={!isReady}
 							className={clsx(
 								"rounded font-medium transition-colors",
-								!isReady
-									? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-									: inPoint !== null
-										? "bg-green-600 text-white"
-										: "bg-gray-700 text-gray-300 hover:bg-gray-600",
 								isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
+								!isReady && "bg-gray-700/50 text-gray-500 cursor-not-allowed",
+								isReady && inPoint !== null && "bg-green-600 text-white",
+								isReady && inPoint === null && "bg-gray-700 text-gray-300 hover:bg-gray-600",
 							)}
 							title="Set start point"
 						>
@@ -392,12 +332,10 @@ export function ReplayControls({
 							disabled={!isReady}
 							className={clsx(
 								"rounded font-medium transition-colors",
-								!isReady
-									? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-									: outPoint !== null
-										? "bg-green-600 text-white"
-										: "bg-gray-700 text-gray-300 hover:bg-gray-600",
 								isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
+								!isReady && "bg-gray-700/50 text-gray-500 cursor-not-allowed",
+								isReady && outPoint !== null && "bg-green-600 text-white",
+								isReady && outPoint === null && "bg-gray-700 text-gray-300 hover:bg-gray-600",
 							)}
 							title="Set end point"
 						>
