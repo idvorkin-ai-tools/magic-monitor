@@ -2,6 +2,14 @@ import clsx from "clsx";
 import { useCallback, useEffect, useRef } from "react";
 import type { SessionThumbnail } from "../types/sessions";
 
+// ===== Helpers =====
+
+function formatThumbTime(seconds: number): string {
+	const mins = Math.floor(seconds / 60);
+	const secs = Math.floor(seconds % 60);
+	return mins > 0 ? `${mins}:${secs.toString().padStart(2, "0")}` : `${secs}s`;
+}
+
 // ===== Types =====
 
 interface TimelineProps {
@@ -63,11 +71,6 @@ export function Timeline({
 			const container = containerRef.current;
 			if (!container || disabled) return;
 
-			// Ignore events on the thumbnail strip (let it handle its own scrolling)
-			if (thumbStripRef.current?.contains(e.target as Node)) {
-				return;
-			}
-
 			// Store the pointerId for use in handlers (to ensure we capture/release the same pointer)
 			const pointerId = e.pointerId;
 
@@ -107,7 +110,6 @@ export function Timeline({
 		},
 		[getTimeFromPosition, onSeek, disabled],
 	);
-
 
 	// Cleanup effect to remove event listeners if component unmounts during drag
 	useEffect(() => {
@@ -153,7 +155,7 @@ export function Timeline({
 			ref={containerRef}
 			data-testid="timeline-container"
 			className={clsx(
-				"w-full touch-none",
+				"w-full",
 				disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
 			)}
 			onPointerDown={handlePointerDown}
@@ -162,14 +164,20 @@ export function Timeline({
 			{thumbnails && thumbnails.length > 0 && (
 				<div
 					ref={thumbStripRef}
-					className="flex gap-1 mb-2 overflow-x-auto pb-1"
+					className="flex gap-1 mb-2 overflow-x-auto pb-1 touch-pan-x"
 				>
 					{thumbnails.map((thumb, index) => (
-						<div
+						<button
 							key={index}
+							type="button"
+							aria-label={`Seek to ${formatThumbTime(thumb.time)}`}
+							onClick={() => onSeek(thumb.time)}
+							onPointerDown={(e) => e.stopPropagation()}
 							style={{ width: thumbWidth, height: thumbHeight }}
 							className={clsx(
-								"flex-shrink-0 rounded overflow-hidden relative bg-black",
+								"flex-shrink-0 rounded overflow-hidden relative cursor-pointer transition-all",
+								"hover:ring-2 hover:ring-white/50 focus-visible:ring-2 focus-visible:ring-blue-400 focus:outline-none",
+								"active:brightness-90 active:ring-blue-400",
 								currentTime >= thumb.time &&
 									(index === thumbnails.length - 1 ||
 										currentTime < thumbnails[index + 1]?.time) &&
@@ -179,13 +187,14 @@ export function Timeline({
 							<img
 								src={thumb.dataUrl}
 								alt={`Frame at ${thumb.time.toFixed(1)}s`}
-								className="w-full h-full object-contain"
+								className="w-full h-full object-cover"
+								draggable={false}
+								loading="lazy"
 							/>
-							{/* Timestamp overlay */}
-							<div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5">
-								{Math.floor(thumb.time / 60)}:{String(Math.floor(thumb.time % 60)).padStart(2, "0")}
-							</div>
-						</div>
+							<span className="absolute bottom-0 right-0 bg-black/70 text-white text-[10px] px-1 rounded-tl">
+								{formatThumbTime(thumb.time)}
+							</span>
+						</button>
 					))}
 				</div>
 			)}
@@ -195,7 +204,7 @@ export function Timeline({
 				ref={trackRef}
 				data-testid="timeline-track"
 				className={clsx(
-					"relative w-full bg-gray-700 rounded-full",
+					"relative w-full bg-gray-700 rounded-full touch-none",
 					isMobile ? "h-2" : "h-3",
 				)}
 			>
