@@ -63,6 +63,11 @@ export function Timeline({
 			const container = containerRef.current;
 			if (!container || disabled) return;
 
+			// Ignore events on the thumbnail strip (let it handle its own scrolling)
+			if (thumbStripRef.current?.contains(e.target as Node)) {
+				return;
+			}
+
 			// Store the pointerId for use in handlers (to ensure we capture/release the same pointer)
 			const pointerId = e.pointerId;
 
@@ -158,7 +163,6 @@ export function Timeline({
 				<div
 					ref={thumbStripRef}
 					className="flex gap-1 mb-2 overflow-x-auto pb-1"
-					onPointerDown={(e) => e.stopPropagation()}
 				>
 					{thumbnails.map((thumb, index) => (
 						<div
