@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	buildDefaultDescription,
 	buildDefaultTitle,
 	buildGitHubIssueUrl,
 	buildIssueBody,
 	formatDate,
+	getMediaRecorderInfo,
 	getMetadata,
 } from "./bugReportFormatters";
 
@@ -260,5 +261,62 @@ describe("getMetadata", () => {
 
 		expect(routeCalled).toBe(true);
 		expect(agentCalled).toBe(true);
+	});
+});
+
+describe("getMediaRecorderInfo", () => {
+	// Mock MediaRecorder for basic tests
+	class MockMediaRecorder {
+		static isTypeSupported(mimeType: string): boolean {
+			return mimeType.includes("webm");
+		}
+	}
+
+	beforeAll(() => {
+		// @ts-expect-error - Mock MediaRecorder for testing
+		globalThis.MediaRecorder = MockMediaRecorder;
+	});
+
+	it("returns expected structure", () => {
+		const result = getMediaRecorderInfo();
+
+		expect(result).toHaveProperty("available");
+		expect(result).toHaveProperty("isIOSSafari");
+		expect(result).toHaveProperty("selectedCodec");
+		expect(result).toHaveProperty("supportedCodecs");
+	});
+
+	it("returns safe defaults when MediaRecorder throws", () => {
+		// Save original
+		const originalMediaRecorder = globalThis.MediaRecorder;
+
+		// Create a mock that throws
+		// @ts-expect-error - Mock MediaRecorder for testing
+		globalThis.MediaRecorder = class {
+			static isTypeSupported(): boolean {
+				throw new Error("Test error");
+			}
+		};
+
+		// Suppress console.error for this test
+		const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const result = getMediaRecorderInfo();
+
+		// Should return safe defaults instead of throwing
+		expect(result.available).toBe(false);
+		expect(result.isIOSSafari).toBe(false);
+		expect(result.selectedCodec).toBe("(error during detection)");
+		expect(result.supportedCodecs).toEqual([]);
+
+		// Should have logged the error
+		expect(consoleSpy).toHaveBeenCalledWith(
+			"[BugReport] Failed to collect MediaRecorder info:",
+			expect.any(Error),
+		);
+
+		// Cleanup
+		consoleSpy.mockRestore();
+		(globalThis as Record<string, unknown>).MediaRecorder = originalMediaRecorder;
 	});
 });
