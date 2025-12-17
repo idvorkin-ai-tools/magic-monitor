@@ -175,7 +175,7 @@ export function Timeline({
 							onPointerDown={(e) => e.stopPropagation()}
 							style={{ width: thumbWidth, height: thumbHeight }}
 							className={clsx(
-								"flex-shrink-0 rounded overflow-hidden relative cursor-pointer transition-all",
+								"flex-shrink-0 rounded overflow-hidden relative cursor-pointer transition-all bg-black",
 								"hover:ring-2 hover:ring-white/50 focus-visible:ring-2 focus-visible:ring-blue-400 focus:outline-none",
 								"active:brightness-90 active:ring-blue-400",
 								currentTime >= thumb.time &&
@@ -187,7 +187,7 @@ export function Timeline({
 							<img
 								src={thumb.dataUrl}
 								alt={`Frame at ${thumb.time.toFixed(1)}s`}
-								className="w-full h-full object-cover"
+								className="w-full h-full object-contain"
 								draggable={false}
 								loading="lazy"
 							/>
