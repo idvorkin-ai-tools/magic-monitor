@@ -261,11 +261,13 @@ just e2e-ui       # Interactive UI mode
 ```
 tests/
 ├── helpers/
-│   └── seedRewindBuffer.ts    # IndexedDB seeding utility
+│   ├── seedRewindBuffer.ts    # IndexedDB seeding utility (legacy)
+│   └── seedSessionBuffer.ts   # Session IndexedDB seeding
 ├── fixtures/
 │   ├── test-chunk.webm        # Test video chunk
 │   └── test-preview.jpg       # Thumbnail image
 ├── magic-monitor.spec.ts      # Main E2E test suite
+├── dropdown-bug.spec.ts       # Dropdown interaction tests
 └── session-recorder.spec.ts   # Session recording tests
 ```
 

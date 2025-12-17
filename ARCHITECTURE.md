@@ -74,9 +74,18 @@ src/
 ├── smoothing/           # Smoothing algorithms
 │   ├── ema.ts
 │   ├── kalman.ts
+│   ├── types.ts
 │   └── index.ts
 ├── constants/           # Shared constants
 │   └── zoom.ts
+├── types/               # TypeScript type definitions
+│   ├── bugReport.ts
+│   └── sessions.ts
+├── utils/               # Pure utility functions
+│   ├── bugReportFormatters.ts
+│   ├── formatters.ts
+│   ├── shakeDetection.ts
+│   └── thumbnailSelection.ts
 └── App.tsx
 ```
 

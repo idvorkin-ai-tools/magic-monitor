@@ -13,11 +13,12 @@ flowchart LR
         end
         subgraph Hysteresis["Hysteresis Thresholds"]
             ZOOM_TH["ZOOM_THRESHOLD = 0.1"]
-            PAN_TH["PAN_THRESHOLD = 50px"]
+            PAN_TH["PAN_THRESHOLD = 0.025<br/>(normalized)"]
         end
-        subgraph Smoothing["Smoothing"]
-            SMOOTH["SMOOTH_FACTOR = 0.05"]
-            SMOOTH_SLOW["SMOOTH_FACTOR_SLOW = 0.025<br/>(no hands: 0.5×)"]
+        subgraph Smoothing["Smoothing Presets"]
+            EMA["EMA (default)"]
+            KALMAN_FAST["Kalman Fast"]
+            KALMAN_SMOOTH["Kalman Smooth"]
         end
         subgraph Defaults["Defaults"]
             DEF_PAD["DEFAULT_PADDING = 2.0"]
@@ -156,7 +157,7 @@ zoomDelta > ZOOM_THRESHOLD  OR  panDistance > PAN_THRESHOLD
 **Thresholds**:
 
 - `ZOOM_THRESHOLD` = 0.1 (10% zoom change)
-- `PAN_THRESHOLD` = 50 pixels
+- `PAN_THRESHOLD` = 0.025 (normalized coordinates, ~2.5% of frame)
 
 If the change is below both thresholds, the committed target remains unchanged and the system continues interpolating toward the previous target.
 
@@ -166,21 +167,19 @@ If the change is below both thresholds, the committed target remains unchanged a
 2. New detection: target zoom = 2.05 (delta = 0.05 < 0.1)
 3. Result: Committed target stays at 2.0, no change
 
-## Smoothing (Lerp)
+## Smoothing
 
-Current values interpolate toward committed targets each frame:
+Current values interpolate toward committed targets each frame using pluggable smoothing algorithms.
 
-```
-current = current + (target - current) * smoothFactor
-```
+### Available Presets
 
-**Default smoothFactor**: 0.05 (slower = smoother)
+| Preset | Description |
+|--------|-------------|
+| `ema` (default) | Exponential Moving Average - lightweight, good balance |
+| `kalman-fast` | 6D Kalman filter with process noise favoring fast response |
+| `kalman-smooth` | 6D Kalman filter with process noise favoring stability |
 
-This creates exponential decay toward the target:
-
-- After 1 frame: 5% of the way there
-- After 10 frames: ~40% of the way there
-- After 50 frames: ~92% of the way there
+All smoothers implement a common interface and include speed clamping to limit maximum movement per frame, preventing jarring transitions.
 
 ## No Hands Detected
 
@@ -188,17 +187,17 @@ When no hands are detected, the system smoothly returns to default state:
 
 ```
 Target: zoom = 1, pan = (0, 0)
-Smooth factor: smoothFactor * 0.5 (half speed)
+Speed: 0.5× normal (half speed)
 ```
 
 The slower return prevents jarring zoom-out when hands briefly leave frame.
 
 ## Configuration
 
-| Parameter    | Default | Description                       |
-| ------------ | ------- | --------------------------------- |
-| padding      | 2.0     | Multiplier for space around hands |
-| smoothFactor | 0.05    | Lerp rate (0-1, lower = smoother) |
+| Parameter        | Default | Description                           |
+| ---------------- | ------- | ------------------------------------- |
+| padding          | 2.0     | Multiplier for space around hands     |
+| smoothingPreset  | "ema"   | Smoothing algorithm preset to use     |
 
 ## External Architecture
 
@@ -252,14 +251,15 @@ flowchart TD
     HYST -->|Yes| COMMIT["Commit new target"]
     HYST -->|No| KEEP["Keep current target"]
 
-    COMMIT --> LERP["Lerp toward target<br/>current += (target - current) × SMOOTH_FACTOR"]
-    KEEP --> LERP
+    COMMIT --> SMOOTH["Apply smoother<br/>(EMA or Kalman)"]
+    KEEP --> SMOOTH
 
     HANDS -->|No| RESET["Set target to<br/>DEFAULT_ZOOM, DEFAULT_PAN"]
-    RESET --> LERP_SLOW["Lerp at half speed<br/>current += (target - current) × SMOOTH_FACTOR_SLOW"]
+    RESET --> SMOOTH_SLOW["Smooth at half speed"]
 
-    LERP --> OUTPUT["Output: zoom, pan,<br/>landmarks, clampedEdges"]
-    LERP_SLOW --> OUTPUT
+    SMOOTH --> CLAMP_SPEED["Speed clamp<br/>(limit max movement)"]
+    SMOOTH_SLOW --> CLAMP_SPEED
+    CLAMP_SPEED --> OUTPUT["Output: zoom, pan,<br/>landmarks, clampedEdges"]
     OUTPUT --> WAIT
     WAIT --> START
 ```
@@ -285,16 +285,17 @@ stateDiagram-v2
 
     state Idle {
         [*] --> ZoomingOut
-        ZoomingOut --> ZoomingOut: lerp at SMOOTH_FACTOR_SLOW
+        ZoomingOut --> ZoomingOut: smooth at 0.5× speed
     }
 ```
 
 ## Pure Functions for Testing
 
-The following calculations can be extracted as pure functions:
+The following are exported as pure functions for testability:
 
-1. `calculateTargetZoom(boundingBox, padding)` → number
-2. `calculateTargetPan(boundingBox, videoSize)` → {x, y}
-3. `clampPanToViewport(pan, zoom, videoSize)` → {pan: {x, y}, clampedEdges: {left, right, top, bottom}}
-4. `shouldCommitTarget(newTarget, committedTarget, thresholds)` → boolean
-5. `lerp(current, target, factor)` → number
+1. `clampNormalizedPan(pan, zoom)` → {pan: {x, y}, clampedEdges} - Clamps normalized pan to viewport bounds
+2. `clampPanToViewport(pan, zoom, videoSize)` → {pan: {x, y}, clampedEdges} - Legacy pixel-based version
+
+Smoothing functions are in `src/smoothing/`:
+- `createSmoother(preset)` - Factory for smoother instances
+- `clampSpeed(prev, current, maxPanSpeed, maxZoomSpeed)` - Speed limiting

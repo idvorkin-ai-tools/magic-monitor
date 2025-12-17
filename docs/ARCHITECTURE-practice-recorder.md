@@ -132,7 +132,7 @@ interface SessionThumbnail {
 }
 ```
 
-A 5-min block has ~20 thumbnails (every 15s). Each JPEG ~10-30KB = ~200-600KB per block.
+A 5-min block has ~100 thumbnails (every 3s). Each JPEG ~10-30KB = ~1-3MB per block.
 
 ## Storage Architecture
 
@@ -159,6 +159,7 @@ export const SessionStorageService = {
 
   // Create
   async saveSession(session: Omit<PracticeSession, 'id'>): Promise<string>,
+  async saveSessionWithBlob(session: Omit<PracticeSession, 'id'>, blob: Blob): Promise<string>,  // atomic
   async saveBlob(id: string, blob: Blob): Promise<void>,
 
   // Read
@@ -176,12 +177,14 @@ export const SessionStorageService = {
   // Delete
   async deleteSession(id: string): Promise<void>,
   async deleteBlob(id: string): Promise<void>,
+  async deleteSessionWithBlob(id: string): Promise<void>,  // atomic
 
   // Pruning
-  async pruneOldSessions(keepDurationMs: number): Promise<number>,  // returns count deleted
+  async pruneOldSessions(keepDurationSeconds?: number): Promise<number>,  // returns count deleted
   async getStorageUsage(): Promise<{ used: number, quota: number }>,
 
   // Cleanup
+  async clear(): Promise<void>,  // clear all data
   close(): void
 }
 
@@ -190,38 +193,37 @@ export type SessionStorageServiceType = typeof SessionStorageService
 
 ### Storage Limits
 
-| Type | Policy | Est. Size (4K/15Mbps) |
-|------|--------|----------------------|
-| Recent unsaved | Keep ~10 min worth | ~1.1 GB max |
+| Type | Policy | Est. Size (5Mbps) |
+|------|--------|-------------------|
+| Recent unsaved | Keep ~10 min worth | ~375 MB max |
 | Saved sessions | User manages | Unlimited (warn at 3GB) |
 
 ### Pruning Logic
 
-```typescript
-const RECENT_DURATION_SECONDS = 10 * 60  // 10 minutes of history
+Actual implementation in `SessionStorageService.pruneOldSessions()`:
 
-async function pruneOldSessions() {
-  const unsaved = await db.sessions
-    .where('saved').equals(false)
-    .reverse()                    // newest first
-    .sortBy('createdAt')
+```typescript
+const keepDurationSeconds = SESSION_CONFIG.MAX_RECENT_DURATION_SECONDS  // 10 minutes
+
+async function pruneOldSessions(keepDurationSeconds: number) {
+  const unsaved = await getRecentSessions(1000)  // Get all unsaved, sorted newest first
 
   let totalDurationSeconds = 0
   const toKeep: string[] = []
   const toDelete: string[] = []
 
   for (const session of unsaved) {
-    if (totalDurationSeconds < RECENT_DURATION_SECONDS) {
+    if (totalDurationSeconds < keepDurationSeconds) {
       toKeep.push(session.id)
-      totalDurationSeconds += session.duration  // duration is already in seconds
+      totalDurationSeconds += session.duration  // duration is in seconds
     } else {
       toDelete.push(session.id)
     }
   }
 
-  for (const id of toDelete) {
-    await deleteSession(id)
-  }
+  // Delete old sessions and their blobs atomically
+  await Promise.all(toDelete.map(id => deleteSessionWithBlob(id)))
+  return toDelete.length
 }
 ```
 
@@ -270,7 +272,7 @@ interface RecordingService {
 ### Realtime Thumbnail Capture
 
 ```typescript
-const THUMBNAIL_INTERVAL_MS = 15_000  // every 15 seconds
+const THUMBNAIL_INTERVAL_MS = 3_000  // every 3 seconds (configurable via SESSION_CONFIG)
 
 // Inside recording loop
 useEffect(() => {
@@ -301,12 +303,16 @@ Thumbnails accumulate during recording. When block completes, they're saved with
 
 ### Configuration
 
+From `src/types/sessions.ts`:
+
 ```typescript
-const CONFIG = {
-  BLOCK_DURATION_MS: 5 * 60 * 1000,     // 5 minutes
-  MAX_RECENT_BLOCKS: 3,                  // ~15 min of recent
-  VIDEO_BITRATE: 15_000_000,             // 15 Mbps for 4K
-  THUMBNAIL_QUALITY: 0.7,                // JPEG quality
+export const SESSION_CONFIG = {
+  BLOCK_DURATION_MS: 5 * 60 * 1000,           // 5 minutes
+  MAX_RECENT_DURATION_SECONDS: 10 * 60,       // 10 minutes of history
+  VIDEO_BITRATE: 5_000_000,                   // 5 Mbps - balanced quality/performance
+  THUMBNAIL_QUALITY: 0.7,                     // JPEG quality
+  THUMBNAIL_INTERVAL_MS: 3_000,               // every 3 seconds (for fine-grained selection)
+  STORAGE_WARNING_BYTES: 3 * 1024 * 1024 * 1024, // 3 GB
 }
 ```
 
@@ -429,7 +435,7 @@ function useFrameStepper(videoRef: RefObject<HTMLVideoElement>) {
 └─────────────────────────────────────────────────────┘
 ```
 
-5-min block = 20 thumbnails at 15s intervals.
+5-min block = ~100 thumbnails at 3s intervals (displayed count varies based on screen size).
 
 ### ReplayControls
 
@@ -468,14 +474,17 @@ CameraStage
 ```
 src/
 ├── hooks/
-│   ├── useSessionRecorder.ts    # Block-based recording
-│   ├── useSessionStorage.ts     # IndexedDB operations
-│   ├── useReplayPlayer.ts       # Playback + trim controls
-│   └── useFrameStepper.ts       # Frame-accurate navigation
+│   ├── useSessionRecorder.ts    # Block-based recording orchestration
+│   ├── useSessionList.ts        # Session list management + saveBlock
+│   ├── useBlockRecorder.ts      # Individual block recording
+│   ├── useBlockRotation.ts      # Auto-rotate through recording blocks
+│   ├── useReplayPlayer.ts       # Playback + trim controls + frame stepping
+│   └── useThumbnailCapture.ts   # Thumbnail extraction during recording
 ├── services/
 │   ├── SessionStorageService.ts # IndexedDB abstraction
 │   ├── VideoFixService.ts       # fix-webm-meta wrapper (Humble Object)
 │   ├── ThumbnailCaptureService.ts # Canvas operations (Humble Object)
+│   ├── MediaRecorderService.ts  # MediaRecorder wrapper (Humble Object)
 │   ├── ShareService.ts          # Native share / download (Humble Object)
 │   └── TimerService.ts          # Injectable timers (Humble Object)
 ├── components/
@@ -483,7 +492,10 @@ src/
 │   ├── SessionThumbnail.tsx     # Individual preview card
 │   ├── ReplayView.tsx           # Full replay experience
 │   ├── ReplayControls.tsx       # Transport + trim UI
-│   └── Timeline.tsx             # Scrubber with trim handles
+│   ├── Timeline.tsx             # Scrubber with trim handles
+│   └── ThumbnailGrid.tsx        # Grid layout for session thumbnails
+├── machines/
+│   └── SessionRecorderMachine.ts # XState machine for recording state
 └── types/
     └── sessions.ts              # PracticeSession, etc.
 ```
