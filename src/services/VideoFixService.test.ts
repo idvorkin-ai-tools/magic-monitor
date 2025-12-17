@@ -60,8 +60,38 @@ describe("VideoFixService", () => {
 	});
 
 	describe("needsFix", () => {
-		it("returns true (fix always needed for now)", () => {
-			expect(VideoFixService.needsFix()).toBe(true);
+		it("returns true for WebM blobs", () => {
+			const webmBlob = new Blob(["test"], { type: "video/webm" });
+			expect(VideoFixService.needsFix(webmBlob)).toBe(true);
+		});
+
+		it("returns true for WebM with codecs", () => {
+			const webmBlob = new Blob(["test"], { type: "video/webm;codecs=vp9" });
+			expect(VideoFixService.needsFix(webmBlob)).toBe(true);
+		});
+
+		it("returns false for MP4 blobs (iOS)", () => {
+			const mp4Blob = new Blob(["test"], { type: "video/mp4" });
+			expect(VideoFixService.needsFix(mp4Blob)).toBe(false);
+		});
+
+		it("returns false for MP4 with codecs", () => {
+			const mp4Blob = new Blob(["test"], { type: "video/mp4;codecs=avc1" });
+			expect(VideoFixService.needsFix(mp4Blob)).toBe(false);
+		});
+	});
+
+	describe("fixDuration with MP4", () => {
+		it("skips fix for MP4 blobs and returns original", async () => {
+			const fixWebmDuration = (await import("fix-webm-duration")).default;
+			const mp4Blob = new Blob(["test"], { type: "video/mp4" });
+
+			const result = await VideoFixService.fixDuration(mp4Blob, 5000);
+
+			// Should NOT call fix-webm-duration for MP4
+			expect(fixWebmDuration).not.toHaveBeenCalled();
+			expect(result.blob).toBe(mp4Blob);
+			expect(result.wasFixed).toBe(false);
 		});
 	});
 });

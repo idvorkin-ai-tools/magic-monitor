@@ -10,12 +10,20 @@ export const VideoFixService = {
 	 * MediaRecorder-produced WebM files often lack proper duration metadata,
 	 * making them non-seekable. This fixes that issue.
 	 *
+	 * Note: Only applies to WebM files. MP4 files (used on iOS) don't need this fix.
+	 *
 	 * @returns Object with blob and wasFixed flag indicating if fix succeeded
 	 */
 	async fixDuration(
 		blob: Blob,
 		durationMs?: number,
 	): Promise<{ blob: Blob; wasFixed: boolean }> {
+		// Only fix WebM files - MP4 (used on iOS) doesn't need this fix
+		// and fix-webm-duration would corrupt MP4 files
+		if (!blob.type.includes("webm")) {
+			return { blob, wasFixed: false };
+		}
+
 		try {
 			const fixWebmDuration = (await import("fix-webm-duration")).default;
 			// fix-webm-duration infers duration from WebM when not provided
@@ -31,13 +39,11 @@ export const VideoFixService = {
 	},
 
 	/**
-	 * Check if fix is needed based on browser capabilities.
-	 * Some browsers (Safari 18.4+) may produce seekable WebM natively.
+	 * Check if fix is needed based on blob type.
+	 * Only WebM files need the duration fix - MP4 files have proper metadata.
 	 */
-	needsFix(): boolean {
-		// For now, always assume fix is needed
-		// Could add detection for browsers that produce seekable WebM natively
-		return true;
+	needsFix(blob: Blob): boolean {
+		return blob.type.includes("webm");
 	},
 };
 
