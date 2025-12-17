@@ -12,7 +12,9 @@ export const ThumbnailCaptureService = {
 		const canvas = document.createElement("canvas");
 		canvas.width = video.videoWidth;
 		canvas.height = video.videoHeight;
-		const ctx = canvas.getContext("2d");
+		// willReadFrequently: true hints browser to optimize for pixel reads (toDataURL)
+		// This can improve performance on iOS by using appropriate memory backing
+		const ctx = canvas.getContext("2d", { willReadFrequently: true });
 		if (!ctx) {
 			throw new Error("Cannot get canvas context");
 		}

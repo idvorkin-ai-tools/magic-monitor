@@ -280,7 +280,8 @@ export function CameraStage() {
 			const canvas = document.createElement("canvas");
 			canvas.width = video.videoWidth;
 			canvas.height = video.videoHeight;
-			const ctx = canvas.getContext("2d");
+			// willReadFrequently: true for pixel sampling operations
+			const ctx = canvas.getContext("2d", { willReadFrequently: true });
 			if (!ctx) return;
 
 			ctx.drawImage(video, 0, 0);

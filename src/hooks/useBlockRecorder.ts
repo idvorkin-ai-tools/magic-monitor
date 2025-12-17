@@ -1,5 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import {
+	DeviceService,
+	type DeviceServiceType,
+} from "../services/DeviceService";
+import {
 	MediaRecorderService,
 	type MediaRecorderServiceType,
 	type RecordingSession,
@@ -11,6 +15,7 @@ export interface BlockRecorderConfig {
 	videoRef: React.RefObject<HTMLVideoElement | null>;
 	mediaRecorderService?: MediaRecorderServiceType;
 	timerService?: TimerServiceType;
+	deviceService?: DeviceServiceType;
 }
 
 export interface StopRecordingOptions {
@@ -30,10 +35,21 @@ export interface BlockRecorderControls {
  * Hook for managing MediaRecorder lifecycle (start/stop recording).
  * Single Responsibility: MediaRecorder session management.
  */
+/**
+ * Get the appropriate video bitrate based on device type.
+ * Mobile devices use lower bitrate to reduce encoder strain.
+ */
+function getVideoBitrate(deviceService: DeviceServiceType): number {
+	return deviceService.isMobileDevice()
+		? SESSION_CONFIG.VIDEO_BITRATE_MOBILE
+		: SESSION_CONFIG.VIDEO_BITRATE_DESKTOP;
+}
+
 export function useBlockRecorder({
 	videoRef,
 	mediaRecorderService = MediaRecorderService,
 	timerService = TimerService,
+	deviceService = DeviceService,
 }: BlockRecorderConfig): BlockRecorderControls {
 	const [isRecording, setIsRecording] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -74,7 +90,7 @@ export function useBlockRecorder({
 
 		try {
 			const session = mediaRecorderService.startRecording(stream, {
-				videoBitsPerSecond: SESSION_CONFIG.VIDEO_BITRATE,
+				videoBitsPerSecond: getVideoBitrate(deviceService),
 			});
 
 			blockStartTimeRef.current = timerService.now();
@@ -114,7 +130,7 @@ export function useBlockRecorder({
 			setError("Recording failed - check camera connection");
 			setIsRecording(false);
 		}
-	}, [videoRef, mediaRecorderService, timerService]);
+	}, [videoRef, mediaRecorderService, timerService, deviceService]);
 
 	// Helper to clean up cloned stream
 	const cleanupClonedStream = useCallback(() => {
