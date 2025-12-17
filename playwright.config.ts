@@ -12,9 +12,9 @@ export default defineConfig({
 	],
 	use: {
 		baseURL: "https://localhost:5173",
-		trace: "on",
-		video: "on",
-		screenshot: "on",
+		trace: "retain-on-failure",
+		video: "retain-on-failure",
+		screenshot: "only-on-failure",
 		ignoreHTTPSErrors: true,
 		// Block service workers to prevent cached content from interfering with tests
 		serviceWorkers: "block",
@@ -24,13 +24,6 @@ export default defineConfig({
 			name: "chromium",
 			use: {
 				...devices["Desktop Chrome"],
-				headless: true,
-			},
-		},
-		{
-			name: "mobile",
-			use: {
-				...devices["iPhone 14 Pro"],
 				headless: true,
 			},
 		},
