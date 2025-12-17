@@ -32,10 +32,6 @@ export interface BlockRecorderControls {
 }
 
 /**
- * Hook for managing MediaRecorder lifecycle (start/stop recording).
- * Single Responsibility: MediaRecorder session management.
- */
-/**
  * Get the appropriate video bitrate based on device type.
  * Mobile devices use lower bitrate to reduce encoder strain.
  */
@@ -45,6 +41,10 @@ function getVideoBitrate(deviceService: DeviceServiceType): number {
 		: SESSION_CONFIG.VIDEO_BITRATE_DESKTOP;
 }
 
+/**
+ * Hook for managing MediaRecorder lifecycle (start/stop recording).
+ * Single Responsibility: MediaRecorder session management.
+ */
 export function useBlockRecorder({
 	videoRef,
 	mediaRecorderService = MediaRecorderService,
