@@ -1,4 +1,9 @@
-import type { BugReportData, BugReportMetadata } from "../types/bugReport";
+import { MediaRecorderService } from "../services/MediaRecorderService";
+import type {
+	BugReportData,
+	BugReportMetadata,
+	MediaRecorderInfo,
+} from "../types/bugReport";
 import { GIT_COMMIT_URL, GIT_SHA_SHORT } from "../version";
 
 export function formatBuildLink(): string {
@@ -73,6 +78,14 @@ export function buildIssueBody(
 | Display Mode | \`${metadata.displayMode}\` |
 | Touch Device | \`${metadata.isTouchDevice}\` |
 | Mobile | \`${metadata.isMobile}\` |
+
+**MediaRecorder**
+| Field | Value |
+|-------|-------|
+| Available | \`${metadata.mediaRecorder.available}\` |
+| iOS Safari | \`${metadata.mediaRecorder.isIOSSafari}\` |
+| Selected Codec | \`${metadata.mediaRecorder.selectedCodec}\` |
+| Supported Codecs | \`${metadata.mediaRecorder.supportedCodecs.join(", ") || "none"}\` |
 `;
 	}
 
@@ -112,6 +125,33 @@ export interface DeviceInfoGetters {
 	isMobileDevice: () => boolean;
 }
 
+/**
+ * Collect MediaRecorder debug info for bug reports.
+ */
+export function getMediaRecorderInfo(): MediaRecorderInfo {
+	const available = typeof MediaRecorder !== "undefined";
+	const isIOSSafari = available ? MediaRecorderService.isIOSSafari() : false;
+	const selectedCodec = available ? MediaRecorderService.getBestCodec() : "";
+
+	// Test codecs
+	const codecsToTest = [
+		"video/webm;codecs=vp9",
+		"video/webm",
+		"video/mp4;codecs=avc1.42E01E",
+		"video/mp4",
+	];
+	const supportedCodecs = available
+		? codecsToTest.filter((codec) => MediaRecorderService.isTypeSupported(codec))
+		: [];
+
+	return {
+		available,
+		isIOSSafari,
+		selectedCodec: selectedCodec || "(browser picks)",
+		supportedCodecs,
+	};
+}
+
 export function getMetadata(
 	getCurrentRoute: () => string,
 	getUserAgent: () => string,
@@ -133,6 +173,7 @@ export function getMetadata(
 		displayMode: deviceInfo.getDisplayMode(),
 		isTouchDevice: deviceInfo.isTouchDevice(),
 		isMobile: deviceInfo.isMobileDevice(),
+		mediaRecorder: getMediaRecorderInfo(),
 	};
 }
 
@@ -175,5 +216,13 @@ ${error.stack || "No stack trace available"}
 | Display Mode | \`${metadata.displayMode}\` |
 | Touch Device | \`${metadata.isTouchDevice}\` |
 | Mobile | \`${metadata.isMobile}\` |
+
+**MediaRecorder**
+| Field | Value |
+|-------|-------|
+| Available | \`${metadata.mediaRecorder.available}\` |
+| iOS Safari | \`${metadata.mediaRecorder.isIOSSafari}\` |
+| Selected Codec | \`${metadata.mediaRecorder.selectedCodec}\` |
+| Supported Codecs | \`${metadata.mediaRecorder.supportedCodecs.join(", ") || "none"}\` |
 `;
 }

@@ -30,12 +30,40 @@ export const MediaRecorderService = {
 	},
 
 	/**
+	 * Detect if running on iOS Safari.
+	 * iOS Safari lies about WebM support in isTypeSupported() - it reports true
+	 * but cannot actually play back WebM videos. We must force MP4 on iOS.
+	 */
+	isIOSSafari(): boolean {
+		const ua = navigator.userAgent;
+		const isIOS = /iPad|iPhone|iPod/.test(ua);
+		const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua);
+		return isIOS && isSafari;
+	},
+
+	/**
 	 * Get the best supported video codec.
-	 * iOS Safari requires MP4 (doesn't support WebM at all).
+	 * iOS Safari requires MP4 (doesn't support WebM playback despite isTypeSupported lying).
 	 * Other browsers prefer WebM with VP9 for better compression.
 	 */
 	getBestCodec(): string {
-		// Try WebM with VP9 first (best compression, works on Chrome/Firefox/Edge)
+		// iOS Safari MUST use MP4 - it lies about WebM support in isTypeSupported
+		// but cannot play back WebM videos (fails with "format not supported")
+		if (this.isIOSSafari()) {
+			if (this.isTypeSupported("video/mp4;codecs=avc1.42E01E")) {
+				return "video/mp4;codecs=avc1.42E01E";
+			}
+			if (this.isTypeSupported("video/mp4;codecs=avc1")) {
+				return "video/mp4;codecs=avc1";
+			}
+			if (this.isTypeSupported("video/mp4")) {
+				return "video/mp4";
+			}
+			// Let iOS pick - it will use MP4
+			return "";
+		}
+
+		// Non-iOS: Try WebM with VP9 first (best compression, works on Chrome/Firefox/Edge)
 		if (this.isTypeSupported("video/webm;codecs=vp9")) {
 			return "video/webm;codecs=vp9";
 		}
@@ -43,7 +71,7 @@ export const MediaRecorderService = {
 		if (this.isTypeSupported("video/webm")) {
 			return "video/webm";
 		}
-		// Try MP4 with H.264 baseline profile (required for iOS Safari)
+		// Try MP4 with H.264 baseline profile
 		// avc1.42E01E = H.264 Baseline Profile Level 3.0 (widely compatible)
 		if (this.isTypeSupported("video/mp4;codecs=avc1.42E01E")) {
 			return "video/mp4;codecs=avc1.42E01E";

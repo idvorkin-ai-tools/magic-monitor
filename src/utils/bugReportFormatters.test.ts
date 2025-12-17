@@ -71,6 +71,12 @@ describe("buildIssueBody", () => {
 		displayMode: "browser",
 		isTouchDevice: false,
 		isMobile: false,
+		mediaRecorder: {
+			available: true,
+			isIOSSafari: false,
+			selectedCodec: "video/webm;codecs=vp9",
+			supportedCodecs: ["video/webm;codecs=vp9", "video/webm"],
+		},
 	};
 
 	it("includes description", () => {
