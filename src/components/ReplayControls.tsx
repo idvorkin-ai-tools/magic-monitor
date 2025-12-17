@@ -70,18 +70,18 @@ export function ReplayControls({
 	const [thumbnailSize, setThumbnailSize] = useState(50); // 0-100 slider
 	const [panelPosition, setPanelPosition] = useState({ x: 0, y: 0 });
 	const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
-	const controlPanelRef = useRef<HTMLDivElement>(null);
+	const dragHandleRef = useRef<HTMLDivElement>(null);
 
 	const { isMobile: detectedMobile } = useMobileDetection();
 	const effectiveMobile = isMobile || detectedMobile;
 
-	// Handle drag start for control panel
+	// Handle drag start for control panel (only from drag handle)
 	const handleDragStart = useCallback((e: React.PointerEvent) => {
 		e.preventDefault();
-		const panel = controlPanelRef.current;
-		if (!panel) return;
+		const handle = dragHandleRef.current;
+		if (!handle) return;
 
-		panel.setPointerCapture(e.pointerId);
+		handle.setPointerCapture(e.pointerId);
 		dragRef.current = {
 			startX: e.clientX,
 			startY: e.clientY,
@@ -102,9 +102,9 @@ export function ReplayControls({
 
 	const handleDragEnd = useCallback((e: React.PointerEvent) => {
 		if (!dragRef.current) return;
-		const panel = controlPanelRef.current;
-		if (panel) {
-			panel.releasePointerCapture(e.pointerId);
+		const handle = dragHandleRef.current;
+		if (handle) {
+			handle.releasePointerCapture(e.pointerId);
 		}
 		dragRef.current = null;
 	}, []);
@@ -121,24 +121,23 @@ export function ReplayControls({
 
 	return (
 		<div
-			ref={controlPanelRef}
 			className={clsx(
 				"z-50 w-full max-w-4xl absolute left-1/2",
 				isMobile ? "bottom-3 px-2" : "bottom-12 px-4",
 			)}
 			style={{
-				transform: `translate(calc(-50% + ${panelPosition.x}px), ${-panelPosition.y}px)`,
-				touchAction: "none",
+				transform: `translate(calc(-50% + ${panelPosition.x}px), ${panelPosition.y}px)`,
 			}}
-			onPointerDown={handleDragStart}
-			onPointerMove={handleDragMove}
-			onPointerUp={handleDragEnd}
-			onPointerCancel={handleDragEnd}
 		>
-			{/* Drag handle - always visible */}
+			{/* Drag handle - only element that initiates panel drag */}
 			<div
-				className="flex items-center justify-center cursor-move select-none py-1"
+				ref={dragHandleRef}
+				className="flex items-center justify-center cursor-move select-none py-1 touch-none"
 				title="Drag to move"
+				onPointerDown={handleDragStart}
+				onPointerMove={handleDragMove}
+				onPointerUp={handleDragEnd}
+				onPointerCancel={handleDragEnd}
 			>
 				<div className="flex gap-0.5">
 					{/* Grip dots pattern */}
@@ -164,52 +163,8 @@ export function ReplayControls({
 					isMobile ? "rounded-lg" : "rounded-2xl",
 				)}
 			>
-				{/* Thumbnail controls - compact row */}
-				{player.session?.thumbnails && player.session.thumbnails.length > 0 && (
-					<div
-						className="flex items-center gap-3 px-4 pt-1.5"
-						onPointerDown={(e) => e.stopPropagation()}
-					>
-						<button
-							onClick={() => setShowThumbnails(!showThumbnails)}
-							className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
-						>
-							<span
-								className={clsx(
-									"transition-transform duration-200 text-[10px]",
-									showThumbnails ? "rotate-90" : "rotate-0",
-								)}
-							>
-								▶
-							</span>
-							Previews
-						</button>
-						{showThumbnails && (
-							<div className="flex items-center gap-0.5">
-								<button
-									onClick={() => setThumbnailSize(Math.max(0, thumbnailSize - 25))}
-									className="text-xs text-gray-400 hover:text-white w-5 h-5 flex items-center justify-center"
-									title="Smaller thumbnails"
-								>
-									−
-								</button>
-								<button
-									onClick={() => setThumbnailSize(Math.min(100, thumbnailSize + 25))}
-									className="text-xs text-gray-400 hover:text-white w-5 h-5 flex items-center justify-center"
-									title="Larger thumbnails"
-								>
-									+
-								</button>
-							</div>
-						)}
-					</div>
-				)}
-
 				{/* Timeline with thumbnails */}
-				<div
-					className={clsx("px-4", isMobile ? "py-2" : "py-3")}
-					onPointerDown={(e) => e.stopPropagation()}
-				>
+				<div className={clsx("px-4", isMobile ? "py-2" : "py-3")}>
 					<Timeline
 						currentTime={currentTime}
 						duration={duration}
@@ -229,7 +184,6 @@ export function ReplayControls({
 						"flex items-center justify-between border-t border-gray-700",
 						isMobile ? "px-2 py-1" : "px-3 py-1",
 					)}
-					onPointerDown={(e) => e.stopPropagation()}
 				>
 					{/* Left: Exit, Sessions, and navigation */}
 					<div className="flex items-center gap-1.5">
@@ -254,6 +208,43 @@ export function ReplayControls({
 							>
 								📹 Sessions
 							</button>
+						)}
+
+						{/* Preview thumbnails toggle */}
+						{player.session?.thumbnails && player.session.thumbnails.length > 0 && (
+							<>
+								<button
+									onClick={() => setShowThumbnails(!showThumbnails)}
+									className={clsx(
+										"rounded font-medium transition-colors",
+										showThumbnails
+											? "bg-blue-600 text-white hover:bg-blue-500"
+											: "bg-gray-700 text-gray-300 hover:bg-gray-600",
+										isMobile ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs",
+									)}
+									title="Toggle previews"
+								>
+									🖼
+								</button>
+								{showThumbnails && (
+									<div className="flex items-center">
+										<button
+											onClick={() => setThumbnailSize(Math.max(0, thumbnailSize - 25))}
+											className="text-xs text-gray-400 hover:text-white w-5 h-5 flex items-center justify-center"
+											title="Smaller thumbnails"
+										>
+											−
+										</button>
+										<button
+											onClick={() => setThumbnailSize(Math.min(100, thumbnailSize + 25))}
+											className="text-xs text-gray-400 hover:text-white w-5 h-5 flex items-center justify-center"
+											title="Larger thumbnails"
+										>
+											+
+										</button>
+									</div>
+								)}
+							</>
 						)}
 
 						<div className="h-4 w-px bg-gray-700" />

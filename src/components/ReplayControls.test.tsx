@@ -724,8 +724,8 @@ describe("ReplayControls", () => {
 	});
 
 	describe("thumbnail controls", () => {
-		it("shows preview toggle when session has thumbnails", () => {
-			render(
+		it("shows preview toggle in transport controls when session has thumbnails", () => {
+			const { container } = render(
 				<ReplayControls
 					player={mockPlayer}
 					onExit={mockOnExit}
@@ -733,7 +733,14 @@ describe("ReplayControls", () => {
 				/>,
 			);
 
-			expect(screen.getByText("Previews")).toBeTruthy();
+			// Preview toggle should exist
+			const previewToggle = screen.getByTitle("Toggle previews");
+			expect(previewToggle).toBeTruthy();
+
+			// It should be in the transport controls row (has border-t)
+			const transportRow = container.querySelector(".border-t.border-gray-700");
+			expect(transportRow).toBeTruthy();
+			expect(transportRow?.contains(previewToggle)).toBe(true);
 		});
 
 		it("does not show preview toggle when session has no thumbnails", () => {
@@ -748,7 +755,7 @@ describe("ReplayControls", () => {
 				/>,
 			);
 
-			expect(screen.queryByText("Previews")).toBeFalsy();
+			expect(screen.queryByTitle("Toggle previews")).toBeFalsy();
 		});
 
 		it("does not show preview toggle when no session loaded", () => {
@@ -760,7 +767,7 @@ describe("ReplayControls", () => {
 				/>,
 			);
 
-			expect(screen.queryByText("Previews")).toBeFalsy();
+			expect(screen.queryByTitle("Toggle previews")).toBeFalsy();
 		});
 
 		it("toggles thumbnail visibility when clicked", () => {
@@ -772,16 +779,16 @@ describe("ReplayControls", () => {
 				/>,
 			);
 
-			const previewToggle = screen.getByText("Previews");
+			const previewToggle = screen.getByTitle("Toggle previews");
 
-			// Initially thumbnails should be shown (alt="" means they're decorative, not accessible)
+			// Initially thumbnails should be shown
 			let images = container.querySelectorAll("img");
 			expect(images.length).toBeGreaterThan(0);
 
 			// Click to hide
 			fireEvent.click(previewToggle);
 
-			// Thumbnails should be hidden (Timeline receives undefined)
+			// Thumbnails should be hidden
 			images = container.querySelectorAll("img");
 			expect(images.length).toBe(0);
 		});
@@ -802,6 +809,161 @@ describe("ReplayControls", () => {
 			expect(largerButton).toBeTruthy();
 		});
 
+		it("hides size buttons when thumbnails are collapsed", () => {
+			render(
+				<ReplayControls
+					player={mockPlayer}
+					onExit={mockOnExit}
+					onSaveClick={mockOnSaveClick}
+				/>,
+			);
+
+			// Click to collapse thumbnails
+			const previewToggle = screen.getByTitle("Toggle previews");
+			fireEvent.click(previewToggle);
+
+			// Size buttons should be hidden
+			expect(screen.queryByTitle("Smaller thumbnails")).toBeFalsy();
+			expect(screen.queryByTitle("Larger thumbnails")).toBeFalsy();
+		});
+
+		it("has no separate thumbnail controls row (compact design)", () => {
+			const { container } = render(
+				<ReplayControls
+					player={mockPlayer}
+					onExit={mockOnExit}
+					onSaveClick={mockOnSaveClick}
+				/>,
+			);
+
+			// The main control bar should only have two direct sections:
+			// 1. Timeline area (with thumbnails + progress bar)
+			// 2. Transport controls row
+			// There should NOT be a separate "thumbnail controls" row
+			const mainBar = container.querySelector(".bg-gray-900\\/95");
+			expect(mainBar).toBeTruthy();
+
+			// Count direct children that are divs (sections)
+			const sections = mainBar?.querySelectorAll(":scope > div");
+			// Should be exactly 2: timeline section and transport controls
+			expect(sections?.length).toBe(2);
+		});
+
+	});
+
+	describe("panel drag behavior", () => {
+		it("dragging down moves panel down (positive Y)", () => {
+			const { container } = render(
+				<ReplayControls
+					player={mockPlayer}
+					onExit={mockOnExit}
+					onSaveClick={mockOnSaveClick}
+				/>,
+			);
+
+			// Find the drag handle (the grip dots area)
+			const dragHandle = container.querySelector('[title="Drag to move"]') as HTMLElement;
+			expect(dragHandle).toBeTruthy();
+
+			// Get the panel container
+			const panel = dragHandle.closest(".z-50") as HTMLElement;
+			expect(panel).toBeTruthy();
+
+			// Initial transform should have Y=0
+			const initialTransform = panel.style.transform;
+			expect(initialTransform).toContain("0px");
+
+			// Start drag
+			fireEvent.pointerDown(dragHandle, { clientX: 100, clientY: 100, pointerId: 1 });
+
+			// Drag DOWN by 50px (positive clientY direction)
+			fireEvent.pointerMove(dragHandle, { clientX: 100, clientY: 150, pointerId: 1 });
+
+			// Panel should move DOWN - positive translateY value
+			// The transform should show the panel moved down, not up
+			const newTransform = panel.style.transform;
+			// When dragging down, the Y component should result in panel moving down
+			// translateY(positive) moves element down
+			// We expect something like translate(calc(-50% + 0px), 50px) or similar positive Y
+			expect(newTransform).toMatch(/,\s*50px\)/);
+
+			fireEvent.pointerUp(dragHandle, { clientX: 100, clientY: 150, pointerId: 1 });
+		});
+
+		it("dragging up moves panel up (negative Y)", () => {
+			const { container } = render(
+				<ReplayControls
+					player={mockPlayer}
+					onExit={mockOnExit}
+					onSaveClick={mockOnSaveClick}
+				/>,
+			);
+
+			const dragHandle = container.querySelector('[title="Drag to move"]') as HTMLElement;
+			const panel = dragHandle.closest(".z-50") as HTMLElement;
+
+			// Start drag
+			fireEvent.pointerDown(dragHandle, { clientX: 100, clientY: 100, pointerId: 1 });
+
+			// Drag UP by 50px (negative clientY direction)
+			fireEvent.pointerMove(dragHandle, { clientX: 100, clientY: 50, pointerId: 1 });
+
+			// Panel should move UP - negative translateY value
+			const newTransform = panel.style.transform;
+			expect(newTransform).toMatch(/,\s*-50px\)/);
+
+			fireEvent.pointerUp(dragHandle, { clientX: 100, clientY: 50, pointerId: 1 });
+		});
+
+		it("dragging left/right moves panel horizontally", () => {
+			const { container } = render(
+				<ReplayControls
+					player={mockPlayer}
+					onExit={mockOnExit}
+					onSaveClick={mockOnSaveClick}
+				/>,
+			);
+
+			const dragHandle = container.querySelector('[title="Drag to move"]') as HTMLElement;
+			const panel = dragHandle.closest(".z-50") as HTMLElement;
+
+			// Start drag
+			fireEvent.pointerDown(dragHandle, { clientX: 100, clientY: 100, pointerId: 1 });
+
+			// Drag RIGHT by 75px
+			fireEvent.pointerMove(dragHandle, { clientX: 175, clientY: 100, pointerId: 1 });
+
+			// Panel X should be +75
+			const newTransform = panel.style.transform;
+			expect(newTransform).toContain("75px");
+
+			fireEvent.pointerUp(dragHandle, { clientX: 175, clientY: 100, pointerId: 1 });
+		});
+
+		it("only drag handle initiates drag, not other panel areas", () => {
+			const { container } = render(
+				<ReplayControls
+					player={mockPlayer}
+					onExit={mockOnExit}
+					onSaveClick={mockOnSaveClick}
+				/>,
+			);
+
+			const panel = container.querySelector(".z-50") as HTMLElement;
+			const timeline = container.querySelector('[data-testid="timeline-container"]') as HTMLElement;
+
+			// Pointer down on timeline should NOT start panel drag
+			fireEvent.pointerDown(timeline, { clientX: 100, clientY: 100, pointerId: 1 });
+			fireEvent.pointerMove(timeline, { clientX: 100, clientY: 200, pointerId: 1 });
+
+			// Panel should not have moved
+			const transform = panel.style.transform;
+			// Should still be at origin (0, 0 offset)
+			expect(transform).toContain("0px");
+			expect(transform).toMatch(/,\s*0px\)/);
+
+			fireEvent.pointerUp(timeline, { clientX: 100, clientY: 200, pointerId: 1 });
+		});
 	});
 
 	describe("mobile mode", () => {
