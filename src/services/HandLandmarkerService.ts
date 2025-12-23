@@ -142,6 +142,11 @@ class HandLandmarkerServiceImpl {
 			const canvas = document.createElement("canvas");
 			const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
 			console.log("[HandLandmarkerService] WebGL available:", !!gl, gl ? `(${gl.getParameter(gl.VERSION)})` : "");
+			// Clean up diagnostic canvas to prevent memory leak
+			if (gl) {
+				const loseContext = gl.getExtension("WEBGL_lose_context");
+				loseContext?.loseContext();
+			}
 			console.log("[HandLandmarkerService] HandLandmarker initialized successfully");
 
 			this.updateState({ phase: "ready" });

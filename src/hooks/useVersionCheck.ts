@@ -1,5 +1,5 @@
 import { useRegisterSW } from "virtual:pwa-register/react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	DeviceService,
 	type DeviceServiceType,
@@ -9,7 +9,9 @@ const LAST_UPDATE_CHECK_KEY = "magic-monitor-last-update-check";
 
 export function useVersionCheck(service: DeviceServiceType = DeviceService) {
 	const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
+	const intervalIdRef = useRef<number | null>(null);
 	const [isChecking, setIsChecking] = useState(false);
+	const [serviceWorkerAvailable, setServiceWorkerAvailable] = useState(false);
 	const [lastCheckTime, setLastCheckTime] = useState<Date | null>(() => {
 		const stored = service.getStorageItem(LAST_UPDATE_CHECK_KEY);
 		return stored ? new Date(stored) : null;
@@ -21,9 +23,10 @@ export function useVersionCheck(service: DeviceServiceType = DeviceService) {
 	} = useRegisterSW({
 		onRegisteredSW(swUrl, registration) {
 			registrationRef.current = registration ?? null;
+			setServiceWorkerAvailable(registration !== undefined);
 			// Check for updates periodically (every 30 minutes)
 			if (registration) {
-				setInterval(
+				intervalIdRef.current = window.setInterval(
 					() => {
 						registration.update();
 						const now = new Date();
@@ -39,6 +42,15 @@ export function useVersionCheck(service: DeviceServiceType = DeviceService) {
 			console.error("Service worker registration error:", error);
 		},
 	});
+
+	// Clean up interval on unmount
+	useEffect(() => {
+		return () => {
+			if (intervalIdRef.current !== null) {
+				clearInterval(intervalIdRef.current);
+			}
+		};
+	}, []);
 
 	const reload = () => {
 		updateServiceWorker(true);
@@ -70,6 +82,6 @@ export function useVersionCheck(service: DeviceServiceType = DeviceService) {
 		isChecking,
 		lastCheckTime,
 		// Expose whether service worker is available (for UI feedback)
-		serviceWorkerAvailable: registrationRef.current !== null,
+		serviceWorkerAvailable,
 	};
 }

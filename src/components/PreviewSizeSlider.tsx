@@ -1,3 +1,5 @@
+import clsx from "clsx";
+
 // ===== Types =====
 
 export interface PreviewSizeSliderProps {
@@ -34,7 +36,7 @@ export function PreviewSizeSlider({
 				value={value}
 				onChange={(e) => onChange(Number(e.target.value))}
 				onPointerDown={onPointerDown}
-				className={`${width} h-1 accent-blue-500 cursor-pointer`}
+				className={clsx(width, "h-1 accent-blue-500 cursor-pointer")}
 				title={title}
 			/>
 			<span className="text-xs text-gray-500">+</span>

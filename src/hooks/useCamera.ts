@@ -27,12 +27,18 @@ export function useCamera(initialDeviceId?: string) {
 
 	const [retryCount, setRetryCount] = useState(0);
 
+	// Use ref to avoid recreating getDevices when selectedDeviceId changes
+	const selectedDeviceIdRef = useRef(selectedDeviceId);
+	useEffect(() => {
+		selectedDeviceIdRef.current = selectedDeviceId;
+	}, [selectedDeviceId]);
+
 	const getDevices = useCallback(async () => {
 		const videoDevices = await CameraService.getVideoDevices();
 		setDevices(videoDevices);
 
 		// If we have devices but none selected, pick the first one and load its settings
-		if (videoDevices.length > 0 && !selectedDeviceId) {
+		if (videoDevices.length > 0 && !selectedDeviceIdRef.current) {
 			const deviceId = videoDevices[0].deviceId;
 			setSelectedDeviceId(deviceId);
 			DeviceService.setStorageItem(DEVICE_ID_STORAGE_KEY, deviceId);
@@ -42,7 +48,7 @@ export function useCamera(initialDeviceId?: string) {
 			setResolution(settings.resolution);
 			setOrientation(settings.orientation);
 		}
-	}, [selectedDeviceId]);
+	}, []);
 
 	// Handle device changes - syncs with external device enumeration
 	useEffect(() => {

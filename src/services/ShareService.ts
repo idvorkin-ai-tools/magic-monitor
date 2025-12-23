@@ -69,13 +69,16 @@ export const ShareService = {
 
 	/**
 	 * Generate a timestamped filename for video exports.
+	 * @param prefix - Filename prefix (default: "practice-clip")
+	 * @param mimeType - MIME type to derive extension from (default: "video/webm")
 	 */
-	generateFilename(prefix = "practice-clip"): string {
+	generateFilename(prefix = "practice-clip", mimeType = "video/webm"): string {
+		const extension = mimeType.includes("mp4") ? "mp4" : "webm";
 		const timestamp = new Date()
 			.toISOString()
 			.slice(0, 19)
 			.replace(/:/g, "-");
-		return `${prefix}-${timestamp}.webm`;
+		return `${prefix}-${timestamp}.${extension}`;
 	},
 };
 

@@ -46,7 +46,7 @@ export function Thumbnail({
 	);
 
 	return (
-		<div onClick={onClick} className={`${containerClass} h-full`}>
+		<div onClick={onClick} className={clsx(containerClass, "h-full")}>
 			{imageUrl ? (
 				// Disk mode: use img element with data URL
 				<img

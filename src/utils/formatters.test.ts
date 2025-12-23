@@ -41,13 +41,11 @@ describe("formatDuration", () => {
 		expect(formatDuration(59.99)).toBe("0:59");
 	});
 
-	it("handles negative numbers by flooring", () => {
-		// Math.floor(-65 / 60) = -2, Math.floor(-65 % 60) = Math.floor(-5) = -5
-		// JavaScript's % operator returns negative for negative inputs
-		// Note: padStart doesn't pad negative numbers, so -5 stays as "-5"
-		expect(formatDuration(-65)).toBe("-2:-5");
-		expect(formatDuration(-1)).toBe("-1:-1");
-		expect(formatDuration(-60)).toBe("-1:00");
+	it("handles negative numbers by treating them as 0", () => {
+		// Negative durations don't make sense, treat them as 0
+		expect(formatDuration(-65)).toBe("0:00");
+		expect(formatDuration(-1)).toBe("0:00");
+		expect(formatDuration(-60)).toBe("0:00");
 	});
 
 	it("handles NaN input", () => {
@@ -61,7 +59,7 @@ describe("formatDuration", () => {
 	});
 
 	it("handles negative Infinity", () => {
-		// Math.floor(-Infinity / 60) = -Infinity, -Infinity % 60 = NaN
-		expect(formatDuration(Number.NEGATIVE_INFINITY)).toBe("-Infinity:NaN");
+		// Negative Infinity is treated as 0 (negative durations don't make sense)
+		expect(formatDuration(Number.NEGATIVE_INFINITY)).toBe("0:00");
 	});
 });
