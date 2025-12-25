@@ -152,9 +152,8 @@ export function CameraStage() {
 		lastCheckTime,
 	} = useVersionCheck();
 
-	// Bug Reporter - destructure stable callbacks to avoid dependency anti-pattern
+	// Bug Reporter
 	const bugReporter = useBugReporter();
-	const { open: openBugReporter, shakeEnabled } = bugReporter;
 
 	// Debug Info for MediaRecorder troubleshooting
 	const recorderDebugInfo = useRecorderDebugInfo();
@@ -164,8 +163,8 @@ export function CameraStage() {
 		isSupported: isShakeSupported,
 		requestPermission: requestShakePermission,
 	} = useShakeDetector({
-		enabled: shakeEnabled,
-		onShake: openBugReporter,
+		enabled: bugReporter.shakeEnabled,
+		onShake: bugReporter.open,
 	});
 
 	// Detect platform for keyboard shortcut display
@@ -177,12 +176,12 @@ export function CameraStage() {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.ctrlKey || e.metaKey) && e.key === "i") {
 				e.preventDefault();
-				openBugReporter();
+				bugReporter.open();
 			}
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [openBugReporter]);
+	}, [bugReporter]);
 
 	// Sync stream to video element
 	useEffect(() => {

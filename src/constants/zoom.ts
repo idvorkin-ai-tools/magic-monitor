@@ -33,6 +33,5 @@ export const PAN_CONSTANTS = {
  * maxPan = (1 - 1/zoom) / 2
  */
 export function calculateMaxPan(zoom: number): number {
-	const safeZoom = Math.max(zoom, ZOOM_CONSTANTS.MIN_ZOOM);
-	return (1 - 1 / safeZoom) / 2;
+	return (1 - 1 / zoom) / 2;
 }
