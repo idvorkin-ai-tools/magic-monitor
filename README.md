@@ -1,6 +1,6 @@
 # Magic Monitor
 
-**[Try It Yourself →](https://magic-monitor.surge.sh)**
+**[Try It Yourself →](https://magic-monitor.surge.sh)** | **[Cloudflare Preview](https://magic-monitor.pages.dev)**
 
 Turn your webcam into a magic practice mirror. Perfect your sleight of hand with instant replay and AI-powered hand tracking.
 
