@@ -6,7 +6,7 @@ import { VersionNotification } from "./components/VersionNotification";
 function App() {
 	return (
 		<ErrorBoundary FallbackComponent={CrashFallback}>
-			<div className="w-screen h-screen bg-gray-900 overflow-hidden">
+			<div className="w-screen h-screen bg-gray-900 overflow-hidden" data-testid="app-root">
 				<CameraStage />
 				<VersionNotification />
 			</div>
