@@ -487,7 +487,7 @@ export function CameraStage() {
 				muted
 				onLoadedMetadata={handleVideoMetadataLoaded}
 				className={clsx(
-					"max-w-full max-h-full object-contain transition-transform duration-75 ease-out",
+					"w-full h-full object-contain transition-transform duration-75 ease-out",
 					appState === "replay" ? "hidden" : "block",
 				)}
 				style={{
