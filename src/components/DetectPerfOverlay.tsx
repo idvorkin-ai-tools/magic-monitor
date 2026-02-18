@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 interface DetectPerfOverlayProps {
 	detectTimeMsRef: React.RefObject<number>;
 	videoRef: React.RefObject<HTMLVideoElement | null>;
+	processingResRef: React.RefObject<{ width: number; height: number }>;
 }
 
 /**
@@ -10,7 +11,7 @@ interface DetectPerfOverlayProps {
  * Uses refs and rAF to avoid React re-renders (same pattern as HandSkeleton).
  * Smooths the detect time with EMA to reduce jitter.
  */
-export function DetectPerfOverlay({ detectTimeMsRef, videoRef }: DetectPerfOverlayProps) {
+export function DetectPerfOverlay({ detectTimeMsRef, videoRef, processingResRef }: DetectPerfOverlayProps) {
 	const spanRef = useRef<HTMLSpanElement>(null);
 	const smoothedMsRef = useRef(0);
 
@@ -30,15 +31,16 @@ export function DetectPerfOverlay({ detectTimeMsRef, videoRef }: DetectPerfOverl
 				const video = videoRef.current;
 				const camRes = video ? `${video.videoWidth}×${video.videoHeight}` : "—";
 
+				const pr = processingResRef.current;
 				spanRef.current.textContent =
-					`Detect: ${smoothedMsRef.current.toFixed(1)}ms | Camera: ${camRes} | Process: 640×360`;
+					`Detect: ${smoothedMsRef.current.toFixed(1)}ms | Camera: ${camRes} | Process: ${pr.width}×${pr.height}`;
 			}
 			rafId = requestAnimationFrame(update);
 		};
 
 		update();
 		return () => cancelAnimationFrame(rafId);
-	}, [detectTimeMsRef, videoRef]);
+	}, [detectTimeMsRef, videoRef, processingResRef]);
 
 	return (
 		<div className="absolute top-2 left-2 z-50 pointer-events-none">

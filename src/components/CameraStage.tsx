@@ -505,7 +505,7 @@ export function CameraStage() {
 						videoRef={videoRef}
 						isMirror={isMirror}
 					/>
-					<DetectPerfOverlay detectTimeMsRef={smartZoom.detectTimeMsRef} videoRef={videoRef} />
+					<DetectPerfOverlay detectTimeMsRef={smartZoom.detectTimeMsRef} videoRef={videoRef} processingResRef={smartZoom.processingResRef} />
 				</>
 			)}
 

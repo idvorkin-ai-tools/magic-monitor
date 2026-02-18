@@ -4,6 +4,7 @@ import { HandLandmarkerService } from "../services/HandLandmarkerService";
 import {
 	clampNormalizedPan,
 	clampPanToViewport,
+	computeProcessingDimensions,
 	useSmartZoom,
 } from "./useSmartZoom";
 
@@ -527,5 +528,37 @@ describe("clampPanToViewport (legacy pixel-based)", () => {
 		expect(result.pan.y).toBe(-100); // Within bounds
 		expect(result.clampedEdges.right).toBe(true); // At -maxPanX
 		expect(result.clampedEdges.left).toBe(false);
+	});
+});
+
+describe("computeProcessingDimensions", () => {
+	it("should scale 16:9 landscape to 640x360", () => {
+		const result = computeProcessingDimensions(1920, 1080);
+		expect(result).toEqual({ width: 640, height: 360 });
+	});
+
+	it("should preserve 4:3 aspect ratio (640x480)", () => {
+		const result = computeProcessingDimensions(1280, 960);
+		expect(result).toEqual({ width: 640, height: 480 });
+	});
+
+	it("should handle portrait video (1080x1920 → 360x640)", () => {
+		const result = computeProcessingDimensions(1080, 1920);
+		expect(result).toEqual({ width: 360, height: 640 });
+	});
+
+	it("should not upscale small video (320x240 → 320x240)", () => {
+		const result = computeProcessingDimensions(320, 240);
+		expect(result).toEqual({ width: 320, height: 240 });
+	});
+
+	it("should handle square video (1000x1000 → 640x640)", () => {
+		const result = computeProcessingDimensions(1000, 1000);
+		expect(result).toEqual({ width: 640, height: 640 });
+	});
+
+	it("should respect custom maxDimension", () => {
+		const result = computeProcessingDimensions(1920, 1080, 320);
+		expect(result).toEqual({ width: 320, height: 180 });
 	});
 });
