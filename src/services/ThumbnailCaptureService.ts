@@ -8,17 +8,18 @@ export const ThumbnailCaptureService = {
 	/**
 	 * Capture a frame from a video element as JPEG data URL.
 	 */
-	captureFromVideo(video: HTMLVideoElement, quality = 0.7): string {
+	captureFromVideo(video: HTMLVideoElement, quality = 0.7, maxWidth = 640): string {
+		const scale = Math.min(1, maxWidth / video.videoWidth);
 		const canvas = document.createElement("canvas");
-		canvas.width = video.videoWidth;
-		canvas.height = video.videoHeight;
+		canvas.width = Math.round(video.videoWidth * scale);
+		canvas.height = Math.round(video.videoHeight * scale);
 		// willReadFrequently: true hints browser to optimize for pixel reads (toDataURL)
 		// This can improve performance on iOS by using appropriate memory backing
 		const ctx = canvas.getContext("2d", { willReadFrequently: true });
 		if (!ctx) {
 			throw new Error("Cannot get canvas context");
 		}
-		ctx.drawImage(video, 0, 0);
+		ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 		return canvas.toDataURL("image/jpeg", quality);
 	},
 

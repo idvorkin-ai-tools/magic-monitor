@@ -121,6 +121,9 @@ export function SettingsModal({
 				ref={containerRef}
 				className="bg-gray-900 border border-white/10 p-6 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto"
 				onClick={(e) => e.stopPropagation()}
+				onMouseDown={(e) => e.stopPropagation()}
+				onMouseMove={(e) => e.stopPropagation()}
+				onWheel={(e) => e.stopPropagation()}
 			>
 				<div className="flex justify-between items-center mb-6">
 					<h2 className="text-xl font-bold text-white">Settings</h2>

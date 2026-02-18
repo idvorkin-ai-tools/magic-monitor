@@ -19,6 +19,7 @@ import { AboutModal } from "./AboutModal";
 import { BugReportModal } from "./BugReportModal";
 import { EdgeIndicator } from "./EdgeIndicator";
 import { ErrorOverlay } from "./ErrorOverlay";
+import { DetectPerfOverlay } from "./DetectPerfOverlay";
 import { HandSkeleton } from "./HandSkeleton";
 import { Minimap } from "./Minimap";
 import { ReplayView } from "./ReplayView";
@@ -498,11 +499,14 @@ export function CameraStage() {
 
 			{/* Hand Skeleton Debug Overlay */}
 			{showHandSkeleton && isSmartZoom && appState === "live" && (
-				<HandSkeleton
-					landmarksRef={smartZoom.debugLandmarksRef}
-					videoRef={videoRef}
-					isMirror={isMirror}
-				/>
+				<>
+					<HandSkeleton
+						landmarksRef={smartZoom.debugLandmarksRef}
+						videoRef={videoRef}
+						isMirror={isMirror}
+					/>
+					<DetectPerfOverlay detectTimeMsRef={smartZoom.detectTimeMsRef} videoRef={videoRef} />
+				</>
 			)}
 
 			{/* Replay View */}
