@@ -106,6 +106,22 @@ export function clampPanToViewport(
 	return { pan: clampedPan, clampedEdges };
 }
 
+/**
+ * Compute processing canvas dimensions that preserve the source aspect ratio.
+ * Scales so the larger dimension fits within maxDimension; never upscales.
+ */
+export function computeProcessingDimensions(
+	videoWidth: number,
+	videoHeight: number,
+	maxDimension = 640,
+): { width: number; height: number } {
+	const scale = Math.min(1, maxDimension / Math.max(videoWidth, videoHeight));
+	return {
+		width: Math.round(videoWidth * scale),
+		height: Math.round(videoHeight * scale),
+	};
+}
+
 interface SmartZoomConfig {
 	videoRef: React.RefObject<HTMLVideoElement | null>;
 	enabled: boolean;
@@ -167,9 +183,11 @@ export function useSmartZoom({
 	const detectTimeMsRef = useRef(0);
 
 	// Offscreen canvas for downscaling video before detection
-	// MediaPipe's hand model works at 224x224 internally, so 640x360 is more than enough
+	// MediaPipe's hand model works at 224x224 internally, so 640-wide is more than enough
 	const processingCanvasRef = useRef<OffscreenCanvas | HTMLCanvasElement | null>(null);
 	const processingCtxRef = useRef<CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null>(null);
+	const lastVideoDimsRef = useRef({ width: 0, height: 0 });
+	const processingResRef = useRef({ width: 0, height: 0 });
 
 	const requestRef = useRef<number>(0);
 	const lastVideoTimeRef = useRef<number>(-1);
@@ -218,21 +236,33 @@ export function useSmartZoom({
 			if (video.currentTime !== lastVideoTimeRef.current) {
 				lastVideoTimeRef.current = video.currentTime;
 
-				// Lazily create offscreen processing canvas (once)
-				if (!processingCanvasRef.current) {
-					processingCanvasRef.current = document.createElement("canvas");
-					processingCanvasRef.current.width = 640;
-					processingCanvasRef.current.height = 360;
-					processingCtxRef.current = processingCanvasRef.current.getContext("2d");
+				// Create or resize processing canvas to match video aspect ratio
+				const vw = video.videoWidth;
+				const vh = video.videoHeight;
+				if (
+					!processingCanvasRef.current ||
+					lastVideoDimsRef.current.width !== vw ||
+					lastVideoDimsRef.current.height !== vh
+				) {
+					const dims = computeProcessingDimensions(vw, vh);
+					if (!processingCanvasRef.current) {
+						processingCanvasRef.current = document.createElement("canvas");
+					}
+					processingCanvasRef.current.width = dims.width;
+					processingCanvasRef.current.height = dims.height;
+					processingCtxRef.current = (processingCanvasRef.current as HTMLCanvasElement).getContext("2d");
+					lastVideoDimsRef.current = { width: vw, height: vh };
+					processingResRef.current = dims;
 				}
 
-				// Downscale video to 640x360 before detection.
+				// Downscale video preserving aspect ratio before detection.
 				// Falls back to raw video if drawImage fails (e.g. in jsdom tests).
 				let detectInput: HTMLVideoElement | HTMLCanvasElement = video;
 				const processingCtx = processingCtxRef.current;
+				const procRes = processingResRef.current;
 				if (processingCtx) {
 					try {
-						processingCtx.drawImage(video, 0, 0, 640, 360);
+						processingCtx.drawImage(video, 0, 0, procRes.width, procRes.height);
 						detectInput = processingCanvasRef.current as HTMLCanvasElement;
 					} catch {
 						// jsdom canvas doesn't support drawImage with video — use raw video
@@ -478,6 +508,7 @@ export function useSmartZoom({
 		clampedEdgesRef,
 		debugLandmarksRef,
 		detectTimeMsRef,
+		processingResRef,
 		getDebugTrace,
 	};
 }
