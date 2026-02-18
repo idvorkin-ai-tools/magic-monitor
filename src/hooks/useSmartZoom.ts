@@ -163,6 +163,14 @@ export function useSmartZoom({
 	// The refs above always have the real-time value; state is for UI display only
 	const UI_UPDATE_INTERVAL = 6;
 
+	// Perf timing for detection (exposed via ref for overlay)
+	const detectTimeMsRef = useRef(0);
+
+	// Offscreen canvas for downscaling video before detection
+	// MediaPipe's hand model works at 224x224 internally, so 640x360 is more than enough
+	const processingCanvasRef = useRef<OffscreenCanvas | HTMLCanvasElement | null>(null);
+	const processingCtxRef = useRef<CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null>(null);
+
 	const requestRef = useRef<number>(0);
 	const lastVideoTimeRef = useRef<number>(-1);
 
@@ -210,11 +218,34 @@ export function useSmartZoom({
 			if (video.currentTime !== lastVideoTimeRef.current) {
 				lastVideoTimeRef.current = video.currentTime;
 
+				// Lazily create offscreen processing canvas (once)
+				if (!processingCanvasRef.current) {
+					processingCanvasRef.current = document.createElement("canvas");
+					processingCanvasRef.current.width = 640;
+					processingCanvasRef.current.height = 360;
+					processingCtxRef.current = processingCanvasRef.current.getContext("2d");
+				}
+
+				// Downscale video to 640x360 before detection.
+				// Falls back to raw video if drawImage fails (e.g. in jsdom tests).
+				let detectInput: HTMLVideoElement | HTMLCanvasElement = video;
+				const processingCtx = processingCtxRef.current;
+				if (processingCtx) {
+					try {
+						processingCtx.drawImage(video, 0, 0, 640, 360);
+						detectInput = processingCanvasRef.current as HTMLCanvasElement;
+					} catch {
+						// jsdom canvas doesn't support drawImage with video — use raw video
+					}
+				}
+
 				const startTimeMs = performance.now();
+				const t0 = performance.now();
 				const result = landmarker.detectForVideo(
-					video,
+					detectInput as unknown as HTMLVideoElement,
 					startTimeMs,
 				);
+				detectTimeMsRef.current = performance.now() - t0;
 
 				if (result?.landmarks && result.landmarks.length > 0) {
 					// Calculate bounding box of all hands
@@ -446,6 +477,7 @@ export function useSmartZoom({
 		panRef,
 		clampedEdgesRef,
 		debugLandmarksRef,
+		detectTimeMsRef,
 		getDebugTrace,
 	};
 }

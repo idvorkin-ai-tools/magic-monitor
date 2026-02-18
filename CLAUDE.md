@@ -113,6 +113,53 @@ React 19 + TypeScript + Vite + Tailwind CSS application for real-time camera mir
 - Props: `children`, `onClick`, `active`, `disabled`, `color`, `title`, `warning`
 - Use instead of inline conditional button styling
 
+### rAF Pattern (requestAnimationFrame for High-Frequency Updates)
+
+Use the **rAF ref-reading pattern** when data changes at 30-60fps but React re-renders would be too expensive. The producer writes to a `useRef`, the consumer reads it in a `requestAnimationFrame` loop — React never knows the value changed.
+
+**When to use:**
+- Visualizing data that changes every frame (landmarks, timing stats, waveforms)
+- Overlays that track video/canvas coordinates
+- Anything driven by `requestAnimationFrame` in a hook that would cause render storms via `useState`
+
+**When NOT to use:**
+- Data that changes < 10 times/sec — just use `useState`
+- Data that other React components need to react to (conditional rendering, props)
+
+**Pattern:**
+```tsx
+// Producer hook (e.g. useSmartZoom)
+const valueRef = useRef(0);
+// In rAF loop:
+valueRef.current = newValue;
+// Expose ref, not state:
+return { valueRef };
+
+// Consumer component (e.g. DetectPerfOverlay, HandSkeleton)
+function Overlay({ valueRef }: { valueRef: React.RefObject<number> }) {
+  const domRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    let rafId: number;
+    const update = () => {
+      if (domRef.current) {
+        domRef.current.textContent = `Value: ${valueRef.current}`;
+      }
+      rafId = requestAnimationFrame(update);
+    };
+    update();
+    return () => cancelAnimationFrame(rafId);
+  }, [valueRef]);
+
+  return <span ref={domRef} />;
+}
+```
+
+**Examples in codebase:**
+- `HandSkeleton` reads `debugLandmarksRef` from useSmartZoom, draws to canvas at 60fps
+- `DetectPerfOverlay` reads `detectTimeMsRef` from useSmartZoom, updates DOM text
+- `useSmartZoom` throttles `useState` updates to ~10Hz but keeps refs at full frame rate
+
 ### CSS Conventions
 
 - Use `clsx` for conditional class composition instead of template literals

@@ -30,7 +30,7 @@ describe("ThumbnailCaptureService", () => {
 	});
 
 	describe("captureFromVideo", () => {
-		it("captures frame from video element", () => {
+		it("captures frame from video element (downscaled to maxWidth)", () => {
 			const mockVideo = {
 				videoWidth: 1920,
 				videoHeight: 1080,
@@ -38,11 +38,26 @@ describe("ThumbnailCaptureService", () => {
 
 			const result = ThumbnailCaptureService.captureFromVideo(mockVideo);
 
-			expect(mockCanvas.width).toBe(1920);
-			expect(mockCanvas.height).toBe(1080);
-			expect(mockCtx.drawImage).toHaveBeenCalledWith(mockVideo, 0, 0);
+			// Default maxWidth=640 → scale = 640/1920 = 1/3
+			expect(mockCanvas.width).toBe(640);
+			expect(mockCanvas.height).toBe(360);
+			expect(mockCtx.drawImage).toHaveBeenCalledWith(mockVideo, 0, 0, 640, 360);
 			expect(mockCanvas.toDataURL).toHaveBeenCalledWith("image/jpeg", 0.7);
 			expect(result).toBe("data:image/jpeg;base64,test");
+		});
+
+		it("does not upscale when video is smaller than maxWidth", () => {
+			const mockVideo = {
+				videoWidth: 320,
+				videoHeight: 240,
+			} as HTMLVideoElement;
+
+			ThumbnailCaptureService.captureFromVideo(mockVideo);
+
+			// scale = min(1, 640/320) = 1 → no scaling
+			expect(mockCanvas.width).toBe(320);
+			expect(mockCanvas.height).toBe(240);
+			expect(mockCtx.drawImage).toHaveBeenCalledWith(mockVideo, 0, 0, 320, 240);
 		});
 
 		it("uses custom quality when provided", () => {
@@ -53,6 +68,9 @@ describe("ThumbnailCaptureService", () => {
 
 			ThumbnailCaptureService.captureFromVideo(mockVideo, 0.5);
 
+			// 640 <= maxWidth(640), so scale=1, no downscaling
+			expect(mockCanvas.width).toBe(640);
+			expect(mockCanvas.height).toBe(480);
 			expect(mockCanvas.toDataURL).toHaveBeenCalledWith("image/jpeg", 0.5);
 		});
 
