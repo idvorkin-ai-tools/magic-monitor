@@ -36,7 +36,7 @@ Use **Tailscale URLs** (e.g., `https://squeaker-teeth.ts.net:5173`), not localho
 ```bash
 just dev      # Run development server (npm run dev) - opens http://localhost:5173
 just build    # Build for production (tsc -b && vite build)
-just test     # Run unit tests (vitest run)
+just test     # Run unit tests AND build (vitest run + vite build)
 just e2e      # Run E2E tests (Playwright)
 just deploy   # Run tests, build, then deploy to magic-monitor.surge.sh
 ```
@@ -45,6 +45,17 @@ Individual npm scripts:
 
 - `npm run lint` - ESLint
 - `npm run test` - Vitest unit tests (excludes tests/ directory which is Playwright)
+
+### Pre-Submit Gate (MANDATORY)
+
+**Before submitting any PR, merge, or marking work as done, you MUST run `just test` and confirm it exits cleanly (exit code 0).** This is non-negotiable.
+
+`just test` runs both unit tests AND a full production build. It catches:
+- TypeScript errors
+- Unit test failures
+- Vite/PWA build errors (e.g., asset size limits, workbox config)
+
+If `just test` fails, fix the issue before proceeding. Do not submit work that doesn't build.
 
 ## Code Quality
 
