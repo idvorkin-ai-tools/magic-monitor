@@ -25,7 +25,8 @@ type LoadingListener = (state: LoadingState) => void;
 
 // YOLO model input size (square)
 const MODEL_INPUT_SIZE = 416;
-const MODEL_PATH = "/models/card-detector.onnx";
+const MODEL_PATH =
+	"https://github.com/idvorkin-ai-tools/magic-monitor/releases/download/v1.0.0-models/card-detector.onnx";
 
 // NMS parameters
 const NMS_IOU_THRESHOLD = 0.5;
