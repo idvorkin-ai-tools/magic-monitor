@@ -21,14 +21,14 @@ export interface CardDetection {
 }
 
 // YOLO class index to card mapping
-// Standard 52-class playing card dataset order (Roboflow convention)
-const RANKS: Rank[] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
-const SUITS: Suit[] = ["\u2660", "\u2665", "\u2666", "\u2663"];
+// PD-Mera model uses alphabetical ordering: 10C,10D,10H,10S, 2C,2D,..., QS
+// Ranks in alphabetical order, each with suits C(♣), D(♦), H(♥), S(♠)
+const PD_MERA_RANKS: Rank[] = ["10", "2", "3", "4", "5", "6", "7", "8", "9", "A", "J", "K", "Q"];
+const PD_MERA_SUITS: Suit[] = ["♣", "♦", "♥", "♠"];
 
-// Build class map: 0-12 = spades A-K, 13-25 = hearts A-K, etc.
 const CLASS_MAP: PlayingCard[] = [];
-for (const suit of SUITS) {
-	for (const rank of RANKS) {
+for (const rank of PD_MERA_RANKS) {
+	for (const suit of PD_MERA_SUITS) {
 		CLASS_MAP.push({ rank, suit });
 	}
 }

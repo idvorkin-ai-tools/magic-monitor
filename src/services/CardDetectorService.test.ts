@@ -80,12 +80,12 @@ describe("parseYoloOutput", () => {
 		data[2] = 100; // w
 		data[3] = 100; // h
 
-		// Set class 0 (Ace of Spades) score high
-		data[4] = 0.95;
+		// PD-Mera class 39 = AS (Ace of Spades)
+		data[4 + 39] = 0.95;
 
 		const result = parseYoloOutput(data, numPredictions, 0.5, 416, 416);
 		expect(result).toHaveLength(1);
-		expect(result[0].label).toBe("A\u2660");
+		expect(result[0].label).toBe("A♠");
 		expect(result[0].confidence).toBeCloseTo(0.95);
 		// Normalized bbox
 		expect(result[0].bbox.x).toBeCloseTo(208 / 416);
@@ -103,14 +103,14 @@ describe("parseYoloOutput", () => {
 		data[2] = 50;
 		data[3] = 50;
 
-		// Class 13 = Ace of Hearts (second suit starts at 13)
-		data[4 + 13] = 0.85;
-		// Class 0 = Ace of Spades (lower score)
-		data[4] = 0.6;
+		// PD-Mera class 38 = AH (Ace of Hearts) — higher score
+		data[4 + 38] = 0.85;
+		// PD-Mera class 39 = AS (Ace of Spades) — lower score
+		data[4 + 39] = 0.6;
 
 		const result = parseYoloOutput(data, numPredictions, 0.5, 416, 416);
 		expect(result).toHaveLength(1);
-		expect(result[0].label).toBe("A\u2665");
+		expect(result[0].label).toBe("A♥");
 		expect(result[0].confidence).toBeCloseTo(0.85);
 	});
 });
