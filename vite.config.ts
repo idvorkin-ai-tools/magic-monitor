@@ -49,7 +49,7 @@ export default defineConfig({
 		...(useSsl ? [basicSsl()] : []),
 		VitePWA({
 			registerType: "autoUpdate",
-			includeAssets: ["favicon.ico", "mediapipe/**/*"],
+			includeAssets: ["favicon.ico", "mediapipe/**/*", "models/**/*"],
 			manifest: {
 				name: "Magic Monitor",
 				short_name: "MagicMon",
@@ -79,7 +79,7 @@ export default defineConfig({
 				],
 			},
 			workbox: {
-				globPatterns: ["**/*.{js,css,html,ico,png,svg,wasm,task}"],
+				globPatterns: ["**/*.{js,css,html,ico,png,svg,wasm,task,onnx}"],
 				maximumFileSizeToCacheInBytes: 15 * 1024 * 1024, // 15MB for large model files
 				runtimeCaching: [
 					{
