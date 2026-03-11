@@ -4,6 +4,7 @@
 .specstory/**
 .aider*
 .claude/
+.runtime/
 .cursorindexingignore
 src/generated_version.ts
 
