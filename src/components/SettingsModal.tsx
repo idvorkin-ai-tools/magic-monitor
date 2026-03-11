@@ -38,6 +38,18 @@ interface SettingsModalProps {
 	showHandSkeleton: boolean;
 	onShowHandSkeletonChange: (enabled: boolean) => void;
 
+	// Card Detection
+	cardDetectionEnabled: boolean;
+	cardModelLoading: boolean;
+	cardModelError: string | null;
+	onCardDetectionChange: (enabled: boolean) => void;
+	cardConfidenceThreshold: number;
+	onCardConfidenceChange: (value: number) => void;
+	cardShowBoxes: boolean;
+	onCardShowBoxesChange: (enabled: boolean) => void;
+	cardShowList: boolean;
+	onCardShowListChange: (enabled: boolean) => void;
+
 	// Flash
 	flashEnabled: boolean;
 	onFlashEnabledChange: (enabled: boolean) => void;
@@ -88,6 +100,16 @@ export function SettingsModal({
 	onSmoothingPresetChange,
 	showHandSkeleton,
 	onShowHandSkeletonChange,
+	cardDetectionEnabled,
+	cardModelLoading,
+	cardModelError,
+	onCardDetectionChange,
+	cardConfidenceThreshold,
+	onCardConfidenceChange,
+	cardShowBoxes,
+	onCardShowBoxesChange,
+	cardShowList,
+	onCardShowListChange,
 	flashEnabled,
 	onFlashEnabledChange,
 	threshold,
@@ -303,6 +325,75 @@ export function SettingsModal({
 									onChange={onShowHandSkeletonChange}
 									disabled={isModelLoading}
 									color="yellow"
+									size="sm"
+								/>
+							</div>
+						</div>
+					)}
+
+					<div className="h-px bg-white/10 my-4" />
+
+					{/* Card Detection */}
+					<div className="flex items-center justify-between">
+						<div>
+							<div className="text-white font-medium">Card Detection</div>
+							<div className="text-xs text-gray-500">Detect playing cards via YOLO</div>
+						</div>
+						<ToggleSwitch
+							checked={cardDetectionEnabled}
+							onChange={onCardDetectionChange}
+							disabled={cardModelLoading}
+							color="purple"
+						/>
+					</div>
+
+					{cardModelError && (
+						<div className="text-xs text-red-400 bg-red-600/10 border border-red-500/20 rounded-lg p-2">
+							Model error: {cardModelError}
+						</div>
+					)}
+
+					{cardDetectionEnabled && (
+						<div className="space-y-4 ml-4 border-l-2 border-purple-600/30 pl-4">
+							<div className="space-y-2">
+								<div className="flex justify-between text-sm text-gray-400">
+									<span>Confidence</span>
+									<span>{Math.round(cardConfidenceThreshold * 100)}%</span>
+								</div>
+								<input
+									type="range"
+									min="10"
+									max="90"
+									value={Math.round(cardConfidenceThreshold * 100)}
+									onChange={(e) =>
+										onCardConfidenceChange(parseInt(e.target.value, 10) / 100)
+									}
+									className="w-full accent-purple-500"
+								/>
+							</div>
+
+							<div className="flex items-center justify-between">
+								<div>
+									<div className="text-white text-sm">Show Bounding Boxes</div>
+									<div className="text-xs text-gray-500">Overlay card outlines</div>
+								</div>
+								<ToggleSwitch
+									checked={cardShowBoxes}
+									onChange={onCardShowBoxesChange}
+									color="purple"
+									size="sm"
+								/>
+							</div>
+
+							<div className="flex items-center justify-between">
+								<div>
+									<div className="text-white text-sm">Show Card List</div>
+									<div className="text-xs text-gray-500">Panel with detected cards</div>
+								</div>
+								<ToggleSwitch
+									checked={cardShowList}
+									onChange={onCardShowListChange}
+									color="purple"
 									size="sm"
 								/>
 							</div>

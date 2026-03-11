@@ -3,6 +3,7 @@ import { Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBugReporter } from "../hooks/useBugReporter";
 import { useCamera } from "../hooks/useCamera";
+import { useCardDetection } from "../hooks/useCardDetection";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
@@ -17,6 +18,8 @@ import { useZoomPan } from "../hooks/useZoomPan";
 import type { AppState } from "../types/sessions";
 import { AboutModal } from "./AboutModal";
 import { BugReportModal } from "./BugReportModal";
+import { CardList } from "./CardList";
+import { CardOverlay } from "./CardOverlay";
 import { EdgeIndicator } from "./EdgeIndicator";
 import { ErrorOverlay } from "./ErrorOverlay";
 import { DetectPerfOverlay } from "./DetectPerfOverlay";
@@ -57,6 +60,10 @@ export function CameraStage() {
 		showHandSkeleton,
 		smoothingPreset,
 		isMirror,
+		cardDetectionEnabled,
+		cardConfidenceThreshold,
+		cardShowBoxes,
+		cardShowList,
 	} = settings;
 	const {
 		setFlashEnabled,
@@ -66,6 +73,10 @@ export function CameraStage() {
 		setShowHandSkeleton,
 		setSmoothingPreset,
 		setIsMirror,
+		setCardDetectionEnabled,
+		setCardConfidenceThreshold,
+		setCardShowBoxes,
+		setCardShowList,
 	} = setters;
 
 	// UI state
@@ -97,6 +108,13 @@ export function CameraStage() {
 		videoRef,
 		enabled: isSmartZoom,
 		smoothingPreset,
+	});
+
+	// Card Detection
+	const cardDetection = useCardDetection({
+		videoRef,
+		enabled: cardDetectionEnabled,
+		confidenceThreshold: cardConfidenceThreshold,
 	});
 
 	// Compute effective zoom/pan: use smartZoom values when enabled, else local state
@@ -399,6 +417,16 @@ export function CameraStage() {
 				lastCheckTime={lastCheckTime}
 				onCheckForUpdate={checkForUpdate}
 				onReloadForUpdate={reloadForUpdate}
+				cardDetectionEnabled={cardDetectionEnabled}
+				cardModelLoading={cardDetection.isModelLoading}
+				cardModelError={cardDetection.modelError}
+				onCardDetectionChange={setCardDetectionEnabled}
+				cardConfidenceThreshold={cardConfidenceThreshold}
+				onCardConfidenceChange={setCardConfidenceThreshold}
+				cardShowBoxes={cardShowBoxes}
+				onCardShowBoxesChange={setCardShowBoxes}
+				cardShowList={cardShowList}
+				onCardShowListChange={setCardShowList}
 				shakeEnabled={bugReporter.shakeEnabled}
 				onShakeEnabledChange={bugReporter.setShakeEnabled}
 				isShakeSupported={isShakeSupported}
@@ -509,6 +537,22 @@ export function CameraStage() {
 				</>
 			)}
 
+			{/* Card Detection Overlays */}
+			{cardDetectionEnabled && appState === "live" && (
+				<>
+					{cardShowBoxes && (
+						<CardOverlay
+							detectionsRef={cardDetection.detectionsRef}
+							videoRef={videoRef}
+							isMirror={isMirror}
+						/>
+					)}
+					{cardShowList && (
+						<CardList detections={cardDetection.detections} />
+					)}
+				</>
+			)}
+
 			{/* Replay View */}
 			{appState === "replay" && (
 				<ReplayView
@@ -569,6 +613,19 @@ export function CameraStage() {
 							loadingProgress={smartZoom.loadingProgress}
 							loadingPhase={smartZoom.loadingPhase}
 						/>
+
+						<StatusButton
+							onClick={() => setCardDetectionEnabled(!cardDetectionEnabled)}
+							active={cardDetectionEnabled}
+							color="purple"
+							title="Card Detection"
+						>
+							{cardDetection.isModelLoading
+								? "🃏 Loading..."
+								: cardDetectionEnabled
+									? "🃏 Cards ON"
+									: "🃏 Cards"}
+						</StatusButton>
 
 						<StatusButton
 							onClick={() => setFlashEnabled(!flashEnabled)}
