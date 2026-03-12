@@ -195,22 +195,37 @@ def cmd_validate(args):
     _print_class_mapping()
 
 
-def _analyze_output_shape(output):
+def _analyze_output_shape(output, num_classes=52):
     """Analyze output tensor shape and report format."""
     if len(output.shape) == 3:
         batch, dim1, dim2 = output.shape
-        if dim1 > dim2:
+
+        # YOLO26 end-to-end: [1, max_detections, 6] where 6 = cx,cy,w,h,conf,class_id
+        if dim2 == 6:
+            print(
+                f"Format: YOLO26 end-to-end [batch={batch}, max_detections={dim1}, features={dim2}]"
+            )
+            print("Features: [cx, cy, w, h, confidence, class_id]")
+            print("Model outputs final detections directly — no NMS needed!")
+            return False
+
+        # YOLOv8-style transposed: [1, 4+num_classes, num_predictions]
+        if dim1 == 4 + num_classes:
             print(
                 f"Format: YOLOv8-style transposed [batch={batch}, features={dim1}, predictions={dim2}]"
             )
-            print(f"Features breakdown: 4 bbox + {dim1 - 4} classes")
+            print(f"Features breakdown: 4 bbox + {num_classes} classes")
+            return True
+
+        # Fallback heuristic
+        if dim2 > dim1:
+            print(
+                f"Format: Likely YOLOv8-style transposed [batch={batch}, features={dim1}, predictions={dim2}]"
+            )
             return True
         else:
             print(
-                f"Format: End-to-end [batch={batch}, predictions={dim1}, features={dim2}]"
-            )
-            print(
-                f"Features breakdown: likely 4 bbox + 1 conf + {dim2 - 5} classes (or 4 bbox + {dim2 - 4} classes)"
+                f"Format: Likely end-to-end [batch={batch}, predictions={dim1}, features={dim2}]"
             )
             return False
     elif len(output.shape) == 2:
@@ -283,80 +298,74 @@ def _validate_with_image(session, input_name, image_path):
 
 
 def _parse_output(output, class_names):
-    """Parse YOLO output tensor into detections. Handles both transposed and normal formats."""
-    import numpy as np
-
-    num_classes = len(class_names) if class_names else 52
+    """Parse YOLO output tensor into detections. Handles multiple output formats."""
     threshold = 0.25
-
     detections = []
 
-    if len(output.shape) == 3:
-        batch, dim1, dim2 = output.shape
-        if dim1 > dim2:
-            # YOLOv8-style transposed: [1, 4+num_classes, num_predictions]
-            data = output[0]  # [features, predictions]
-            num_preds = dim2
-            for i in range(num_preds):
-                class_scores = data[4 : 4 + num_classes, i]
-                max_idx = int(np.argmax(class_scores))
-                confidence = float(class_scores[max_idx])
-                if confidence < threshold:
-                    continue
-                cx = float(data[0, i]) / MODEL_INPUT_SIZE
-                cy = float(data[1, i]) / MODEL_INPUT_SIZE
-                w = float(data[2, i]) / MODEL_INPUT_SIZE
-                h = float(data[3, i]) / MODEL_INPUT_SIZE
-                label = (
-                    class_names[max_idx]
-                    if max_idx < len(class_names)
-                    else f"class_{max_idx}"
-                )
-                detections.append(
-                    {
-                        "label": label,
-                        "confidence": confidence,
-                        "cx": cx,
-                        "cy": cy,
-                        "w": w,
-                        "h": h,
-                    }
-                )
-        else:
-            # End-to-end: [1, num_predictions, features]
-            data = output[0]  # [predictions, features]
-            num_features = dim2
-            has_obj_conf = num_features == 5 + num_classes
-            class_offset = 5 if has_obj_conf else 4
+    if len(output.shape) != 3:
+        return detections
 
-            for i in range(dim1):
-                row = data[i]
-                class_scores = row[class_offset : class_offset + num_classes]
-                max_idx = int(np.argmax(class_scores))
-                confidence = float(class_scores[max_idx])
-                if has_obj_conf:
-                    confidence *= float(row[4])
-                if confidence < threshold:
-                    continue
-                cx = float(row[0]) / MODEL_INPUT_SIZE
-                cy = float(row[1]) / MODEL_INPUT_SIZE
-                w = float(row[2]) / MODEL_INPUT_SIZE
-                h = float(row[3]) / MODEL_INPUT_SIZE
-                label = (
-                    class_names[max_idx]
-                    if max_idx < len(class_names)
-                    else f"class_{max_idx}"
-                )
-                detections.append(
-                    {
-                        "label": label,
-                        "confidence": confidence,
-                        "cx": cx,
-                        "cy": cy,
-                        "w": w,
-                        "h": h,
-                    }
-                )
+    _batch, dim1, dim2 = output.shape
+    data = output[0]
+
+    # YOLO26 end-to-end: [1, 300, 6] = [cx, cy, w, h, confidence, class_id]
+    if dim2 == 6:
+        for i in range(dim1):
+            row = data[i]
+            confidence = float(row[4])
+            if confidence < threshold:
+                continue
+            class_id = int(row[5])
+            cx = float(row[0]) / MODEL_INPUT_SIZE
+            cy = float(row[1]) / MODEL_INPUT_SIZE
+            w = float(row[2]) / MODEL_INPUT_SIZE
+            h = float(row[3]) / MODEL_INPUT_SIZE
+            label = (
+                class_names[class_id]
+                if class_id < len(class_names)
+                else f"class_{class_id}"
+            )
+            detections.append(
+                {
+                    "label": label,
+                    "confidence": confidence,
+                    "cx": cx,
+                    "cy": cy,
+                    "w": w,
+                    "h": h,
+                }
+            )
+
+    # YOLOv8-style transposed: [1, 4+num_classes, num_predictions]
+    elif dim2 < dim1 and dim2 != 6:
+        import numpy as np
+
+        num_classes = len(class_names) if class_names else 52
+        for i in range(dim2):
+            class_scores = data[4 : 4 + num_classes, i]
+            max_idx = int(np.argmax(class_scores))
+            confidence = float(class_scores[max_idx])
+            if confidence < threshold:
+                continue
+            cx = float(data[0, i]) / MODEL_INPUT_SIZE
+            cy = float(data[1, i]) / MODEL_INPUT_SIZE
+            w = float(data[2, i]) / MODEL_INPUT_SIZE
+            h = float(data[3, i]) / MODEL_INPUT_SIZE
+            label = (
+                class_names[max_idx]
+                if max_idx < len(class_names)
+                else f"class_{max_idx}"
+            )
+            detections.append(
+                {
+                    "label": label,
+                    "confidence": confidence,
+                    "cx": cx,
+                    "cy": cy,
+                    "w": w,
+                    "h": h,
+                }
+            )
 
     detections.sort(key=lambda d: d["confidence"], reverse=True)
     return detections
