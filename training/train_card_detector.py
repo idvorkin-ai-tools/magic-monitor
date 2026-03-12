@@ -98,7 +98,7 @@ def _find_last_checkpoint():
 
 
 def cmd_export(args):
-    """Export trained model to ONNX format."""
+    """Export trained model to ONNX and optionally TF.js formats."""
     if args.weights:
         weights_path = Path(args.weights)
     else:
@@ -110,25 +110,150 @@ def cmd_export(args):
         sys.exit(1)
 
     from ultralytics import YOLO
-
-    model = YOLO(str(weights_path))
-    print(f"Exporting {weights_path} to ONNX (imgsz={MODEL_INPUT_SIZE}, simplified)...")
-    export_path = model.export(format="onnx", imgsz=MODEL_INPUT_SIZE, simplify=True)
-
-    # Copy to expected location
     import shutil
 
-    shutil.copy2(export_path, ONNX_OUTPUT)
-    print(f"ONNX model saved to {ONNX_OUTPUT}")
+    model = YOLO(str(weights_path))
 
+    # ONNX export
+    print(f"Exporting {weights_path} to ONNX (imgsz={MODEL_INPUT_SIZE}, simplified)...")
+    onnx_path = model.export(format="onnx", imgsz=MODEL_INPUT_SIZE, simplify=True)
+    shutil.copy2(onnx_path, ONNX_OUTPUT)
     size_mb = ONNX_OUTPUT.stat().st_size / (1024 * 1024)
-    print(f"Model size: {size_mb:.1f} MB")
+    print(f"ONNX model saved to {ONNX_OUTPUT} ({size_mb:.1f} MB)")
 
-    # Also copy to public/models if it exists
     if PUBLIC_MODELS_DIR.exists():
         dest = PUBLIC_MODELS_DIR / "card-detector.onnx"
         shutil.copy2(ONNX_OUTPUT, dest)
         print(f"Copied to {dest}")
+
+    # TF.js export
+    if not args.skip_tfjs:
+        print(f"\nExporting {weights_path} to TF.js (imgsz={MODEL_INPUT_SIZE})...")
+        try:
+            model_fresh = YOLO(str(weights_path))
+            tfjs_path = model_fresh.export(format="tfjs", imgsz=MODEL_INPUT_SIZE)
+            tfjs_dest = SCRIPT_DIR / "card-detector-tfjs"
+            if Path(tfjs_path).is_dir():
+                if tfjs_dest.exists():
+                    shutil.rmtree(tfjs_dest)
+                shutil.copytree(tfjs_path, tfjs_dest)
+            else:
+                shutil.copy2(tfjs_path, tfjs_dest)
+            print(f"TF.js model saved to {tfjs_dest}")
+        except (SystemError, Exception) as e:
+            print(f"TF.js export failed: {e}")
+            print("  TF.js export may not be supported on this platform (e.g. ARM64).")
+            print("  Try running on Colab or x86 Linux instead.")
+
+    # Generate model card
+    _write_model_card(weights_path)
+
+
+def _write_model_card(weights_path):
+    """Write a model card with training details."""
+    from ultralytics import YOLO
+
+    model = YOLO(str(weights_path))
+
+    # Try to load training args from the model
+    train_args = {}
+    if hasattr(model, "ckpt") and model.ckpt and "train_args" in model.ckpt:
+        train_args = model.ckpt["train_args"]
+    elif hasattr(model, "ckpt") and model.ckpt:
+        for key in ["epoch", "best_fitness", "train_args"]:
+            if key in model.ckpt:
+                train_args[key] = model.ckpt[key]
+
+    # Get model info
+    n_params = sum(p.numel() for p in model.model.parameters())
+    onnx_size = ONNX_OUTPUT.stat().st_size / (1024 * 1024) if ONNX_OUTPUT.exists() else 0
+
+    # Check for training results
+    results_csv = RUNS_DIR / "cards-yolo26n" / "results.csv"
+    best_metrics = {}
+    if results_csv.exists():
+        import csv
+
+        with open(results_csv) as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            if rows:
+                last = rows[-1]
+                for k, v in last.items():
+                    k = k.strip()
+                    if "mAP" in k or "precision" in k or "recall" in k:
+                        try:
+                            best_metrics[k] = float(v)
+                        except ValueError:
+                            pass
+
+    card_path = SCRIPT_DIR / "MODEL_CARD.md"
+    with open(card_path, "w") as f:
+        f.write("# YOLO26n Playing Card Detector — Model Card\n\n")
+        f.write("## Overview\n\n")
+        f.write("A YOLO26n (nano) model fine-tuned to detect 52 playing card classes in real-time.\n")
+        f.write("Designed for browser inference via ONNX Runtime Web or TensorFlow.js.\n\n")
+
+        f.write("## Architecture\n\n")
+        f.write(f"- **Base model:** YOLO26n (nano)\n")
+        f.write(f"- **Parameters:** {n_params:,}\n")
+        f.write(f"- **Input size:** {MODEL_INPUT_SIZE}x{MODEL_INPUT_SIZE}\n")
+        f.write(f"- **Output format:** `[1, 300, 6]` = `[cx, cy, w, h, confidence, class_id]`\n")
+        f.write(f"- **NMS:** Not needed (end-to-end detection)\n")
+        f.write(f"- **ONNX size:** {onnx_size:.1f} MB\n\n")
+
+        f.write("## Training\n\n")
+        f.write(f"- **Dataset:** Augmented Startups Playing Cards (Roboflow Universe)\n")
+        f.write(f"- **Dataset URL:** https://universe.roboflow.com/augmented-startups/playing-cards-ow27d\n")
+        f.write(f"- **Classes:** 52 (standard deck, no jokers)\n")
+        f.write(f"- **Method:** Transfer learning from COCO-pretrained YOLO26n\n")
+        if train_args:
+            epochs = train_args.get("epochs", "unknown")
+            batch = train_args.get("batch", "unknown")
+            f.write(f"- **Epochs:** {epochs}\n")
+            f.write(f"- **Batch size:** {batch}\n")
+        f.write(f"- **Image size:** {MODEL_INPUT_SIZE}x{MODEL_INPUT_SIZE}\n")
+        f.write(f"- **Weights source:** `{weights_path.name}`\n\n")
+
+        if best_metrics:
+            f.write("## Metrics (training)\n\n")
+            for k, v in sorted(best_metrics.items()):
+                f.write(f"- **{k}:** {v:.4f}\n")
+            f.write("\n")
+
+        f.write("## Class Mapping\n\n")
+        f.write("Alphabetical by rank, then by suit (same as PD-Mera convention):\n\n")
+        f.write("| Index | Class | Card |\n")
+        f.write("|-------|-------|------|\n")
+        class_names = [
+            "10C", "10D", "10H", "10S", "2C", "2D", "2H", "2S",
+            "3C", "3D", "3H", "3S", "4C", "4D", "4H", "4S",
+            "5C", "5D", "5H", "5S", "6C", "6D", "6H", "6S",
+            "7C", "7D", "7H", "7S", "8C", "8D", "8H", "8S",
+            "9C", "9D", "9H", "9S", "AC", "AD", "AH", "AS",
+            "JC", "JD", "JH", "JS", "KC", "KD", "KH", "KS",
+            "QC", "QD", "QH", "QS",
+        ]
+        suit_map = {"C": "clubs", "D": "diamonds", "H": "hearts", "S": "spades"}
+        for i, name in enumerate(class_names):
+            rank = name[:-1]
+            suit = suit_map[name[-1]]
+            f.write(f"| {i} | {name} | {rank} of {suit} |\n")
+
+        f.write("\n## Export Formats\n\n")
+        f.write("- **ONNX:** `card-detector.onnx` — for ONNX Runtime Web (WebGL2)\n")
+        f.write("- **TF.js:** `card-detector-tfjs/` — for TensorFlow.js\n\n")
+
+        f.write("## Usage\n\n")
+        f.write("```bash\n")
+        f.write("# Train\n")
+        f.write("python train_card_detector.py download\n")
+        f.write("python train_card_detector.py train\n")
+        f.write("python train_card_detector.py export\n")
+        f.write("python train_card_detector.py validate\n")
+        f.write("```\n")
+
+    print(f"\nModel card written to {card_path}")
 
 
 def cmd_validate(args):
@@ -420,12 +545,17 @@ def main():
     tr.set_defaults(func=cmd_train)
 
     # export
-    ex = subparsers.add_parser("export", help="Export best weights to ONNX")
+    ex = subparsers.add_parser("export", help="Export best weights to ONNX + TF.js")
     ex.add_argument(
         "--weights",
         type=str,
         default=None,
         help="Path to weights (default: auto-find best.pt)",
+    )
+    ex.add_argument(
+        "--skip-tfjs",
+        action="store_true",
+        help="Skip TF.js export (e.g. on ARM64 where it's unsupported)",
     )
     ex.set_defaults(func=cmd_export)
 
