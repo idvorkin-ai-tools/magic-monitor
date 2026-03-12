@@ -3,6 +3,8 @@
  *
  * Mirrors HandLandmarkerService: loads model once, shares across components,
  * exposes loading state via subscribe pattern.
+ *
+ * Model: PD-Mera YOLOv8s (416x416 input, 52 card classes)
  */
 import * as ort from "onnxruntime-web";
 import {
