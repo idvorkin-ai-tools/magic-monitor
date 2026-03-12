@@ -1,5 +1,8 @@
 /**
- * Singleton service for YOLO playing card detection via ONNX Runtime Web.
+ * Singleton service for YOLO26 playing card detection via ONNX Runtime Web.
+ *
+ * Uses YOLO26n (NMS-free, end-to-end) — the model outputs final detections
+ * directly, no post-processing NMS needed.
  *
  * Mirrors HandLandmarkerService: loads model once, shares across components,
  * exposes loading state via subscribe pattern.
@@ -9,7 +12,6 @@ import {
 	NUM_CLASSES,
 	cardToLabel,
 	classIndexToCard,
-	type BoundingBox,
 	type CardDetection,
 } from "../types/cards";
 
@@ -23,70 +25,20 @@ export interface LoadingState {
 
 type LoadingListener = (state: LoadingState) => void;
 
-// YOLO model input size (square)
-const MODEL_INPUT_SIZE = 416;
+// YOLO26n model input size (square)
+const MODEL_INPUT_SIZE = 640;
 const MODEL_PATH =
-	"https://github.com/idvorkin-ai-tools/magic-monitor/releases/download/v1.0.0-models/card-detector.onnx";
-
-// NMS parameters
-const NMS_IOU_THRESHOLD = 0.5;
+	"https://idvorkin-models.s3.us-west-2.amazonaws.com/card-detector.onnx";
 
 /**
- * Compute IoU (intersection over union) between two boxes.
- * Boxes are in center format: { x, y, width, height } normalized 0-1.
- */
-function computeIoU(a: BoundingBox, b: BoundingBox): number {
-	const ax1 = a.x - a.width / 2;
-	const ay1 = a.y - a.height / 2;
-	const ax2 = a.x + a.width / 2;
-	const ay2 = a.y + a.height / 2;
-
-	const bx1 = b.x - b.width / 2;
-	const by1 = b.y - b.height / 2;
-	const bx2 = b.x + b.width / 2;
-	const by2 = b.y + b.height / 2;
-
-	const ix1 = Math.max(ax1, bx1);
-	const iy1 = Math.max(ay1, by1);
-	const ix2 = Math.min(ax2, bx2);
-	const iy2 = Math.min(ay2, by2);
-
-	const iw = Math.max(0, ix2 - ix1);
-	const ih = Math.max(0, iy2 - iy1);
-	const intersection = iw * ih;
-
-	const aArea = a.width * a.height;
-	const bArea = b.width * b.height;
-	const union = aArea + bArea - intersection;
-
-	return union > 0 ? intersection / union : 0;
-}
-
-/**
- * Non-max suppression: remove overlapping detections, keep highest confidence.
- */
-export function nms(detections: CardDetection[], iouThreshold = NMS_IOU_THRESHOLD): CardDetection[] {
-	const sorted = [...detections].sort((a, b) => b.confidence - a.confidence);
-	const kept: CardDetection[] = [];
-
-	for (const det of sorted) {
-		const dominated = kept.some((k) => computeIoU(k.bbox, det.bbox) > iouThreshold);
-		if (!dominated) {
-			kept.push(det);
-		}
-	}
-
-	return kept;
-}
-
-/**
- * Parse YOLO output tensor into CardDetection[].
+ * Parse YOLO26 output tensor into CardDetection[].
  *
- * YOLOv8 output shape: [1, 56, 8400] where:
+ * YOLO26 end-to-end output shape: [1, N, 56] where:
+ *   - N = number of detections (variable, model decides)
  *   - 56 = 4 bbox coords + 52 class scores
- *   - 8400 = number of anchor predictions
  *
- * Each column is one prediction: [cx, cy, w, h, class0_score, class1_score, ...]
+ * Each row is one detection: [cx, cy, w, h, class0_score, class1_score, ...]
+ * No NMS needed — YOLO26 outputs final deduplicated detections.
  */
 export function parseYoloOutput(
 	outputData: Float32Array,
@@ -96,13 +48,16 @@ export function parseYoloOutput(
 	inputHeight: number,
 ): CardDetection[] {
 	const detections: CardDetection[] = [];
+	const stride = 4 + NUM_CLASSES; // 56
 
 	for (let i = 0; i < numPredictions; i++) {
-		// Find max class score for this prediction
+		const offset = i * stride;
+
+		// Find max class score for this detection
 		let maxScore = 0;
 		let maxClassIdx = 0;
 		for (let c = 0; c < NUM_CLASSES; c++) {
-			const score = outputData[(4 + c) * numPredictions + i];
+			const score = outputData[offset + 4 + c];
 			if (score > maxScore) {
 				maxScore = score;
 				maxClassIdx = c;
@@ -115,10 +70,10 @@ export function parseYoloOutput(
 		if (!card) continue;
 
 		// Extract bbox (center format, pixel coords relative to model input)
-		const cx = outputData[0 * numPredictions + i] / inputWidth;
-		const cy = outputData[1 * numPredictions + i] / inputHeight;
-		const w = outputData[2 * numPredictions + i] / inputWidth;
-		const h = outputData[3 * numPredictions + i] / inputHeight;
+		const cx = outputData[offset + 0] / inputWidth;
+		const cy = outputData[offset + 1] / inputHeight;
+		const w = outputData[offset + 2] / inputWidth;
+		const h = outputData[offset + 3] / inputHeight;
 
 		detections.push({
 			card,
@@ -128,7 +83,7 @@ export function parseYoloOutput(
 		});
 	}
 
-	return nms(detections);
+	return detections;
 }
 
 class CardDetectorServiceImpl {
@@ -283,8 +238,8 @@ class CardDetectorServiceImpl {
 		const output = results[outputName];
 		const outputData = output.data as Float32Array;
 
-		// YOLOv8 output: [1, 56, N] where N is number of predictions
-		const numPredictions = output.dims[2];
+		// YOLO26 end-to-end output: [1, N, 56] where N is number of detections
+		const numPredictions = output.dims[1];
 
 		return parseYoloOutput(outputData, numPredictions, confidenceThreshold, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
 	}
