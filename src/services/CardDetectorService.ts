@@ -26,7 +26,7 @@ type LoadingListener = (state: LoadingState) => void;
 
 // YOLO model input size (square) — must match the trained model's input dimensions
 const MODEL_INPUT_SIZE = 640;
-const MODEL_PATH = "https://idvorkin-models.s3.amazonaws.com/card-detector.onnx";
+const MODEL_PATH = "https://idvorkin-models.s3.amazonaws.com/card-detector-yolo26s.onnx";
 
 // NMS parameters
 const NMS_IOU_THRESHOLD = 0.5;
