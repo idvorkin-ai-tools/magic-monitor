@@ -47,11 +47,4 @@ export function cardToLabel(card: PlayingCard): string {
 	return `${card.rank}${card.suit}`;
 }
 
-export const SUIT_COLORS: Record<Suit, string> = {
-	"\u2660": "#1a1a2e",
-	"\u2665": "#dc2626",
-	"\u2666": "#dc2626",
-	"\u2663": "#1a1a2e",
-};
-
 export const NUM_CLASSES = 52;

@@ -92,7 +92,7 @@ export interface LetterboxInfo {
  *
  * Output shape: [1, 300, 6] where each detection is:
  *   [x1, y1, x2, y2, confidence, class_id]
- * Coordinates are in pixel space relative to model input (416x416),
+ * Coordinates are in pixel space relative to the model input,
  * including letterbox padding. We undo the padding so bbox coords
  * are normalized to the original video frame (0-1).
  */
@@ -336,13 +336,13 @@ class CardDetectorServiceImpl {
 	 * Uses the already-rendered preprocess canvas and last detection results
 	 * to avoid blocking the main thread with a second inference call.
 	 */
-	debugSnapshot(
-		_source: HTMLVideoElement | HTMLCanvasElement,
-		confidenceThreshold = 0.5,
-	): void {
+	debugSnapshot(): void {
 		const srcWidth = this.lastSourceWidth;
 		const srcHeight = this.lastSourceHeight;
 		const detections = this.lastDetections;
+		const confidenceThreshold = detections.length > 0
+			? Math.min(...detections.map((d) => d.confidence))
+			: 0;
 		const canvas = this.preprocessCanvas;
 		const ctx = this.preprocessCtx;
 		if (!canvas || !ctx) return;
@@ -355,7 +355,7 @@ class CardDetectorServiceImpl {
 		const dCtx = debugCanvas.getContext("2d");
 		if (!dCtx) return;
 
-		// Draw the preprocessed 416x416 image scaled up
+		// Draw the preprocessed model input image scaled up
 		dCtx.imageSmoothingEnabled = false;
 		dCtx.drawImage(canvas, 0, 0, debugSize, debugSize);
 

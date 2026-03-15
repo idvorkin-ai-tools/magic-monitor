@@ -192,11 +192,6 @@ export function CameraStage() {
 	const bugReportShortcut = isMac ? "⌘I" : "Ctrl+I";
 
 	// Keyboard shortcuts
-	const cardConfThresholdRef = useRef(cardConfidenceThreshold);
-	useEffect(() => {
-		cardConfThresholdRef.current = cardConfidenceThreshold;
-	}, [cardConfidenceThreshold]);
-
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			// Ctrl/Cmd+I: bug report
@@ -206,8 +201,8 @@ export function CameraStage() {
 			}
 			// Z: card detection debug snapshot
 			if (e.key === "z" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-				if (videoRef.current && CardDetectorService.isReady()) {
-					CardDetectorService.debugSnapshot(videoRef.current, cardConfThresholdRef.current);
+				if (CardDetectorService.isReady()) {
+					CardDetectorService.debugSnapshot();
 				}
 			}
 		};
