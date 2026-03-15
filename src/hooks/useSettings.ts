@@ -10,6 +10,10 @@ const FLASH_ENABLED_STORAGE_KEY = "magic-monitor-flash-enabled";
 const FLASH_THRESHOLD_STORAGE_KEY = "magic-monitor-flash-threshold";
 const FLASH_TARGET_COLOR_STORAGE_KEY = "magic-monitor-flash-target-color";
 const MIRROR_STORAGE_KEY = "magic-monitor-mirror";
+const CARD_DETECTION_STORAGE_KEY = "magic-monitor-card-detection";
+const CARD_CONFIDENCE_STORAGE_KEY = "magic-monitor-card-confidence";
+const CARD_SHOW_BOXES_STORAGE_KEY = "magic-monitor-card-show-boxes";
+const CARD_SHOW_LIST_STORAGE_KEY = "magic-monitor-card-show-list";
 
 export interface Settings {
 	// Flash Detection
@@ -24,6 +28,12 @@ export interface Settings {
 
 	// Mirror
 	isMirror: boolean;
+
+	// Card Detection
+	cardDetectionEnabled: boolean;
+	cardConfidenceThreshold: number;
+	cardShowBoxes: boolean;
+	cardShowList: boolean;
 }
 
 export interface SettingsSetters {
@@ -34,6 +44,10 @@ export interface SettingsSetters {
 	setShowHandSkeleton: (value: boolean) => void;
 	setSmoothingPreset: (preset: SmoothingPreset) => void;
 	setIsMirror: (value: boolean) => void;
+	setCardDetectionEnabled: (value: boolean) => void;
+	setCardConfidenceThreshold: (value: number) => void;
+	setCardShowBoxes: (value: boolean) => void;
+	setCardShowList: (value: boolean) => void;
 }
 
 export interface UseSettingsReturn {
@@ -108,6 +122,32 @@ export function useSettings(): UseSettingsReturn {
 		return DeviceService.getStorageItem(MIRROR_STORAGE_KEY) === "true";
 	});
 
+	// Card Detection state (persisted to localStorage)
+	const [cardDetectionEnabled, setCardDetectionEnabledInternal] = useState(() => {
+		return DeviceService.getStorageItem(CARD_DETECTION_STORAGE_KEY) === "true";
+	});
+
+	const [cardConfidenceThreshold, setCardConfidenceThresholdInternal] = useState(() => {
+		const stored = DeviceService.getStorageItem(CARD_CONFIDENCE_STORAGE_KEY);
+		if (stored) {
+			const parsed = Number.parseFloat(stored);
+			if (!Number.isNaN(parsed)) return parsed;
+		}
+		return 0.5;
+	});
+
+	const [cardShowBoxes, setCardShowBoxesInternal] = useState(() => {
+		const stored = DeviceService.getStorageItem(CARD_SHOW_BOXES_STORAGE_KEY);
+		if (stored !== null) return stored === "true";
+		return true; // Default on
+	});
+
+	const [cardShowList, setCardShowListInternal] = useState(() => {
+		const stored = DeviceService.getStorageItem(CARD_SHOW_LIST_STORAGE_KEY);
+		if (stored !== null) return stored === "true";
+		return true; // Default on
+	});
+
 	// Wrapped setters that persist to localStorage
 	const setFlashEnabled = useCallback((value: boolean) => {
 		setFlashEnabledInternal(value);
@@ -154,6 +194,26 @@ export function useSettings(): UseSettingsReturn {
 		DeviceService.setStorageItem(MIRROR_STORAGE_KEY, String(value));
 	}, []);
 
+	const setCardDetectionEnabled = useCallback((value: boolean) => {
+		setCardDetectionEnabledInternal(value);
+		DeviceService.setStorageItem(CARD_DETECTION_STORAGE_KEY, String(value));
+	}, []);
+
+	const setCardConfidenceThreshold = useCallback((value: number) => {
+		setCardConfidenceThresholdInternal(value);
+		DeviceService.setStorageItem(CARD_CONFIDENCE_STORAGE_KEY, String(value));
+	}, []);
+
+	const setCardShowBoxes = useCallback((value: boolean) => {
+		setCardShowBoxesInternal(value);
+		DeviceService.setStorageItem(CARD_SHOW_BOXES_STORAGE_KEY, String(value));
+	}, []);
+
+	const setCardShowList = useCallback((value: boolean) => {
+		setCardShowListInternal(value);
+		DeviceService.setStorageItem(CARD_SHOW_LIST_STORAGE_KEY, String(value));
+	}, []);
+
 	return {
 		settings: {
 			flashEnabled,
@@ -163,6 +223,10 @@ export function useSettings(): UseSettingsReturn {
 			showHandSkeleton,
 			smoothingPreset,
 			isMirror,
+			cardDetectionEnabled,
+			cardConfidenceThreshold,
+			cardShowBoxes,
+			cardShowList,
 		},
 		setters: {
 			setFlashEnabled,
@@ -172,6 +236,10 @@ export function useSettings(): UseSettingsReturn {
 			setShowHandSkeleton,
 			setSmoothingPreset,
 			setIsMirror,
+			setCardDetectionEnabled,
+			setCardConfidenceThreshold,
+			setCardShowBoxes,
+			setCardShowList,
 		},
 	};
 }

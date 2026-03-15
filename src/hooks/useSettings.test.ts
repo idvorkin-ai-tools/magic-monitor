@@ -30,6 +30,10 @@ describe("useSettings", () => {
 				showHandSkeleton: false,
 				smoothingPreset: "ema",
 				isMirror: false,
+				cardDetectionEnabled: false,
+				cardConfidenceThreshold: 0.5,
+				cardShowBoxes: true,
+				cardShowList: true,
 			});
 		});
 
