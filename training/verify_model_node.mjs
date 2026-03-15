@@ -28,7 +28,7 @@ const DATASET_LABELS = [
 const MODEL_PATH = "card-detector.onnx";
 const TEST_IMAGES = "dataset/test/images";
 const TEST_LABELS = "dataset/test/labels";
-const MODEL_INPUT_SIZE = 416;
+let MODEL_INPUT_SIZE = 640; // will be read from model
 const CONF_THRESHOLD = 0.5;
 
 /**
@@ -86,9 +86,24 @@ async function main() {
 
 	const inputName = session.inputNames[0];
 	const outputName = session.outputNames[0];
-	console.log(`Input: ${inputName}, Output: ${outputName}`);
 
-	// Get input/output shapes from a dummy run
+	// Read input size from model metadata
+	const inputMeta = session.inputNames[0];
+	// onnxruntime-node doesn't expose shape easily, so infer from model file
+	// Try a dummy run at 640 first, fall back to 416
+	for (const trySize of [640, 416]) {
+		try {
+			const testTensor = new ort.Tensor("float32", new Float32Array(3 * trySize * trySize), [1, 3, trySize, trySize]);
+			await session.run({ [inputName]: testTensor });
+			MODEL_INPUT_SIZE = trySize;
+			break;
+		} catch {
+			continue;
+		}
+	}
+	console.log(`Input: ${inputName}, Output: ${outputName}, Size: ${MODEL_INPUT_SIZE}x${MODEL_INPUT_SIZE}`);
+
+	// Get output shape from a dummy run
 	const dummyInput = new ort.Tensor("float32", new Float32Array(3 * MODEL_INPUT_SIZE * MODEL_INPUT_SIZE), [1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE]);
 	const dummyResult = await session.run({ [inputName]: dummyInput });
 	const outputDims = dummyResult[outputName].dims;

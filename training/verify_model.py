@@ -1,4 +1,6 @@
-"""Verify the YOLO26n card detector ONNX model against test images.
+"""Verify the YOLO card detector ONNX model against test images.
+
+Automatically detects model input size from the ONNX file.
 
 Usage:
     cd training/
@@ -62,6 +64,11 @@ def main():
     sess = ort.InferenceSession(MODEL_PATH)
     input_name = sess.get_inputs()[0].name
 
+    # Read model input size from ONNX metadata
+    input_shape = sess.get_inputs()[0].shape
+    model_size = input_shape[2] if isinstance(input_shape[2], int) else 640
+    print(f"Model input size: {model_size}x{model_size}")
+
     image_files = sorted(glob.glob(os.path.join(TEST_IMAGES, "*.jpg")))
     if not image_files:
         print("No test images found!")
@@ -77,7 +84,7 @@ def main():
         if img is None:
             continue
 
-        blob = preprocess(img)
+        blob = preprocess(img, model_size)
         output = sess.run(None, {input_name: blob})[0]
         dets = parse_detections(output)
 
@@ -121,7 +128,7 @@ def main():
     print("\nSample detections (first 5 images):")
     for img_path in image_files[:5]:
         img = cv2.imread(img_path)
-        blob = preprocess(img)
+        blob = preprocess(img, model_size)
         output = sess.run(None, {input_name: blob})[0]
         dets = parse_detections(output)
 
