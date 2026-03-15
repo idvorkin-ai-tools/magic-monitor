@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useBugReporter } from "../hooks/useBugReporter";
 import { useCamera } from "../hooks/useCamera";
 import { useCardDetection } from "../hooks/useCardDetection";
+import { CardDetectorService } from "../services/CardDetectorService";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
@@ -190,12 +191,24 @@ export function CameraStage() {
 	const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 	const bugReportShortcut = isMac ? "⌘I" : "Ctrl+I";
 
-	// Keyboard shortcut for bug reporting (Ctrl/Cmd + I)
+	// Keyboard shortcuts
+	const cardConfThresholdRef = useRef(cardConfidenceThreshold);
+	useEffect(() => {
+		cardConfThresholdRef.current = cardConfidenceThreshold;
+	}, [cardConfidenceThreshold]);
+
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
+			// Ctrl/Cmd+I: bug report
 			if ((e.ctrlKey || e.metaKey) && e.key === "i") {
 				e.preventDefault();
 				bugReporter.open();
+			}
+			// Z: card detection debug snapshot
+			if (e.key === "z" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+				if (videoRef.current && CardDetectorService.isReady()) {
+					CardDetectorService.debugSnapshot(videoRef.current, cardConfThresholdRef.current);
+				}
 			}
 		};
 		window.addEventListener("keydown", handleKeyDown);

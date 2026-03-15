@@ -17,9 +17,55 @@ const SUIT_BOX_COLORS: Record<string, string> = {
 };
 
 /**
+ * Compute the actual rendered image rectangle inside a video element
+ * that uses object-contain. Accounts for letterboxing/pillarboxing.
+ */
+function getRenderedVideoRect(video: HTMLVideoElement): {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+} {
+	const videoW = video.videoWidth;
+	const videoH = video.videoHeight;
+	if (!videoW || !videoH) return { left: 0, top: 0, width: 0, height: 0 };
+
+	// Use offsetWidth/Height (CSS layout size, before transforms)
+	const elemW = video.offsetWidth;
+	const elemH = video.offsetHeight;
+
+	const videoAR = videoW / videoH;
+	const elemAR = elemW / elemH;
+
+	let imgW: number;
+	let imgH: number;
+	if (videoAR > elemAR) {
+		// Video is wider than element → pillarbox (bars top/bottom)
+		imgW = elemW;
+		imgH = elemW / videoAR;
+	} else {
+		// Video is taller than element → letterbox (bars left/right)
+		imgH = elemH;
+		imgW = elemH * videoAR;
+	}
+
+	// Centered within the element's layout box
+	const left = (elemW - imgW) / 2;
+	const top = (elemH - imgH) / 2;
+
+	return { left, top, width: imgW, height: imgH };
+}
+
+/**
  * Canvas-based card detection overlay.
  * Uses refs and rAF for 60fps rendering without React re-renders.
- * Follows same pattern as HandSkeleton.
+ *
+ * Coordinate pipeline:
+ * 1. Detection bbox is in video-normalized space (0-1), from parseYoloOutput
+ * 2. We compute the rendered video rect (accounting for object-contain)
+ * 3. We map normalized coords to canvas pixel coords
+ * 4. Canvas bitmap matches its CSS layout size (offsetWidth/Height)
+ *    so 1 canvas pixel = 1 CSS pixel, no scaling issues
  */
 export function CardOverlay({
 	detectionsRef,
@@ -49,26 +95,31 @@ export function CardOverlay({
 				return;
 			}
 
-			const videoRect = video.getBoundingClientRect();
-
-			// Resize canvas to match window
-			if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-				canvas.width = window.innerWidth;
-				canvas.height = window.innerHeight;
+			// Bug 2 fix: size canvas bitmap to its own CSS layout size
+			const cw = canvas.offsetWidth;
+			const ch = canvas.offsetHeight;
+			if (canvas.width !== cw || canvas.height !== ch) {
+				canvas.width = cw;
+				canvas.height = ch;
 			}
+
+			// Bug 3 fix: compute actual rendered image rect (not element rect)
+			const imgRect = getRenderedVideoRect(video);
 
 			for (const det of detections) {
 				const { bbox, label, confidence, card } = det;
 
-				// Convert normalized center coords to screen corner coords
+				// Convert normalized center coords to corner coords
 				const bboxLeft = bbox.x - bbox.width / 2;
 				const bboxTop = bbox.y - bbox.height / 2;
 
 				const normalizedLeft = isMirror ? 1 - (bboxLeft + bbox.width) : bboxLeft;
-				const screenX = videoRect.left + normalizedLeft * videoRect.width;
-				const screenY = videoRect.top + bboxTop * videoRect.height;
-				const screenW = bbox.width * videoRect.width;
-				const screenH = bbox.height * videoRect.height;
+
+				// Map to canvas coords using the rendered image rect
+				const screenX = imgRect.left + normalizedLeft * imgRect.width;
+				const screenY = imgRect.top + bboxTop * imgRect.height;
+				const screenW = bbox.width * imgRect.width;
+				const screenH = bbox.height * imgRect.height;
 
 				const color = SUIT_BOX_COLORS[card.suit] ?? "#ffffff";
 
