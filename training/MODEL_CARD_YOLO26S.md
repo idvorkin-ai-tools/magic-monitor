@@ -37,15 +37,14 @@ Upgrading from nano→small at 640x640 nearly doubled recall while improving pre
 
 ### Inference speed (CPU, 50 images, includes preprocess + inference)
 
-Speed benchmarks for the previous nano model (TODO: re-benchmark with new model):
+| Model | Python | Node.js |
+|-------|--------|---------|
+| **YOLO26s @ 640** | **108 ms / 9.3 FPS** | **116 ms / 8.6 FPS** |
+| YOLO26n @ 416 | 25 ms / 39.7 FPS | 33 ms / 30.6 FPS |
 
-| Runtime | ms/image | FPS |
-|---------|----------|-----|
-| Python (onnxruntime + cv2) | 25.2 ms | 39.7 |
-| Node.js (onnxruntime-node + jpeg-js) | 32.7 ms | 30.6 |
-
-The YOLO26s @ 640 model will be slower (~2-3x) due to larger input and more parameters.
-Browser with WASM backend: expect ~10-15 FPS.
+~4x slower than nano due to 3.6x more parameters and 2.4x more pixels.
+Browser with WASM backend + frame skipping (every other frame) = ~4-5 detection FPS,
+which is adequate for playing cards.
 
 ## Class Mapping
 

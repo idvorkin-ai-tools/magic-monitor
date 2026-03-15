@@ -30,6 +30,15 @@ A YOLO26n (nano) model fine-tuned to detect 52 playing card classes.
 | Node.js (nearest-neighbor) | nearest | 74.8% | 94.3% |
 | Python (cv2 bilinear) | bilinear | 40.2% | 95.0% |
 
+### Inference speed (CPU, 50 images, includes preprocess + inference)
+
+| Runtime | ms/image | FPS |
+|---------|----------|-----|
+| Python (onnxruntime + cv2) | 25 ms | 39.7 |
+| Node.js (onnxruntime-node + jpeg-js) | 33 ms | 30.6 |
+
+~4x faster than YOLO26s, but half the recall.
+
 ## S3
 
 `s3://idvorkin-models/card-detector-yolo26n.onnx`
