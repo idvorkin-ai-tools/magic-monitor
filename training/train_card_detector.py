@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Train a YOLO26n playing card detector and export to ONNX for browser use.
+Train a YOLO playing card detector and export to ONNX for browser use.
 
 Usage:
-    python train_card_detector.py download   # Download dataset via Roboflow API
-    python train_card_detector.py train      # Train YOLO26n
-    python train_card_detector.py export     # Export best weights to ONNX
-    python train_card_detector.py validate   # Validate ONNX output format
+    python train_card_detector.py download                    # Download dataset
+    python train_card_detector.py train                       # Train YOLO26s @ 640 (default)
+    python train_card_detector.py train --model-size n --imgsz 416  # Train nano @ 416
+    python train_card_detector.py export                      # Export best weights to ONNX
+    python train_card_detector.py validate                    # Validate ONNX output format
 
 Requires ROBOFLOW_API_KEY environment variable for download command.
 """
@@ -19,9 +20,15 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 DATASET_DIR = SCRIPT_DIR / "dataset"
 RUNS_DIR = SCRIPT_DIR / "runs"
-MODEL_INPUT_SIZE = 416
 ONNX_OUTPUT = SCRIPT_DIR / "card-detector.onnx"
 PUBLIC_MODELS_DIR = SCRIPT_DIR.parent / "public" / "models"
+
+# Model size presets: name -> (pretrained weights, default imgsz)
+MODEL_PRESETS = {
+    "n": ("yolo26n.pt", 416),
+    "s": ("yolo26s.pt", 640),
+    "m": ("yolo26m.pt", 640),
+}
 
 
 def cmd_download(args):
@@ -56,7 +63,7 @@ def cmd_download(args):
 
 
 def cmd_train(args):
-    """Train YOLO26n on the playing card dataset."""
+    """Train YOLO on the playing card dataset."""
     data_yaml = DATASET_DIR / "data.yaml"
     if not data_yaml.exists():
         print(f"ERROR: Dataset not found at {DATASET_DIR}")
@@ -65,8 +72,13 @@ def cmd_train(args):
 
     from ultralytics import YOLO
 
+    size = args.model_size
+    preset_weights, default_imgsz = MODEL_PRESETS[size]
+    imgsz = args.imgsz or default_imgsz
+    run_name = f"cards-yolo26{size}"
+
     if args.resume:
-        last_pt = _find_last_checkpoint()
+        last_pt = _find_last_checkpoint(run_name)
         if not last_pt:
             print("ERROR: No checkpoint found to resume from.")
             sys.exit(1)
@@ -74,35 +86,49 @@ def cmd_train(args):
         model = YOLO(str(last_pt))
         model.train(resume=True)
     else:
-        model = YOLO("yolo26n.pt")
+        model = YOLO(preset_weights)
         print(
-            f"Training YOLO26n for {args.epochs} epochs, batch={args.batch}, imgsz={MODEL_INPUT_SIZE}"
+            f"Training YOLO26{size} for {args.epochs} epochs, batch={args.batch}, imgsz={imgsz}"
         )
         model.train(
             data=str(data_yaml),
             epochs=args.epochs,
-            imgsz=MODEL_INPUT_SIZE,
+            imgsz=imgsz,
             batch=args.batch,
             project=str(RUNS_DIR),
-            name="cards-yolo26n",
+            name=run_name,
             exist_ok=True,
         )
 
-    print(f"\nTraining complete. Weights saved to {RUNS_DIR}/cards-yolo26n/weights/")
+    print(f"\nTraining complete. Weights saved to {RUNS_DIR}/{run_name}/weights/")
 
 
-def _find_last_checkpoint():
+def _find_last_checkpoint(run_name="cards-yolo26s"):
     """Find the last training checkpoint."""
-    last = RUNS_DIR / "cards-yolo26n" / "weights" / "last.pt"
+    last = RUNS_DIR / run_name / "weights" / "last.pt"
     return last if last.exists() else None
+
+
+def _get_imgsz_from_weights(weights_path):
+    """Infer input size from trained weights, fallback to 640."""
+    try:
+        from ultralytics import YOLO
+        model = YOLO(str(weights_path))
+        if hasattr(model, "ckpt") and model.ckpt and "train_args" in model.ckpt:
+            return model.ckpt["train_args"].get("imgsz", 640)
+    except Exception:
+        pass
+    return 640
 
 
 def cmd_export(args):
     """Export trained model to ONNX and optionally TF.js formats."""
+    size = args.model_size
     if args.weights:
         weights_path = Path(args.weights)
     else:
-        weights_path = RUNS_DIR / "cards-yolo26n" / "weights" / "best.pt"
+        weights_path = RUNS_DIR / f"cards-yolo26{size}" / "weights" / "best.pt"
+    model_input_size = args.imgsz or _get_imgsz_from_weights(weights_path)
 
     if not weights_path.exists():
         print(f"ERROR: Weights not found at {weights_path}")
@@ -115,8 +141,8 @@ def cmd_export(args):
     model = YOLO(str(weights_path))
 
     # ONNX export
-    print(f"Exporting {weights_path} to ONNX (imgsz={MODEL_INPUT_SIZE}, simplified)...")
-    onnx_path = model.export(format="onnx", imgsz=MODEL_INPUT_SIZE, simplify=True)
+    print(f"Exporting {weights_path} to ONNX (imgsz={model_input_size}, simplified)...")
+    onnx_path = model.export(format="onnx", imgsz=model_input_size, simplify=True)
     shutil.copy2(onnx_path, ONNX_OUTPUT)
     size_mb = ONNX_OUTPUT.stat().st_size / (1024 * 1024)
     print(f"ONNX model saved to {ONNX_OUTPUT} ({size_mb:.1f} MB)")
@@ -128,10 +154,10 @@ def cmd_export(args):
 
     # TF.js export
     if not args.skip_tfjs:
-        print(f"\nExporting {weights_path} to TF.js (imgsz={MODEL_INPUT_SIZE})...")
+        print(f"\nExporting {weights_path} to TF.js (imgsz={model_input_size})...")
         try:
             model_fresh = YOLO(str(weights_path))
-            tfjs_path = model_fresh.export(format="tfjs", imgsz=MODEL_INPUT_SIZE)
+            tfjs_path = model_fresh.export(format="tfjs", imgsz=model_input_size)
             tfjs_dest = SCRIPT_DIR / "card-detector-tfjs"
             if Path(tfjs_path).is_dir():
                 if tfjs_dest.exists():
@@ -146,10 +172,10 @@ def cmd_export(args):
             print("  Try running on Colab or x86 Linux instead.")
 
     # Generate model card
-    _write_model_card(weights_path)
+    _write_model_card(weights_path, model_input_size)
 
 
-def _write_model_card(weights_path):
+def _write_model_card(weights_path, model_input_size=640):
     """Write a model card with training details."""
     from ultralytics import YOLO
 
@@ -197,7 +223,7 @@ def _write_model_card(weights_path):
         f.write("## Architecture\n\n")
         f.write(f"- **Base model:** YOLO26n (nano)\n")
         f.write(f"- **Parameters:** {n_params:,}\n")
-        f.write(f"- **Input size:** {MODEL_INPUT_SIZE}x{MODEL_INPUT_SIZE}\n")
+        f.write(f"- **Input size:** {model_input_size}x{model_input_size}\n")
         f.write(f"- **Output format:** `[1, 300, 6]` = `[cx, cy, w, h, confidence, class_id]`\n")
         f.write(f"- **NMS:** Not needed (end-to-end detection)\n")
         f.write(f"- **ONNX size:** {onnx_size:.1f} MB\n\n")
@@ -212,7 +238,7 @@ def _write_model_card(weights_path):
             batch = train_args.get("batch", "unknown")
             f.write(f"- **Epochs:** {epochs}\n")
             f.write(f"- **Batch size:** {batch}\n")
-        f.write(f"- **Image size:** {MODEL_INPUT_SIZE}x{MODEL_INPUT_SIZE}\n")
+        f.write(f"- **Image size:** {model_input_size}x{model_input_size}\n")
         f.write(f"- **Weights source:** `{weights_path.name}`\n\n")
 
         if best_metrics:
@@ -285,11 +311,11 @@ def cmd_validate(args):
     for out in outputs:
         print(f"Output: {out.name} shape={out.shape} dtype={out.type}")
 
-    # Create dummy input
+    # Create dummy input — infer model_input_size from ONNX input shape
     input_shape = inputs[0].shape
-    # Replace dynamic dims with actual values
+    model_input_size = input_shape[2] if isinstance(input_shape[2], int) else 640
     shape = [
-        d if isinstance(d, int) else MODEL_INPUT_SIZE if i > 1 else 1
+        d if isinstance(d, int) else model_input_size if i > 1 else 1
         for i, d in enumerate(input_shape)
     ]
     dummy = np.random.randn(*shape).astype(np.float32)
@@ -314,7 +340,7 @@ def cmd_validate(args):
     # Try with a real image if available
     test_image = _find_test_image(args.image)
     if test_image:
-        _validate_with_image(session, inputs[0].name, test_image)
+        _validate_with_image(session, inputs[0].name, test_image, model_input_size)
 
     # Print class mapping from data.yaml
     _print_class_mapping()
@@ -378,7 +404,7 @@ def _find_test_image(explicit_path):
     return None
 
 
-def _validate_with_image(session, input_name, image_path):
+def _validate_with_image(session, input_name, image_path, model_input_size=640):
     """Run inference on a real image and report detections."""
     import numpy as np
 
@@ -390,7 +416,7 @@ def _validate_with_image(session, input_name, image_path):
 
     print(f"\n--- Test Image: {image_path.name} ---")
     img = Image.open(image_path).convert("RGB")
-    img_resized = img.resize((MODEL_INPUT_SIZE, MODEL_INPUT_SIZE))
+    img_resized = img.resize((model_input_size, model_input_size))
 
     # Normalize to [0, 1] and reshape to NCHW
     arr = np.array(img_resized, dtype=np.float32) / 255.0
@@ -411,7 +437,7 @@ def _validate_with_image(session, input_name, image_path):
         class_names = data.get("names", [])
 
     # Parse detections based on shape
-    detections = _parse_output(output, class_names)
+    detections = _parse_output(output, class_names, model_input_size)
     if detections:
         print(f"Found {len(detections)} detections (confidence > 0.25):")
         for d in detections[:10]:
@@ -422,7 +448,7 @@ def _validate_with_image(session, input_name, image_path):
         print("No detections above 0.25 confidence (normal for random test image)")
 
 
-def _parse_output(output, class_names):
+def _parse_output(output, class_names, model_input_size=640):
     """Parse YOLO output tensor into detections. Handles multiple output formats."""
     threshold = 0.25
     detections = []
@@ -441,10 +467,10 @@ def _parse_output(output, class_names):
             if confidence < threshold:
                 continue
             class_id = int(row[5])
-            cx = float(row[0]) / MODEL_INPUT_SIZE
-            cy = float(row[1]) / MODEL_INPUT_SIZE
-            w = float(row[2]) / MODEL_INPUT_SIZE
-            h = float(row[3]) / MODEL_INPUT_SIZE
+            cx = float(row[0]) / model_input_size
+            cy = float(row[1]) / model_input_size
+            w = float(row[2]) / model_input_size
+            h = float(row[3]) / model_input_size
             label = (
                 class_names[class_id]
                 if class_id < len(class_names)
@@ -472,10 +498,10 @@ def _parse_output(output, class_names):
             confidence = float(class_scores[max_idx])
             if confidence < threshold:
                 continue
-            cx = float(data[0, i]) / MODEL_INPUT_SIZE
-            cy = float(data[1, i]) / MODEL_INPUT_SIZE
-            w = float(data[2, i]) / MODEL_INPUT_SIZE
-            h = float(data[3, i]) / MODEL_INPUT_SIZE
+            cx = float(data[0, i]) / model_input_size
+            cy = float(data[1, i]) / model_input_size
+            w = float(data[2, i]) / model_input_size
+            h = float(data[3, i]) / model_input_size
             label = (
                 class_names[max_idx]
                 if max_idx < len(class_names)
@@ -521,9 +547,21 @@ def _print_class_mapping():
     print(f"// Total classes: {len(names)}")
 
 
+def _add_model_args(subparser):
+    """Add common --model-size and --imgsz args to a subparser."""
+    subparser.add_argument(
+        "--model-size", type=str, default="s", choices=MODEL_PRESETS.keys(),
+        help="Model size: n=nano, s=small, m=medium (default: s)",
+    )
+    subparser.add_argument(
+        "--imgsz", type=int, default=None,
+        help="Input image size (default: 640 for s/m, 416 for n)",
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Train YOLO26n playing card detector for browser inference"
+        description="Train YOLO playing card detector for browser inference"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -532,7 +570,7 @@ def main():
     dl.set_defaults(func=cmd_download)
 
     # train
-    tr = subparsers.add_parser("train", help="Train YOLO26n on card dataset")
+    tr = subparsers.add_parser("train", help="Train YOLO on card dataset")
     tr.add_argument(
         "--epochs", type=int, default=50, help="Training epochs (default: 50)"
     )
@@ -542,6 +580,7 @@ def main():
     tr.add_argument(
         "--resume", action="store_true", help="Resume from last checkpoint"
     )
+    _add_model_args(tr)
     tr.set_defaults(func=cmd_train)
 
     # export
@@ -557,6 +596,7 @@ def main():
         action="store_true",
         help="Skip TF.js export (e.g. on ARM64 where it's unsupported)",
     )
+    _add_model_args(ex)
     ex.set_defaults(func=cmd_export)
 
     # validate

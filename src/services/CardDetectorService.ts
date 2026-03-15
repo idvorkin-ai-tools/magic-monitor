@@ -24,8 +24,8 @@ export interface LoadingState {
 
 type LoadingListener = (state: LoadingState) => void;
 
-// YOLO model input size (square)
-const MODEL_INPUT_SIZE = 416;
+// YOLO model input size (square) — must match the trained model's input dimensions
+const MODEL_INPUT_SIZE = 640;
 const MODEL_PATH = "https://idvorkin-models.s3.amazonaws.com/card-detector.onnx";
 
 // NMS parameters
@@ -237,6 +237,7 @@ class CardDetectorServiceImpl {
 			console.log("[CardDetectorService] ONNX session created successfully");
 			console.log("[CardDetectorService] Input names:", this.session.inputNames);
 			console.log("[CardDetectorService] Output names:", this.session.outputNames);
+			console.log(`[CardDetectorService] Model input size: ${MODEL_INPUT_SIZE}x${MODEL_INPUT_SIZE}`);
 
 			this.updateState({ phase: "ready" });
 			return this.session;
@@ -282,8 +283,9 @@ class CardDetectorServiceImpl {
 		const offsetX = Math.floor((MODEL_INPUT_SIZE - scaledW) / 2);
 		const offsetY = Math.floor((MODEL_INPUT_SIZE - scaledH) / 2);
 
-		ctx.fillStyle = "#808080"; // YOLO letterbox gray (128/255 ≈ 0.5)
+		ctx.fillStyle = "#727272"; // YOLO letterbox gray (114/255 — Ultralytics default)
 		ctx.fillRect(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
+		ctx.imageSmoothingEnabled = false; // nearest-neighbor to match training
 		ctx.drawImage(source, offsetX, offsetY, scaledW, scaledH);
 
 		const imageData = ctx.getImageData(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
@@ -385,7 +387,7 @@ class CardDetectorServiceImpl {
 		const lines = [
 			`Source: ${srcWidth}x${srcHeight} → Model: ${MODEL_INPUT_SIZE}x${MODEL_INPUT_SIZE}`,
 			`Detections: ${detections.length} (threshold: ${confidenceThreshold})`,
-			`Backend: ${(this.session as unknown as Record<string, unknown>).handler ?? "ort"} | ${new Date().toISOString()}`,
+			`Backend: wasm | ${new Date().toISOString()}`,
 		];
 		dCtx.font = "bold 14px monospace";
 		for (let i = 0; i < lines.length; i++) {
