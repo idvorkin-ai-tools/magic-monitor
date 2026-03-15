@@ -4,9 +4,10 @@
  * Mirrors HandLandmarkerService: loads model once, shares across components,
  * exposes loading state via subscribe pattern.
  */
-import * as ort from "onnxruntime-web";
+import * as ort from "onnxruntime-web/webgpu";
+
+ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/";
 import {
-	NUM_CLASSES,
 	cardToLabel,
 	classIndexToCard,
 	type BoundingBox,
@@ -25,7 +26,7 @@ type LoadingListener = (state: LoadingState) => void;
 
 // YOLO model input size (square)
 const MODEL_INPUT_SIZE = 416;
-const MODEL_PATH = "/models/card-detector.onnx";
+const MODEL_PATH = "https://idvorkin-models.s3.amazonaws.com/card-detector.onnx";
 
 // NMS parameters
 const NMS_IOU_THRESHOLD = 0.5;
@@ -79,54 +80,50 @@ export function nms(detections: CardDetection[], iouThreshold = NMS_IOU_THRESHOL
 }
 
 /**
- * Parse YOLO output tensor into CardDetection[].
+ * Parse YOLO26n post-NMS output tensor into CardDetection[].
  *
- * YOLOv8 output shape: [1, 56, 8400] where:
- *   - 56 = 4 bbox coords + 52 class scores
- *   - 8400 = number of anchor predictions
- *
- * Each column is one prediction: [cx, cy, w, h, class0_score, class1_score, ...]
+ * Output shape: [1, 300, 6] where each detection is:
+ *   [x1, y1, x2, y2, confidence, class_id]
+ * Coordinates are in pixel space relative to model input (416x416).
  */
 export function parseYoloOutput(
 	outputData: Float32Array,
-	numPredictions: number,
+	numDetections: number,
 	confidenceThreshold: number,
 	inputWidth: number,
 	inputHeight: number,
 ): CardDetection[] {
 	const detections: CardDetection[] = [];
 
-	for (let i = 0; i < numPredictions; i++) {
-		// Find max class score for this prediction
-		let maxScore = 0;
-		let maxClassIdx = 0;
-		for (let c = 0; c < NUM_CLASSES; c++) {
-			const score = outputData[(4 + c) * numPredictions + i];
-			if (score > maxScore) {
-				maxScore = score;
-				maxClassIdx = c;
-			}
-		}
+	for (let i = 0; i < numDetections; i++) {
+		const offset = i * 6;
+		const x1 = outputData[offset];
+		const y1 = outputData[offset + 1];
+		const x2 = outputData[offset + 2];
+		const y2 = outputData[offset + 3];
+		const confidence = outputData[offset + 4];
+		const classId = Math.round(outputData[offset + 5]);
 
-		if (maxScore < confidenceThreshold) continue;
+		if (confidence < confidenceThreshold) continue;
 
-		const card = classIndexToCard(maxClassIdx);
+		const card = classIndexToCard(classId);
 		if (!card) continue;
 
-		// Extract bbox (center format, pixel coords relative to model input)
-		const cx = outputData[0 * numPredictions + i] / inputWidth;
-		const cy = outputData[1 * numPredictions + i] / inputHeight;
-		const w = outputData[2 * numPredictions + i] / inputWidth;
-		const h = outputData[3 * numPredictions + i] / inputHeight;
+		// Convert corner coords to normalized center format
+		const cx = ((x1 + x2) / 2) / inputWidth;
+		const cy = ((y1 + y2) / 2) / inputHeight;
+		const w = (x2 - x1) / inputWidth;
+		const h = (y2 - y1) / inputHeight;
 
 		detections.push({
 			card,
 			label: cardToLabel(card),
 			bbox: { x: cx, y: cy, width: w, height: h },
-			confidence: maxScore,
+			confidence,
 		});
 	}
 
+	// Output is already post-NMS, but filter any remaining overlaps
 	return nms(detections);
 }
 
@@ -220,7 +217,7 @@ class CardDetectorServiceImpl {
 
 			console.log("[CardDetectorService] Creating ONNX inference session...");
 			this.session = await ort.InferenceSession.create(modelBuffer.buffer, {
-				executionProviders: ["webgl"],
+				executionProviders: ["webgpu", "webgl", "wasm"],
 				graphOptimizationLevel: "all",
 			});
 
@@ -282,10 +279,10 @@ class CardDetectorServiceImpl {
 		const output = results[outputName];
 		const outputData = output.data as Float32Array;
 
-		// YOLOv8 output: [1, 56, N] where N is number of predictions
-		const numPredictions = output.dims[2];
+		// YOLO26n post-NMS output: [1, 300, 6]
+		const numDetections = output.dims[1];
 
-		return parseYoloOutput(outputData, numPredictions, confidenceThreshold, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
+		return parseYoloOutput(outputData, numDetections, confidenceThreshold, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
 	}
 
 	isReady(): boolean {

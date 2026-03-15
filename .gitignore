@@ -7,6 +7,9 @@
 .runtime/
 .cursorindexingignore
 src/generated_version.ts
+training/node_modules/
+training/package.json
+training/package-lock.json
 
 # Training artifacts
 training/dataset/

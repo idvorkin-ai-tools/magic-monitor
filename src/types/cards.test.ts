@@ -2,24 +2,26 @@ import { describe, expect, it } from "vitest";
 import { classIndexToCard, cardToLabel, NUM_CLASSES } from "./cards";
 
 describe("classIndexToCard", () => {
-	it("maps index 0 to Ace of Spades", () => {
-		const card = classIndexToCard(0);
-		expect(card).toEqual({ rank: "A", suit: "\u2660" });
+	// Alphabetical dataset order: 0=10C, 1=10D, 2=10H, 3=10S, 4=2C, ...
+
+	it("maps index 0 to 10 of Clubs", () => {
+		expect(classIndexToCard(0)).toEqual({ rank: "10", suit: "\u2663" });
 	});
 
-	it("maps index 12 to King of Spades", () => {
-		const card = classIndexToCard(12);
-		expect(card).toEqual({ rank: "K", suit: "\u2660" });
+	it("maps index 2 to 10 of Hearts", () => {
+		expect(classIndexToCard(2)).toEqual({ rank: "10", suit: "\u2665" });
 	});
 
-	it("maps index 13 to Ace of Hearts", () => {
-		const card = classIndexToCard(13);
-		expect(card).toEqual({ rank: "A", suit: "\u2665" });
+	it("maps index 36 to Ace of Clubs", () => {
+		expect(classIndexToCard(36)).toEqual({ rank: "A", suit: "\u2663" });
 	});
 
-	it("maps index 51 to King of Clubs", () => {
-		const card = classIndexToCard(51);
-		expect(card).toEqual({ rank: "K", suit: "\u2663" });
+	it("maps index 39 to Ace of Spades", () => {
+		expect(classIndexToCard(39)).toEqual({ rank: "A", suit: "\u2660" });
+	});
+
+	it("maps index 51 to Queen of Spades", () => {
+		expect(classIndexToCard(51)).toEqual({ rank: "Q", suit: "\u2660" });
 	});
 
 	it("returns null for out-of-range index", () => {
