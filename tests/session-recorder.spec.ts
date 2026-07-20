@@ -61,7 +61,7 @@ async function injectCounterCamera(page: Page) {
 		draw();
 
 		// Expose counter for test verification
-		(window as Window & { counterCamera: { getCounter: () => number; reset: () => void } }).counterCamera = {
+		(window as unknown as Window & { counterCamera: { getCounter: () => number; reset: () => void } }).counterCamera = {
 			getCounter: () => counter,
 			reset: () => {
 				startTime = Date.now();
