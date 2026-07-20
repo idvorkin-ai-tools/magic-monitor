@@ -105,7 +105,6 @@ async function injectMockCamera(page: Page) {
 		};
 
 		// Mock MediaRecorder to work with canvas streams in headless Chrome
-		const OriginalMediaRecorder = window.MediaRecorder;
 		const mockRecordings = new Map<MediaRecorder, Blob[]>();
 
 		class MockMediaRecorder {
@@ -178,18 +177,11 @@ async function injectMockCamera(page: Page) {
 			}
 		}
 
-		// Only use mock if original doesn't work with our stream
-		// Test if the original MediaRecorder works
-		try {
-			const testRecorder = new OriginalMediaRecorder(stream, { mimeType: "video/webm" });
-			testRecorder.start();
-			testRecorder.stop();
-			console.log("Original MediaRecorder works with canvas stream");
-		} catch {
-			console.log("Original MediaRecorder failed, using mock");
-			// @ts-expect-error - overriding MediaRecorder
-			window.MediaRecorder = MockMediaRecorder;
-		}
+		// Always install the mock: MediaRecorder with canvas streams is
+		// unreliable in headless Chrome, and deterministic recording data
+		// is what the recording tests depend on.
+		// @ts-expect-error - overriding MediaRecorder
+		window.MediaRecorder = MockMediaRecorder;
 	});
 }
 
