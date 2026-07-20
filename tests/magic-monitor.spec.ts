@@ -533,38 +533,33 @@ test.describe("Magic Monitor E2E", () => {
 		await expect(video).toBeVisible();
 	});
 
-	// Skip recording tests - MediaRecorder with canvas stream doesn't work reliably in headless Chrome
-	// These would need either a real video file or more sophisticated mocking
-	test.skip("Recording: Shows recording indicator when live", async ({ page }) => {
+	test("Recording: Shows recording indicator when live", async ({ page }) => {
 		// Wait for app to load and start recording
 		const video = page.getByTestId("main-video");
 		await expect(video).toBeVisible();
 
-		// Recording indicator should show "REC" or recording duration
-		// Look for the recording indicator in the control bar
-		const recordingIndicator = page.locator("text=/REC|\\d+:\\d+/");
-		await expect(recordingIndicator.first()).toBeVisible({ timeout: 10000 });
+		// Recording indicator should show REC once video + storage are ready
+		const recordingIndicator = page.getByText("● REC");
+		await expect(recordingIndicator).toBeVisible({ timeout: 10000 });
 	});
 
-	test.skip("Recording: Duration counter increases over time", async ({ page }) => {
+	test("Recording: Duration counter increases over time", async ({ page }) => {
 		// Wait for app to load
 		const video = page.getByTestId("main-video");
 		await expect(video).toBeVisible();
 
-		// Wait for recording to start (should show a duration like "0:01" or "0:00")
-		const durationRegex = /\d+:\d{2}/;
-		await expect(page.getByText(durationRegex).first()).toBeVisible({ timeout: 10000 });
+		// Status bar shows "<seconds>s | <n> sessions" while live
+		// (.first() — the regex also matches ancestor spans; match innermost deterministically)
+		const statusReadout = page.getByText(/\d+s \|/).first();
+		await expect(statusReadout).toBeVisible({ timeout: 10000 });
 
-		// Get initial duration text
-		const durationElement = page.getByText(durationRegex).first();
-		const initialText = await durationElement.textContent();
+		const initialText = await statusReadout.textContent();
 
-		// Wait 2 seconds for counter to increase
-		await page.waitForTimeout(2000);
-
-		// Duration should have increased
-		const newText = await durationElement.textContent();
-		expect(newText).not.toBe(initialText);
+		// Wait for the block duration to tick up
+		await expect(async () => {
+			const newText = await statusReadout.textContent();
+			expect(newText).not.toBe(initialText);
+		}).toPass({ timeout: 5000 });
 	});
 
 	test("Settings: Resolution selector shows options", async ({ page }) => {
