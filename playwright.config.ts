@@ -11,7 +11,7 @@ export default defineConfig({
 		["html", { outputFolder: "playwright-report" }],
 	],
 	use: {
-		baseURL: "https://localhost:5173",
+		baseURL: "https://localhost:5273",
 		trace: "retain-on-failure",
 		video: "retain-on-failure",
 		screenshot: "only-on-failure",
@@ -29,8 +29,8 @@ export default defineConfig({
 		},
 	],
 	webServer: {
-		command: "npm run dev -- --port 5173",
-		url: "https://localhost:5173",
+		command: "npx vite --port 5273 --strictPort",
+		url: "https://localhost:5273",
 		reuseExistingServer: !process.env.CI, // Reuse existing server in dev, start fresh in CI
 		timeout: 120 * 1000,
 		stdout: "ignore",
