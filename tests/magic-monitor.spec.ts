@@ -562,6 +562,24 @@ test.describe("Magic Monitor E2E", () => {
 		}).toPass({ timeout: 5000 });
 	});
 
+	test("Recording: A real recorded block appears in Sessions without seeding", async ({ page }) => {
+		// Wait for recording to actually start
+		await expect(page.getByTestId("main-video")).toBeVisible();
+		await expect(page.getByText("● REC")).toBeVisible({ timeout: 10000 });
+
+		// Let the mock recorder emit at least two 1s chunks
+		await page.waitForTimeout(2500);
+
+		// Opening the picker stops and saves the current block
+		await page.getByRole("button", { name: "Sessions" }).click();
+		await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+
+		// The just-recorded block must appear as a Recent session.
+		// This is the only test covering record→storage→picker for real;
+		// everything else seeds IndexedDB directly.
+		await expect(page.getByText("No recent recordings")).toBeHidden({ timeout: 10000 });
+	});
+
 	test("Settings: Resolution selector shows options", async ({ page }) => {
 		// Open settings
 		await page.getByTitle("Settings").click();
