@@ -276,6 +276,24 @@ describe("useCamera", () => {
 			});
 		});
 
+		it("adopting the opened device does not restart the stream", async () => {
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
+				createMockDevice("device-1", "Camera 1"),
+			]);
+			vi.mocked(CameraService.start).mockResolvedValue(
+				createMockStream("device-1"),
+			);
+
+			const { result } = renderHook(() => useCamera());
+
+			await waitFor(() => {
+				expect(result.current.selectedDeviceId).toBe("device-1");
+			});
+			// The adoption state write must not have torn down and reopened
+			expect(CameraService.start).toHaveBeenCalledTimes(1);
+			expect(CameraService.stop).not.toHaveBeenCalled();
+		});
+
 		it("stops previous stream when device changes", async () => {
 			const stream1 = createMockStream("device-1");
 			const stream2 = createMockStream("device-2");

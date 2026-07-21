@@ -120,9 +120,8 @@ export function useCamera(initialDeviceId?: string) {
 
 				// Refresh device list to get labels after permission grant
 				const postDevices = await CameraService.getVideoDevices();
-				if (isActive) {
-					setDevices(postDevices);
-				}
+				if (!isActive) return;
+				setDevices(postDevices);
 
 				// Adopt the device the stream actually serves. If the track is
 				// anonymous (no deviceId — virtual/canvas sources), fall back to
@@ -165,15 +164,25 @@ export function useCamera(initialDeviceId?: string) {
 
 		setupCamera();
 
+		// Cancellation ONLY. This cleanup runs before every re-run of the
+		// effect - stopping the stream here would defeat the idempotence
+		// guard above (adoption re-run would always find a torn-down stream).
 		return () => {
 			isActive = false;
+		};
+	}, [selectedDeviceId, resolution, orientation, retryCount]); // Re-run when device/resolution/orientation changes
+
+	// Final teardown - the deps-effect cleanup must not stop the stream
+	// (it runs before every re-run and would defeat the idempotence guard).
+	useEffect(() => {
+		return () => {
 			activeConfigRef.current = null;
 			if (streamRef.current) {
 				CameraService.stop(streamRef.current);
 				streamRef.current = null;
 			}
 		};
-	}, [selectedDeviceId, resolution, orientation, retryCount]); // Re-run when device/resolution/orientation changes
+	}, []);
 
 	// Wrap setter to persist selection and load device-specific settings
 	const handleSetSelectedDeviceId = useCallback((deviceId: string) => {
