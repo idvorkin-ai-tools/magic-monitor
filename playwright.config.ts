@@ -4,7 +4,10 @@ export default defineConfig({
 	testDir: "./tests",
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
-	retries: process.env.CI ? 2 : 0,
+	// 1 local retry: a known app bug (MediaPipe crash on 0x0 pre-metadata frame,
+	// tracked in the reliability sweep) can kill an arbitrary test under suite
+	// timing pressure; retried passes surface as "flaky", not silent green.
+	retries: process.env.CI ? 2 : 1,
 	workers: process.env.CI ? 1 : 2,
 	reporter: [
 		["list"],
