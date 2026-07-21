@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as CameraService from "../services/CameraService";
 import {
+	CameraService,
 	InsecureContextError,
 	type Orientation,
 	type Resolution,
 	resolveCameraSelection,
 } from "../services/CameraService";
-import * as CameraSettingsService from "../services/CameraSettingsService";
+import {
+	CameraSettingsService,
+	updateSettingForDevice,
+} from "../services/CameraSettingsService";
 import { DeviceService } from "../services/DeviceService";
 
 const DEVICE_ID_STORAGE_KEY = "magic-monitor-camera-device-id";
@@ -261,11 +264,7 @@ export function useCamera(initialDeviceId?: string) {
 	const handleSetResolution = useCallback(
 		(res: Resolution) => {
 			setResolution(res);
-			CameraSettingsService.updateSettingForDevice(
-				selectedDeviceId,
-				"resolution",
-				res,
-			);
+			updateSettingForDevice(selectedDeviceId, "resolution", res);
 		},
 		[selectedDeviceId],
 	);
@@ -274,11 +273,7 @@ export function useCamera(initialDeviceId?: string) {
 	const handleSetOrientation = useCallback(
 		(orient: Orientation) => {
 			setOrientation(orient);
-			CameraSettingsService.updateSettingForDevice(
-				selectedDeviceId,
-				"orientation",
-				orient,
-			);
+			updateSettingForDevice(selectedDeviceId, "orientation", orient);
 		},
 		[selectedDeviceId],
 	);

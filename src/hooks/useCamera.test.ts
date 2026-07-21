@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as CameraService from "../services/CameraService";
+import { CameraService, InsecureContextError } from "../services/CameraService";
 import { DeviceService } from "../services/DeviceService";
 import { useCamera } from "./useCamera";
 
@@ -10,19 +10,15 @@ vi.mock("../services/CameraService", async (importOriginal) => {
 	const actual =
 		await importOriginal<typeof import("../services/CameraService")>();
 	return {
-		getVideoDevices: vi.fn(),
-		start: vi.fn(),
-		stop: vi.fn(),
-		addDeviceChangeListener: vi.fn(),
-		resolveCameraSelection: actual.resolveCameraSelection,
-		InsecureContextError: class InsecureContextError extends Error {
-			constructor() {
-				super(
-					"Camera requires HTTPS. Access this page via localhost or a secure connection.",
-				);
-				this.name = "InsecureContextError";
-			}
+		...actual, // keeps resolveCameraSelection, types, RESOLUTION_PRESETS real
+		CameraService: {
+			getVideoDevices: vi.fn(),
+			start: vi.fn(),
+			stop: vi.fn(),
+			addDeviceChangeListener: vi.fn(),
+			isSecureContext: vi.fn().mockReturnValue(true),
 		},
+		InsecureContextError: actual.InsecureContextError,
 	};
 });
 
@@ -363,7 +359,7 @@ describe("useCamera", () => {
 
 		it("sets specific error for InsecureContextError", async () => {
 			vi.mocked(CameraService.start).mockRejectedValue(
-				new CameraService.InsecureContextError(),
+				new InsecureContextError(),
 			);
 
 			const { result } = renderHook(() => useCamera());
