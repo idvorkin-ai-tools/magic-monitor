@@ -51,6 +51,7 @@ export class SessionRecorderMachine {
 	private enabled = false;
 	private videoReady = false;
 	private storageReady = false;
+	private consecutiveSaveFailures = 0;
 	private callbacks: SessionRecorderCallbacks;
 
 	constructor(callbacks: SessionRecorderCallbacks) {
@@ -67,6 +68,10 @@ export class SessionRecorderMachine {
 		return this.state.type === "recording";
 	}
 
+	getConsecutiveSaveFailures(): number {
+		return this.consecutiveSaveFailures;
+	}
+
 	// ===== Input Methods =====
 
 	/**
@@ -75,6 +80,7 @@ export class SessionRecorderMachine {
 	enable(): void {
 		if (this.enabled) return;
 		this.enabled = true;
+		this.consecutiveSaveFailures = 0;
 		this.tryTransition();
 	}
 
@@ -168,6 +174,8 @@ export class SessionRecorderMachine {
 				thumbnails,
 				blockStart,
 			);
+			this.consecutiveSaveFailures =
+				savedSession === null ? this.consecutiveSaveFailures + 1 : 0;
 		}
 
 		// Never park: re-run the transition ladder now that the stop is done (H2).

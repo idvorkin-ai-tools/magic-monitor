@@ -101,7 +101,7 @@ export function useSessionRecorder({
 		sessionStorageService,
 		videoFixService,
 	});
-	const { saveBlock, refreshSessions, isInitialized } = sessionList;
+	const { saveBlock, refreshSessions, isInitialized, initFailed } = sessionList;
 
 	// Latest-callback refs so the machine never needs to be recreated
 	const startRecordingRef = useLatest(startRecording);
@@ -167,8 +167,7 @@ export function useSessionRecorder({
 	useEffect(() => {
 		if (isRecording) {
 			durationTimerRef.current = timerService.setInterval(() => {
-				const elapsed =
-					(timerService.now() - blockStartTimeRef.current) / 1000;
+				const elapsed = (timerService.now() - blockStartTimeRef.current) / 1000;
 				setCurrentBlockDuration(elapsed);
 			}, 1000);
 		} else {
@@ -189,16 +188,15 @@ export function useSessionRecorder({
 		};
 	}, [isRecording, timerService]);
 
-	// Storage initialization effect
+	// Storage initialization effect: only genuine init failure kills recording.
+	// Save/refresh errors stay in sessionList.error for display (M8).
 	useEffect(() => {
-		// When sessionList finishes init, notify machine
-		if (sessionList.error) {
+		if (initFailed) {
 			machineRef.current?.storageInitFailed();
 		} else if (isInitialized) {
-			// Only notify machine when storage is actually initialized
 			machineRef.current?.storageInitialized();
 		}
-	}, [sessionList.error, isInitialized]);
+	}, [initFailed, isInitialized]);
 
 	// Video readiness detection effect
 	useEffect(() => {

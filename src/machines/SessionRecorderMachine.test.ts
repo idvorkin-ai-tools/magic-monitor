@@ -377,4 +377,22 @@ describe("SessionRecorderMachine", () => {
 			expect(machine.getState()).toEqual({ type: "initializing" });
 		});
 	});
+
+	describe("save-failure resilience (M8)", () => {
+		it("keeps rotating blocks and counts consecutive save failures", async () => {
+			machine.enable();
+			machine.storageInitialized();
+			machine.videoIsReady();
+
+			callbacks.onSaveBlock.mockResolvedValueOnce(null); // save fails
+			await machine.stopCurrentBlock();
+
+			expect(machine.getConsecutiveSaveFailures()).toBe(1);
+			expect(machine.getState().type).toBe("recording"); // still rotating
+
+			callbacks.onSaveBlock.mockResolvedValueOnce({} as never); // save succeeds
+			await machine.stopCurrentBlock();
+			expect(machine.getConsecutiveSaveFailures()).toBe(0); // reset on success
+		});
+	});
 });
