@@ -22,6 +22,9 @@ export function useCamera(initialDeviceId?: string) {
 		orientation: Orientation;
 		retryCount: number;
 	} | null>(null);
+	// Handler currently registered on the live track's "ended" event, so the
+	// unmount teardown effect (a separate effect scope) can remove it.
+	const onTrackEndedRef = useRef<(() => void) | undefined>(undefined);
 	const [error, setError] = useState<string | null>(null);
 	const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>(
@@ -55,7 +58,6 @@ export function useCamera(initialDeviceId?: string) {
 
 	// Handle device changes - syncs with external device enumeration
 	useEffect(() => {
-		// eslint-disable-next-line react-hooks/set-state-in-effect -- Syncing with external device list
 		getDevices();
 
 		// Use CameraService for device change listener (handles insecure context internally)
@@ -86,8 +88,18 @@ export function useCamera(initialDeviceId?: string) {
 				return;
 			}
 
+			// What the stream actually ends up serving, once resolved. Starts as
+			// selectedDeviceId but the OverconstrainedError fallback below clears
+			// it (the persisted id was stale) so the adoption step re-derives it
+			// from whatever device actually opened.
+			let effectiveSelectedId = selectedDeviceId;
+
 			try {
 				if (streamRef.current) {
+					const oldTrack = streamRef.current.getVideoTracks()[0];
+					if (onTrackEndedRef.current) {
+						oldTrack?.removeEventListener?.("ended", onTrackEndedRef.current);
+					}
 					CameraService.stop(streamRef.current);
 					streamRef.current = null;
 				}
@@ -103,11 +115,31 @@ export function useCamera(initialDeviceId?: string) {
 					devices: preDevices,
 				});
 
-				const newStream = await CameraService.start(
-					resolved.deviceId ?? undefined,
-					resolution,
-					orientation,
-				);
+				let newStream: MediaStream;
+				try {
+					newStream = await CameraService.start(
+						resolved.deviceId ?? undefined,
+						resolution,
+						orientation,
+					);
+				} catch (err) {
+					const isOverconstrained =
+						err instanceof Error && err.name === "OverconstrainedError";
+					if (!isOverconstrained || !resolved.deviceId) throw err;
+					// Stale persisted id (M3): drop it and fall back to the OS
+					// default. The adoption step below persists what actually opens.
+					DeviceService.setStorageItem(DEVICE_ID_STORAGE_KEY, "");
+					effectiveSelectedId = "";
+					newStream = await CameraService.start(
+						undefined,
+						resolution,
+						orientation,
+					);
+					if (!isActive) {
+						CameraService.stop(newStream);
+						return;
+					}
+				}
 
 				if (!isActive) {
 					CameraService.stop(newStream);
@@ -117,6 +149,22 @@ export function useCamera(initialDeviceId?: string) {
 				streamRef.current = newStream;
 				setStream(newStream);
 				setError(null);
+
+				// Unplug detection (M3): a dead track re-runs selection instead of
+				// leaving a frozen frame. Guard on stream identity (not the
+				// per-run `isActive` flag) - the idempotence guard above can keep
+				// this exact stream alive across effect re-runs (e.g. the
+				// adoption-driven selectedDeviceId update), and `isActive` for
+				// THIS run goes false as soon as that re-run's cleanup fires even
+				// though the track is still live.
+				const liveTrack = newStream.getVideoTracks()[0];
+				const onTrackEnded = () => {
+					if (streamRef.current === newStream) {
+						setRetryCount((c) => c + 1);
+					}
+				};
+				onTrackEndedRef.current = onTrackEnded;
+				liveTrack?.addEventListener?.("ended", onTrackEnded);
 
 				// Refresh device list to get labels after permission grant
 				const postDevices = await CameraService.getVideoDevices();
@@ -130,7 +178,7 @@ export function useCamera(initialDeviceId?: string) {
 				const track = newStream.getVideoTracks()[0];
 				const trackDeviceId = track?.getSettings().deviceId ?? null;
 				const displayId =
-					selectedDeviceId ||
+					effectiveSelectedId ||
 					trackDeviceId ||
 					postDevices.find((d) => d.deviceId)?.deviceId ||
 					"";
@@ -142,7 +190,7 @@ export function useCamera(initialDeviceId?: string) {
 					retryCount,
 				};
 
-				if (!selectedDeviceId && displayId && isActive) {
+				if (!effectiveSelectedId && displayId && isActive) {
 					setSelectedDeviceId(displayId);
 					if (trackDeviceId) {
 						// Only a device the browser actually opened gets persisted
@@ -154,6 +202,13 @@ export function useCamera(initialDeviceId?: string) {
 					console.error("Error accessing camera:", err);
 					if (err instanceof InsecureContextError) {
 						setError(err.message);
+					} else if (
+						err instanceof Error &&
+						err.name === "OverconstrainedError"
+					) {
+						setError("Selected camera is unavailable. It may be unplugged.");
+					} else if (err instanceof Error && err.name === "NotAllowedError") {
+						setError("Could not access camera. Please allow permissions.");
 					} else {
 						setError("Could not access camera. Please allow permissions.");
 					}
@@ -178,6 +233,10 @@ export function useCamera(initialDeviceId?: string) {
 		return () => {
 			activeConfigRef.current = null;
 			if (streamRef.current) {
+				const cleanupTrack = streamRef.current.getVideoTracks()[0];
+				if (onTrackEndedRef.current) {
+					cleanupTrack?.removeEventListener?.("ended", onTrackEndedRef.current);
+				}
 				CameraService.stop(streamRef.current);
 				streamRef.current = null;
 			}

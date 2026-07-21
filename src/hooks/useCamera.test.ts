@@ -40,6 +40,8 @@ function createMockStream(deviceId = "device-1"): MediaStream {
 		kind: "video",
 		stop: vi.fn(),
 		getSettings: () => ({ deviceId }),
+		addEventListener: vi.fn(),
+		removeEventListener: vi.fn(),
 	};
 	return {
 		getTracks: () => [mockTrack],
@@ -370,6 +372,85 @@ describe("useCamera", () => {
 				expect(result.current.error).toBe(
 					"Camera requires HTTPS. Access this page via localhost or a secure connection.",
 				);
+			});
+		});
+
+		it("falls back to the OS default and clears the stale persisted id on OverconstrainedError (M3)", async () => {
+			vi.mocked(DeviceService.getStorageItem).mockReturnValue("stale-id");
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([]); // pre-permission: can't validate
+			const overconstrained = new Error("device not found");
+			overconstrained.name = "OverconstrainedError";
+			vi.mocked(CameraService.start)
+				.mockRejectedValueOnce(overconstrained) // exact constraint fails
+				.mockResolvedValue(createMockStream("real-device")); // unconstrained succeeds
+
+			const { result } = renderHook(() => useCamera());
+
+			await waitFor(() => {
+				expect(result.current.stream).not.toBeNull();
+			});
+			expect(result.current.error).toBeNull(); // recovery is silent - camera works
+			// Second start call was unconstrained
+			expect(vi.mocked(CameraService.start).mock.calls[1][0]).toBeUndefined();
+			// Stale id replaced by the adopted real device
+			expect(DeviceService.setStorageItem).toHaveBeenCalledWith(
+				"magic-monitor-camera-device-id",
+				"real-device",
+			);
+			// No extra stream restart beyond the exact + fallback attempt
+			expect(vi.mocked(CameraService.start)).toHaveBeenCalledTimes(2);
+		});
+
+		it("reports an accurate message when the selected camera is unavailable and fallback also fails (M3)", async () => {
+			vi.mocked(DeviceService.getStorageItem).mockReturnValue("stale-id");
+			const overconstrained = new Error("device not found");
+			overconstrained.name = "OverconstrainedError";
+			vi.mocked(CameraService.start).mockRejectedValue(overconstrained);
+
+			const { result } = renderHook(() => useCamera());
+
+			await waitFor(() => {
+				expect(result.current.error).toBe(
+					"Selected camera is unavailable. It may be unplugged.",
+				);
+			});
+		});
+
+		it("re-runs selection when the live track ends (unplug) instead of freezing (M3)", async () => {
+			let endedHandler: (() => void) | null = null;
+			const track = {
+				kind: "video",
+				stop: vi.fn(),
+				getSettings: () => ({ deviceId: "device-1" }),
+				addEventListener: vi.fn((event: string, cb: () => void) => {
+					if (event === "ended") endedHandler = cb;
+				}),
+				removeEventListener: vi.fn(),
+			};
+			const stream1 = {
+				getTracks: () => [track],
+				getVideoTracks: () => [track],
+				getAudioTracks: () => [],
+				active: true,
+			} as unknown as MediaStream;
+			vi.mocked(CameraService.start)
+				.mockResolvedValueOnce(stream1)
+				.mockResolvedValue(createMockStream("device-2"));
+
+			const { result } = renderHook(() => useCamera());
+			await waitFor(() => {
+				expect(result.current.stream).toBe(stream1);
+			});
+			expect(endedHandler).not.toBeNull();
+
+			act(() => {
+				endedHandler?.();
+			});
+
+			// Setup re-ran: a new stream replaced the dead one
+			await waitFor(() => {
+				expect(result.current.stream).not.toBe(stream1);
+				expect(result.current.stream).not.toBeNull();
 			});
 		});
 	});
