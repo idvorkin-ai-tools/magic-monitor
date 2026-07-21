@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+	type NotRecordingReason,
 	SessionRecorderMachine,
 	type SessionRecorderState,
 } from "../machines/SessionRecorderMachine";
@@ -41,6 +42,7 @@ export interface SessionRecorderConfig {
 export interface SessionRecorderControls {
 	// State
 	isRecording: boolean;
+	notRecordingReason: NotRecordingReason | null;
 	currentBlockDuration: number; // seconds into current block
 	currentThumbnails: SessionThumbnail[]; // thumbnails captured so far
 	error: string | null;
@@ -73,6 +75,8 @@ export function useSessionRecorder({
 }: SessionRecorderConfig): SessionRecorderControls {
 	// State exposed to consumers
 	const [isRecording, setIsRecording] = useState(false);
+	const [notRecordingReason, setNotRecordingReason] =
+		useState<NotRecordingReason | null>(null);
 	const [currentBlockDuration, setCurrentBlockDuration] = useState(0);
 
 	// Duration tracking
@@ -163,6 +167,9 @@ export function useSessionRecorder({
 					if (state.type === "recording") {
 						blockStartTimeRef.current = state.blockStart;
 					}
+					setNotRecordingReason(
+						machineRef.current?.getNotRecordingReason() ?? null,
+					);
 				},
 				now: () => timerService.now(),
 			});
@@ -247,6 +254,11 @@ export function useSessionRecorder({
 		} else {
 			machineRef.current?.disable();
 		}
+		// enable()/disable() don't always change state (e.g. re-enabling when
+		// already idle-but-ready), so onStateChange isn't guaranteed to fire -
+		// refresh the reason directly. Intentional synchronous setState.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
+		setNotRecordingReason(machineRef.current?.getNotRecordingReason() ?? null);
 	}, [enabled]);
 
 	// Cleanup on unmount
@@ -269,6 +281,7 @@ export function useSessionRecorder({
 	return {
 		// State
 		isRecording,
+		notRecordingReason,
 		currentBlockDuration,
 		currentThumbnails: thumbnailCapture.thumbnails,
 		error: combinedError,

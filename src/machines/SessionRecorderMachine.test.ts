@@ -443,4 +443,35 @@ describe("SessionRecorderMachine", () => {
 			expect(callbacks.onStopBlockTimer).not.toHaveBeenCalled();
 		});
 	});
+
+	describe("getNotRecordingReason", () => {
+		it("is null while recording and null while disabled", () => {
+			expect(machine.getNotRecordingReason()).toBeNull(); // disabled
+			machine.enable();
+			machine.storageInitialized();
+			machine.videoIsReady();
+			expect(machine.getNotRecordingReason()).toBeNull(); // recording
+		});
+
+		it("reports starting during benign transitions", () => {
+			machine.enable();
+			expect(machine.getNotRecordingReason()).toBe("starting");
+		});
+
+		it("reports storage-error on init failure and repeated save failures", async () => {
+			machine.enable();
+			machine.storageInitFailed();
+			expect(machine.getNotRecordingReason()).toBe("storage-error");
+		});
+
+		it("reports recorder-error after the 3-strike park", async () => {
+			machine.enable();
+			machine.storageInitialized();
+			machine.videoIsReady();
+			await machine.recorderFailed(null);
+			await machine.recorderFailed(null);
+			await machine.recorderFailed(null);
+			expect(machine.getNotRecordingReason()).toBe("recorder-error");
+		});
+	});
 });

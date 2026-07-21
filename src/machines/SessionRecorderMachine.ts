@@ -9,6 +9,11 @@ export type SessionRecorderState =
 	| { type: "recording"; blockStart: number }
 	| { type: "stopping" };
 
+export type NotRecordingReason =
+	| "storage-error"
+	| "recorder-error"
+	| "starting";
+
 // ===== Callback Types =====
 
 export interface SessionRecorderCallbacks {
@@ -71,6 +76,26 @@ export class SessionRecorderMachine {
 
 	getConsecutiveSaveFailures(): number {
 		return this.consecutiveSaveFailures;
+	}
+
+	/**
+	 * Why recording is not running, from the machine's own point of view.
+	 * null while recording, and null while intentionally disabled (pausing is
+	 * the caller's concept, not the machine's).
+	 */
+	getNotRecordingReason(): NotRecordingReason | null {
+		if (this.state.type === "recording") return null;
+		if (!this.enabled) return null;
+		if (this.consecutiveRecorderFailures >= 3) return "recorder-error";
+		// `state.type === "idle"` (not merely `!storageReady`) is what actually
+		// distinguishes a genuine storageInitFailed() park from the ordinary
+		// "initializing"/"waitingForVideo" states enable() passes through on
+		// the way up - both leave storageReady false, but only the former
+		// means storage is broken rather than just not-yet-ready.
+		if (this.state.type === "idle" || this.consecutiveSaveFailures >= 2) {
+			return "storage-error";
+		}
+		return "starting";
 	}
 
 	// ===== Input Methods =====

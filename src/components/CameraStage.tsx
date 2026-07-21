@@ -493,6 +493,16 @@ export function CameraStage() {
 							<span className="text-yellow-400 mr-2">⏸ PAUSED</span>
 						) : sessionRecorder.isRecording ? (
 							<span className="text-red-400 mr-2">● REC</span>
+						) : sessionRecorder.notRecordingReason === "starting" ? (
+							<span className="text-gray-400 mr-2">◌ starting…</span>
+						) : sessionRecorder.notRecordingReason ? (
+							<span className="text-amber-400 font-bold text-sm mr-2">
+								⚠ NOT RECORDING (
+								{sessionRecorder.notRecordingReason === "storage-error"
+									? "storage failing"
+									: "recorder failing"}
+								)
+							</span>
 						) : null}
 						{Math.floor(sessionRecorder.currentBlockDuration)}s |{" "}
 						{sessionRecorder.recentSessions.length + sessionRecorder.savedSessions.length} sessions
