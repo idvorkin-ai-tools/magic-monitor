@@ -664,9 +664,11 @@ export function CameraStage() {
 						>
 							{cardDetection.isModelLoading
 								? "🃏 Loading..."
-								: cardDetectionEnabled
-									? "🃏 Cards ON"
-									: "🃏 Cards"}
+								: cardDetection.modelError || cardDetection.detectError
+									? "🃏 Cards ERR"
+									: cardDetectionEnabled
+										? "🃏 Cards ON"
+										: "🃏 Cards"}
 						</StatusButton>
 
 						<StatusButton
