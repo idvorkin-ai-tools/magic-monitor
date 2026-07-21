@@ -20,6 +20,7 @@ import type { PracticeSession, SessionThumbnail } from "../types/sessions";
 import { SESSION_CONFIG } from "../types/sessions";
 import { useBlockRecorder } from "./useBlockRecorder";
 import { useBlockRotation } from "./useBlockRotation";
+import { useLatest } from "./useLatest";
 import { useSessionList } from "./useSessionList";
 import { useThumbnailCapture } from "./useThumbnailCapture";
 
@@ -102,21 +103,12 @@ export function useSessionRecorder({
 	});
 	const { saveBlock, refreshSessions, isInitialized } = sessionList;
 
-	// Store callbacks in refs so machine doesn't need to be recreated
-	const startRecordingRef = useRef(startRecording);
-	const stopRecordingRef = useRef(stopRecording);
-	const startCaptureRef = useRef(startCapture);
-	const stopCaptureRef = useRef(stopCapture);
-	const saveBlockRef = useRef(saveBlock);
-
-	// Keep refs up to date
-	useEffect(() => {
-		startRecordingRef.current = startRecording;
-		stopRecordingRef.current = stopRecording;
-		startCaptureRef.current = startCapture;
-		stopCaptureRef.current = stopCapture;
-		saveBlockRef.current = saveBlock;
-	}, [startRecording, stopRecording, startCapture, stopCapture, saveBlock]);
+	// Latest-callback refs so the machine never needs to be recreated
+	const startRecordingRef = useLatest(startRecording);
+	const stopRecordingRef = useLatest(stopRecording);
+	const startCaptureRef = useLatest(startCapture);
+	const stopCaptureRef = useLatest(stopCapture);
+	const saveBlockRef = useLatest(saveBlock);
 
 	// Create machine with callbacks that use refs (so they're always current)
 	const machineRef = useRef<SessionRecorderMachine | null>(null);
@@ -133,13 +125,8 @@ export function useSessionRecorder({
 	});
 	const { startRotation, stopRotation } = blockRotation;
 
-	// Store rotation refs
-	const startRotationRef = useRef(startRotation);
-	const stopRotationRef = useRef(stopRotation);
-	useEffect(() => {
-		startRotationRef.current = startRotation;
-		stopRotationRef.current = stopRotation;
-	}, [startRotation, stopRotation]);
+	const startRotationRef = useLatest(startRotation);
+	const stopRotationRef = useLatest(stopRotation);
 
 	// Initialize machine once
 	useEffect(() => {
