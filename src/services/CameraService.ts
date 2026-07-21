@@ -7,6 +7,30 @@ export const RESOLUTION_PRESETS: Record<Resolution, { width: number; height: num
 	"4k": { width: 3840, height: 2160, label: "4K (Ultra HD)" },
 };
 
+/**
+ * Decide which device to request BEFORE opening a stream.
+ * Pure policy: a persisted id wins when it is (or cannot be proven not to be)
+ * a real device; otherwise the OS default. Never "first in the list" — that
+ * silently overrides the camera the browser/OS actually chose.
+ * Pre-permission enumeration yields empty deviceIds, making validation
+ * impossible — then the persisted id is trusted and the
+ * OverconstrainedError fallback in useCamera is the real validator.
+ */
+export function resolveCameraSelection({
+	persistedId,
+	devices,
+}: {
+	persistedId: string;
+	devices: MediaDeviceInfo[];
+}): { deviceId: string | null } {
+	const validIds = devices.map((d) => d.deviceId).filter(Boolean);
+	const canValidate = validIds.length > 0;
+	if (persistedId && (!canValidate || validIds.includes(persistedId))) {
+		return { deviceId: persistedId };
+	}
+	return { deviceId: null };
+}
+
 export interface CameraSettings {
 	resolution: Resolution;
 	orientation: Orientation;
