@@ -290,15 +290,6 @@ export function CameraStage() {
 		setAppState("picker");
 	}, []);
 
-	const handleStopAndViewRecording = useCallback(async () => {
-		// Stop current recording and immediately view it
-		const session = await stopCurrentBlock({ disable: true });
-		if (session) {
-			await loadSession(session.id);
-			setAppState("replay");
-		}
-	}, [stopCurrentBlock, loadSession]);
-
 	// Escape key handler
 	useEscapeKey({
 		isSettingsOpen,
@@ -477,14 +468,8 @@ export function CameraStage() {
 				onSelectSession={handleSelectSession}
 				recentSessions={sessionRecorder.recentSessions}
 				savedSessions={sessionRecorder.savedSessions}
-				currentRecordingThumbnail={
-					sessionRecorder.currentThumbnails[0]?.dataUrl
-				}
-				currentRecordingDuration={sessionRecorder.currentBlockDuration}
-				isRecording={sessionRecorder.isRecording}
 				onRefresh={sessionRecorder.refreshSessions}
 				activeSessionId={replayPlayer.session?.id}
-				onStopAndViewRecording={handleStopAndViewRecording}
 			/>
 
 			{/* Minimap (Only when zoomed, hidden in replay mode since ReplayView has its own) */}
