@@ -18,7 +18,9 @@ export function useCardDetection({
 }: CardDetectionConfig) {
 	const [isModelLoading, setIsModelLoading] = useState(false);
 	const [loadingProgress, setLoadingProgress] = useState(0);
-	const [loadingPhase, setLoadingPhase] = useState<"downloading" | "initializing">("downloading");
+	const [loadingPhase, setLoadingPhase] = useState<
+		"downloading" | "initializing"
+	>("downloading");
 	const [modelError, setModelError] = useState<string | null>(null);
 
 	// Detections stored in ref for 60fps reads (overlay), throttled to state for UI
@@ -38,10 +40,18 @@ export function useCardDetection({
 	// Subscribe to service loading state
 	useEffect(() => {
 		const handleStateChange = (state: LoadingState) => {
-			setIsModelLoading(state.phase === "downloading" || state.phase === "initializing");
+			setIsModelLoading(
+				state.phase === "downloading" || state.phase === "initializing",
+			);
 			setLoadingProgress(state.progress);
-			setLoadingPhase(state.phase === "initializing" ? "initializing" : "downloading");
-			setModelError(state.phase === "error" ? (state.error?.message ?? "Unknown error") : null);
+			setLoadingPhase(
+				state.phase === "initializing" ? "initializing" : "downloading",
+			);
+			setModelError(
+				state.phase === "error"
+					? (state.error?.message ?? "Unknown error")
+					: null,
+			);
 		};
 
 		const unsubscribe = CardDetectorService.subscribe(handleStateChange);
@@ -79,7 +89,10 @@ export function useCardDetection({
 				// Skip every other frame to reduce GPU contention with hand tracking
 				if (frameCountRef.current % 2 === 0) {
 					const t0 = performance.now();
-					const results = await CardDetectorService.detect(video, confidenceThreshold);
+					const results = await CardDetectorService.detect(
+						video,
+						confidenceThreshold,
+					);
 					detectTimeMsRef.current = performance.now() - t0;
 
 					detectionsRef.current = results;
@@ -108,6 +121,7 @@ export function useCardDetection({
 	useEffect(() => {
 		if (!enabled) {
 			detectionsRef.current = [];
+			// eslint-disable-next-line react-hooks/set-state-in-effect -- clearing detections on disable
 			setDetections([]);
 		}
 	}, [enabled]);

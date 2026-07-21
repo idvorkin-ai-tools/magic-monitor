@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useBugReporter } from "../hooks/useBugReporter";
 import { useCamera } from "../hooks/useCamera";
 import { useCardDetection } from "../hooks/useCardDetection";
-import { CardDetectorService } from "../services/CardDetectorService";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useFlashDetector } from "../hooks/useFlashDetector";
 import { useMobileDetection } from "../hooks/useMobileDetection";
@@ -16,14 +15,15 @@ import { useShakeDetector } from "../hooks/useShakeDetector";
 import { useSmartZoom } from "../hooks/useSmartZoom";
 import { useVersionCheck } from "../hooks/useVersionCheck";
 import { useZoomPan } from "../hooks/useZoomPan";
+import { CardDetectorService } from "../services/CardDetectorService";
 import type { AppState } from "../types/sessions";
 import { AboutModal } from "./AboutModal";
 import { BugReportModal } from "./BugReportModal";
 import { CardList } from "./CardList";
 import { CardOverlay } from "./CardOverlay";
+import { DetectPerfOverlay } from "./DetectPerfOverlay";
 import { EdgeIndicator } from "./EdgeIndicator";
 import { ErrorOverlay } from "./ErrorOverlay";
-import { DetectPerfOverlay } from "./DetectPerfOverlay";
 import { HandSkeleton } from "./HandSkeleton";
 import { Minimap } from "./Minimap";
 import { ReplayView } from "./ReplayView";
@@ -102,7 +102,17 @@ export function CameraStage() {
 		containerRef,
 		onZoomChange: handleManualZoom,
 	});
-	const { zoom, pan, handleWheel, handleMouseDown, handleMouseMove, handleMouseUp, resetZoom, setZoom, setPan } = zoomPan;
+	const {
+		zoom,
+		pan,
+		handleWheel,
+		handleMouseDown,
+		handleMouseMove,
+		handleMouseUp,
+		resetZoom,
+		setZoom,
+		setPan,
+	} = zoomPan;
 
 	// Smart Zoom
 	const smartZoom = useSmartZoom({
@@ -140,7 +150,12 @@ export function CameraStage() {
 	// Replay Player
 	const replayPlayer = useReplayPlayer();
 	// Destructure stable callbacks to avoid render loops in dependency arrays
-	const { loadSession, seek: seekReplay, unloadSession, session: replaySession } = replayPlayer;
+	const {
+		loadSession,
+		seek: seekReplay,
+		unloadSession,
+		session: replaySession,
+	} = replayPlayer;
 
 	const isFlashing = useFlashDetector({
 		videoRef,
@@ -371,7 +386,10 @@ export function CameraStage() {
 					<EdgeIndicator edge="left" visible={smartZoom.clampedEdges.left} />
 					<EdgeIndicator edge="right" visible={smartZoom.clampedEdges.right} />
 					<EdgeIndicator edge="top" visible={smartZoom.clampedEdges.top} />
-					<EdgeIndicator edge="bottom" visible={smartZoom.clampedEdges.bottom} />
+					<EdgeIndicator
+						edge="bottom"
+						visible={smartZoom.clampedEdges.bottom}
+					/>
 				</>
 			)}
 
@@ -458,7 +476,9 @@ export function CameraStage() {
 				onSelectSession={handleSelectSession}
 				recentSessions={sessionRecorder.recentSessions}
 				savedSessions={sessionRecorder.savedSessions}
-				currentRecordingThumbnail={sessionRecorder.currentThumbnails[0]?.dataUrl}
+				currentRecordingThumbnail={
+					sessionRecorder.currentThumbnails[0]?.dataUrl
+				}
 				currentRecordingDuration={sessionRecorder.currentBlockDuration}
 				isRecording={sessionRecorder.isRecording}
 				onRefresh={sessionRecorder.refreshSessions}
@@ -505,7 +525,9 @@ export function CameraStage() {
 							</span>
 						) : null}
 						{Math.floor(sessionRecorder.currentBlockDuration)}s |{" "}
-						{sessionRecorder.recentSessions.length + sessionRecorder.savedSessions.length} sessions
+						{sessionRecorder.recentSessions.length +
+							sessionRecorder.savedSessions.length}{" "}
+						sessions
 					</span>
 				) : null}
 			</div>
@@ -551,7 +573,11 @@ export function CameraStage() {
 						videoRef={videoRef}
 						isMirror={isMirror}
 					/>
-					<DetectPerfOverlay detectTimeMsRef={smartZoom.detectTimeMsRef} videoRef={videoRef} processingResRef={smartZoom.processingResRef} />
+					<DetectPerfOverlay
+						detectTimeMsRef={smartZoom.detectTimeMsRef}
+						videoRef={videoRef}
+						processingResRef={smartZoom.processingResRef}
+					/>
 				</>
 			)}
 
@@ -565,9 +591,7 @@ export function CameraStage() {
 							isMirror={isMirror}
 						/>
 					)}
-					{cardShowList && (
-						<CardList detections={cardDetection.detections} />
-					)}
+					{cardShowList && <CardList detections={cardDetection.detections} />}
 				</>
 			)}
 
@@ -688,7 +712,7 @@ export function CameraStage() {
 							onClick={() => setIsSettingsOpen(true)}
 							className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
 							title="Settings"
-						aria-label="Settings"
+							aria-label="Settings"
 						>
 							<Settings size={18} />
 						</button>
