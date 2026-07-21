@@ -73,7 +73,13 @@ export function settleTransaction<T>(
 	result: () => T,
 ): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
-		tx.oncomplete = () => resolve(result());
+		tx.oncomplete = () => {
+			try {
+				resolve(result());
+			} catch (err) {
+				reject(err);
+			}
+		};
 		tx.onerror = () =>
 			reject(tx.error ?? new Error("IndexedDB transaction failed"));
 		tx.onabort = () =>

@@ -485,5 +485,18 @@ describe("SessionStorageService", () => {
 			fakeTx.oncomplete?.(new Event("complete"));
 			await expect(promise).resolves.toBe(42);
 		});
+
+		it("rejects when result() throws instead of hanging", async () => {
+			const fakeTx = {
+				oncomplete: null,
+				onerror: null,
+				onabort: null,
+			} as unknown as IDBTransaction;
+			const promise = settleTransaction(fakeTx, () => {
+				throw new Error("result blew up");
+			});
+			fakeTx.oncomplete?.(new Event("complete"));
+			await expect(promise).rejects.toThrow("result blew up");
+		});
 	});
 });
