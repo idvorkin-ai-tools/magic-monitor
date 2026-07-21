@@ -136,17 +136,12 @@ export class SessionRecorderMachine {
 
 	/**
 	 * Called when the block rotation timer fires.
-	 * Completes current block and starts a new one if still enabled.
+	 * Completes the current block; the completing transition starts the next
+	 * one if still enabled and ready.
 	 */
 	async blockTimerFired(): Promise<void> {
 		if (this.state.type !== "recording") return;
-
 		await this.stopCurrentBlock();
-
-		// Start new block if still enabled and ready
-		if (this.enabled && this.videoReady && this.storageReady) {
-			this.startRecordingBlock();
-		}
 	}
 
 	/**
@@ -175,12 +170,8 @@ export class SessionRecorderMachine {
 			);
 		}
 
-		// Transition to appropriate next state
-		if (this.enabled && this.videoReady && this.storageReady) {
-			this.setState({ type: "waitingForVideo" });
-		} else {
-			this.setState({ type: "idle" });
-		}
+		// Never park: re-run the transition ladder now that the stop is done (H2).
+		this.tryTransition({ fromStop: true });
 
 		return savedSession;
 	}
@@ -194,8 +185,10 @@ export class SessionRecorderMachine {
 
 	/**
 	 * Attempt to transition based on current conditions.
+	 * `fromStop` marks the call that completes an in-flight stop — it alone
+	 * may leave the "stopping" state.
 	 */
-	private tryTransition(): void {
+	private tryTransition(options: { fromStop?: boolean } = {}): void {
 		// Not enabled? Stay idle
 		if (!this.enabled) {
 			if (this.state.type !== "idle") {
@@ -220,10 +213,10 @@ export class SessionRecorderMachine {
 			return;
 		}
 
-		// Everything ready and not already recording/stopping? Start!
+		// Everything ready and nothing in flight? Start!
 		if (
 			this.state.type !== "recording" &&
-			this.state.type !== "stopping"
+			(this.state.type !== "stopping" || options.fromStop)
 		) {
 			this.startRecordingBlock();
 		}

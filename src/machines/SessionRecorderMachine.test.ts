@@ -181,14 +181,20 @@ describe("SessionRecorderMachine", () => {
 			expect(callbacks.onSaveBlock).not.toHaveBeenCalled();
 		});
 
-		it("transitions to waitingForVideo if still enabled and ready", async () => {
+		it("starts the next block immediately when still enabled and ready", async () => {
 			machine.enable();
 			machine.storageInitialized();
 			machine.videoIsReady();
 
 			await machine.stopCurrentBlock();
 
-			expect(machine.getState()).toEqual({ type: "waitingForVideo" });
+			// Contract change (H2 fix): a completed stop re-runs the transition
+			// ladder instead of parking in waitingForVideo forever.
+			expect(machine.getState()).toEqual({
+				type: "recording",
+				blockStart: 1000,
+			});
+			expect(callbacks.onStartRecording).toHaveBeenCalledTimes(2);
 		});
 
 		it("transitions to idle if disabled during stop", async () => {
@@ -205,6 +211,57 @@ describe("SessionRecorderMachine", () => {
 			await machine.stopCurrentBlock();
 
 			expect(callbacks.onStopRecording).not.toHaveBeenCalled();
+		});
+
+		it("recovers when disable() interleaves with an in-flight stop (pause/resume race)", async () => {
+			machine.enable();
+			machine.storageInitialized();
+			machine.videoIsReady();
+
+			// Hold the stop open so we can interleave inputs mid-flight
+			let resolveStop!: (v: { blob: Blob; duration: number }) => void;
+			callbacks.onStopRecording.mockReturnValueOnce(
+				new Promise((r) => {
+					resolveStop = r;
+				}),
+			);
+
+			const stopPromise = machine.stopCurrentBlock();
+			machine.disable(); // pause while stopping
+			machine.enable(); // resume while still stopping
+			resolveStop({
+				blob: new Blob(["x"], { type: "video/webm" }),
+				duration: 1000,
+			});
+			await stopPromise;
+
+			expect(machine.getState().type).toBe("recording");
+		});
+
+		it("returns to waitingForVideo (and later resumes) if video went away during stop", async () => {
+			machine.enable();
+			machine.storageInitialized();
+			machine.videoIsReady();
+
+			let resolveStop!: (v: { blob: Blob; duration: number }) => void;
+			callbacks.onStopRecording.mockReturnValueOnce(
+				new Promise((r) => {
+					resolveStop = r;
+				}),
+			);
+
+			const stopPromise = machine.stopCurrentBlock();
+			machine.videoNotReady();
+			resolveStop({
+				blob: new Blob(["x"], { type: "video/webm" }),
+				duration: 1000,
+			});
+			await stopPromise;
+
+			expect(machine.getState()).toEqual({ type: "waitingForVideo" });
+
+			machine.videoIsReady();
+			expect(machine.getState().type).toBe("recording");
 		});
 	});
 
@@ -282,11 +339,13 @@ describe("SessionRecorderMachine", () => {
 	});
 
 	describe("state transitions sequence", () => {
-		it("full lifecycle: enable -> init -> video -> record -> stop -> idle", async () => {
+		it("full lifecycle: enable -> init -> video -> record -> stop -> record -> disable -> idle", async () => {
 			const states: string[] = [];
-			callbacks.onStateChange.mockImplementation((state: SessionRecorderState) => {
-				states.push(state.type);
-			});
+			callbacks.onStateChange.mockImplementation(
+				(state: SessionRecorderState) => {
+					states.push(state.type);
+				},
+			);
 
 			machine.enable();
 			machine.storageInitialized();
@@ -299,7 +358,11 @@ describe("SessionRecorderMachine", () => {
 				"waitingForVideo",
 				"recording",
 				"stopping",
-				"waitingForVideo",
+				// Contract change (H2 fix): the manual stop above completes with
+				// everything still enabled/ready, so it re-runs the transition
+				// ladder and restarts recording immediately instead of parking.
+				"recording",
+				"stopping",
 				"idle",
 			]);
 		});
