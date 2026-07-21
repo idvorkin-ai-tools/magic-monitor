@@ -8,7 +8,9 @@ export default defineConfig({
 	// tracked in the reliability sweep) can kill an arbitrary test under suite
 	// timing pressure; retried passes surface as "flaky", not silent green.
 	retries: process.env.CI ? 2 : 1,
-	workers: process.env.CI ? 1 : 2,
+	// Serial everywhere: several tests are timing-sensitive and flake under
+	// parallel load (a different set each run); CI was already serial.
+	workers: 1,
 	reporter: [
 		["list"],
 		["html", { outputFolder: "playwright-report", open: "never" }],
