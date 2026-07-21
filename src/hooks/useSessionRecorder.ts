@@ -82,11 +82,23 @@ export function useSessionRecorder({
 	// Video readiness polling
 	const videoReadyIntervalRef = useRef<number | null>(null);
 
+	// Create machine with callbacks that use refs (so they're always current)
+	const machineRef = useRef<SessionRecorderMachine | null>(null);
+
+	// Mid-block recorder death callback (M1)
+	const onRecorderFailure = useCallback(
+		(salvaged: { blob: Blob; duration: number } | null) => {
+			machineRef.current?.recorderFailed(salvaged);
+		},
+		[],
+	);
+
 	// Use focused hooks for individual concerns
 	const blockRecorder = useBlockRecorder({
 		videoRef,
 		mediaRecorderService,
 		timerService,
+		onRecorderFailure,
 	});
 	const { startRecording, stopRecording } = blockRecorder;
 
@@ -109,9 +121,6 @@ export function useSessionRecorder({
 	const startCaptureRef = useLatest(startCapture);
 	const stopCaptureRef = useLatest(stopCapture);
 	const saveBlockRef = useLatest(saveBlock);
-
-	// Create machine with callbacks that use refs (so they're always current)
-	const machineRef = useRef<SessionRecorderMachine | null>(null);
 
 	// Block rotation callback
 	const onBlockComplete = useCallback(async () => {

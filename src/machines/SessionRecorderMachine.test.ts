@@ -395,4 +395,52 @@ describe("SessionRecorderMachine", () => {
 			expect(machine.getConsecutiveSaveFailures()).toBe(0); // reset on success
 		});
 	});
+
+	describe("recorderFailed (M1)", () => {
+		function startRecordingMachine() {
+			machine.enable();
+			machine.storageInitialized();
+			machine.videoIsReady();
+		}
+
+		it("salvages what it can and restarts recording", async () => {
+			startRecordingMachine();
+
+			await machine.recorderFailed({
+				blob: new Blob(["salvaged"], { type: "video/webm" }),
+				duration: 1200,
+			});
+
+			expect(callbacks.onStopBlockTimer).toHaveBeenCalled();
+			expect(callbacks.onStopThumbnails).toHaveBeenCalled();
+			expect(callbacks.onStopRecording).not.toHaveBeenCalled(); // recorder already dead
+			expect(callbacks.onSaveBlock).toHaveBeenCalledTimes(1);
+			expect(machine.getState().type).toBe("recording"); // restarted
+		});
+
+		it("restarts without saving when nothing was salvaged", async () => {
+			startRecordingMachine();
+			await machine.recorderFailed(null);
+			expect(callbacks.onSaveBlock).not.toHaveBeenCalled();
+			expect(machine.getState().type).toBe("recording");
+		});
+
+		it("parks after 3 consecutive failures instead of hot-looping", async () => {
+			startRecordingMachine();
+			await machine.recorderFailed(null);
+			await machine.recorderFailed(null);
+			await machine.recorderFailed(null);
+			expect(machine.getState()).toEqual({ type: "idle" });
+
+			// User-driven resume retries fresh
+			machine.disable();
+			machine.enable();
+			expect(machine.getState().type).toBe("recording");
+		});
+
+		it("ignores failure reports when not recording", async () => {
+			await machine.recorderFailed(null);
+			expect(callbacks.onStopBlockTimer).not.toHaveBeenCalled();
+		});
+	});
 });

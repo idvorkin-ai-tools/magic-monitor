@@ -9,7 +9,7 @@ class MockMediaRecorder {
 	state: RecordingState;
 	ondataavailable: ((e: { data: Blob }) => void) | null;
 	onstop: (() => void) | null;
-	onerror: (() => void) | null;
+	onerror: ((e?: Event) => void) | null;
 	stream: MediaStream;
 	options: MediaRecorderOptions;
 
@@ -20,6 +20,7 @@ class MockMediaRecorder {
 		this.ondataavailable = null;
 		this.onstop = null;
 		this.onerror = null;
+		registerRecorderInstance(this);
 	}
 
 	start() {
@@ -45,6 +46,14 @@ class MockMediaRecorder {
 	static isTypeSupported(mimeType: string): boolean {
 		return mimeType.includes("webm");
 	}
+}
+
+// Tracks the most recently constructed mock recorder so tests can fire its
+// event handlers directly (simulating mid-block death from outside the
+// service's closure).
+let recorderInstance: MockMediaRecorder | null = null;
+function registerRecorderInstance(instance: MockMediaRecorder): void {
+	recorderInstance = instance;
 }
 
 // Mock URL.createObjectURL and revokeObjectURL
@@ -111,6 +120,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	mockBlobUrls.clear();
 	blobUrlCounter = 0;
+	recorderInstance = null;
 });
 
 describe("MediaRecorderService", () => {
@@ -419,6 +429,39 @@ describe("MediaRecorderService", () => {
 			// Restore original mock
 			// @ts-expect-error - Restore MediaRecorder
 			globalThis.MediaRecorder = originalMockMediaRecorder;
+		});
+
+		it("fires onFailure with best-effort salvage when the recorder errors mid-block", () => {
+			const mockStream = new MediaStream();
+			const onFailure = vi.fn();
+			const session = MediaRecorderService.startRecording(mockStream, {
+				onFailure,
+			});
+			session.start();
+
+			// Simulate mid-block death: fire the recorder's error handler directly
+			recorderInstance?.onerror?.(new Event("error"));
+
+			expect(onFailure).toHaveBeenCalledTimes(1);
+			expect(onFailure).toHaveBeenCalledWith(null); // no chunks yet -> nothing to salvage
+		});
+
+		it("does NOT fire onFailure for a requested stop", async () => {
+			const mockStream = new MediaStream();
+			const onFailure = vi.fn();
+			const session = MediaRecorderService.startRecording(mockStream, {
+				onFailure,
+			});
+			session.start();
+			if (recorderInstance) {
+				recorderInstance.state = "recording";
+			}
+
+			const stopPromise = session.stop();
+			recorderInstance?.onstop?.(); // the stop() promise's own handler resolves it
+			await stopPromise;
+
+			expect(onFailure).not.toHaveBeenCalled();
 		});
 	});
 

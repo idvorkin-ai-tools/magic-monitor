@@ -52,6 +52,7 @@ export class SessionRecorderMachine {
 	private videoReady = false;
 	private storageReady = false;
 	private consecutiveSaveFailures = 0;
+	private consecutiveRecorderFailures = 0;
 	private callbacks: SessionRecorderCallbacks;
 
 	constructor(callbacks: SessionRecorderCallbacks) {
@@ -81,6 +82,7 @@ export class SessionRecorderMachine {
 		if (this.enabled) return;
 		this.enabled = true;
 		this.consecutiveSaveFailures = 0;
+		this.consecutiveRecorderFailures = 0;
 		this.tryTransition();
 	}
 
@@ -151,6 +153,43 @@ export class SessionRecorderMachine {
 	}
 
 	/**
+	 * Called when the recorder died mid-block (the adapter already cleaned up
+	 * its refs/stream). Salvages what was captured, then restarts - unless
+	 * failures are repeating, in which case park visibly rather than hot-loop.
+	 */
+	async recorderFailed(
+		salvaged: { blob: Blob; duration: number } | null,
+	): Promise<void> {
+		if (this.state.type !== "recording") return;
+
+		const blockStart = this.state.blockStart;
+		this.setState({ type: "stopping" });
+
+		this.callbacks.onStopBlockTimer();
+		const thumbnails = this.callbacks.onStopThumbnails();
+		// No onStopRecording: the recorder is already dead.
+
+		if (salvaged && salvaged.blob.size > 0) {
+			const saved = await this.callbacks.onSaveBlock(
+				salvaged.blob,
+				salvaged.duration,
+				thumbnails,
+				blockStart,
+			);
+			this.consecutiveSaveFailures =
+				saved === null ? this.consecutiveSaveFailures + 1 : 0;
+		}
+
+		this.consecutiveRecorderFailures += 1;
+		if (this.consecutiveRecorderFailures >= 3) {
+			this.setState({ type: "idle" });
+			return;
+		}
+
+		this.tryTransition({ fromStop: true });
+	}
+
+	/**
 	 * Manually stop the current recording block.
 	 * Returns the saved session or null if not recording or save failed.
 	 */
@@ -176,6 +215,10 @@ export class SessionRecorderMachine {
 			);
 			this.consecutiveSaveFailures =
 				savedSession === null ? this.consecutiveSaveFailures + 1 : 0;
+		}
+
+		if (savedSession !== null) {
+			this.consecutiveRecorderFailures = 0;
 		}
 
 		// Never park: re-run the transition ladder now that the stop is done (H2).

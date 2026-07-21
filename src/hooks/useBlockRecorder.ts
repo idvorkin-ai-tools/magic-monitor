@@ -10,12 +10,17 @@ import {
 } from "../services/MediaRecorderService";
 import { TimerService, type TimerServiceType } from "../services/TimerService";
 import { SESSION_CONFIG } from "../types/sessions";
+import { useLatest } from "./useLatest";
 
 export interface BlockRecorderConfig {
 	videoRef: React.RefObject<HTMLVideoElement | null>;
 	mediaRecorderService?: MediaRecorderServiceType;
 	timerService?: TimerServiceType;
 	deviceService?: DeviceServiceType;
+	/** Fires when the active recorder dies mid-block (after local cleanup). */
+	onRecorderFailure?: (
+		salvaged: { blob: Blob; duration: number } | null,
+	) => void;
 }
 
 export interface StopRecordingOptions {
@@ -50,6 +55,7 @@ export function useBlockRecorder({
 	mediaRecorderService = MediaRecorderService,
 	timerService = TimerService,
 	deviceService = DeviceService,
+	onRecorderFailure,
 }: BlockRecorderConfig): BlockRecorderControls {
 	const [isRecording, setIsRecording] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -59,6 +65,7 @@ export function useBlockRecorder({
 	// Generation token: each start owns a generation; a stale stop resolving
 	// after a newer start must not touch the newer block's refs (H3).
 	const generationRef = useRef(0);
+	const onRecorderFailureRef = useLatest(onRecorderFailure);
 
 	// Helper to clean up cloned stream
 	const cleanupClonedStream = useCallback(() => {
@@ -70,9 +77,6 @@ export function useBlockRecorder({
 	}, []);
 
 	const startRecording = useCallback(() => {
-		// Bump the generation so any in-flight stop from a previous block
-		// becomes stale (Task 5's onFailure handler will capture this value).
-		generationRef.current++;
 		// A previous block's clone is ours to release before cloning anew —
 		// the stale stop no longer cleans up across generations.
 		cleanupClonedStream();
@@ -108,8 +112,27 @@ export function useBlockRecorder({
 		}
 
 		try {
+			// Captured here (not read from the ref) so the onFailure closure
+			// below can compare against the generation this block was started
+			// under — reading generationRef.current at failure time would
+			// compare it to itself and never detect staleness. Assigned just
+			// before recordingSessionRef.current below: if this call, or
+			// session.start() next, bails out first, generation stays -1
+			// (never a real generation) so a stale in-flight stop from a
+			// previous block still cleans up correctly, and this closure
+			// safely no-ops if it somehow fired for a session that never
+			// fully established.
+			let generation = -1;
 			const session = mediaRecorderService.startRecording(stream, {
 				videoBitsPerSecond: getVideoBitrate(deviceService),
+				onFailure: (salvaged) => {
+					if (generationRef.current !== generation) return; // a dead PAST block is old news
+					recordingSessionRef.current = null;
+					cleanupClonedStream();
+					setIsRecording(false);
+					setError("Recording failed mid-block");
+					onRecorderFailureRef.current?.(salvaged);
+				},
 			});
 
 			blockStartTimeRef.current = timerService.now();
@@ -142,6 +165,10 @@ export function useBlockRecorder({
 				return;
 			}
 
+			// This block is now live: advance the generation so a stale stop
+			// from a previous block can no longer touch these refs (H3), and
+			// so this block's own onFailure closure above recognizes itself.
+			generation = ++generationRef.current;
 			recordingSessionRef.current = session;
 			setIsRecording(true);
 		} catch (err) {
@@ -149,7 +176,14 @@ export function useBlockRecorder({
 			setError("Recording failed - check camera connection");
 			setIsRecording(false);
 		}
-	}, [videoRef, mediaRecorderService, timerService, deviceService, cleanupClonedStream]);
+	}, [
+		videoRef,
+		mediaRecorderService,
+		timerService,
+		deviceService,
+		cleanupClonedStream,
+		onRecorderFailureRef,
+	]);
 
 	const stopRecording = useCallback(
 		async (options?: StopRecordingOptions): Promise<{ blob: Blob; duration: number } | null> => {
