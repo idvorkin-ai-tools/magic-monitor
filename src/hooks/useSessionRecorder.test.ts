@@ -289,6 +289,45 @@ describe("useSessionRecorder", () => {
 		});
 	});
 
+	describe("camera switch (H4)", () => {
+		it("stops and saves the current block when the video stream changes (H4)", async () => {
+			const videoRef = createMockVideoRef(true);
+
+			const { result } = renderHook(() =>
+				useSessionRecorder({
+					videoRef,
+					enabled: true,
+					sessionStorageService: mockStorage,
+					mediaRecorderService: mockRecorder,
+					videoFixService: mockVideoFix,
+					timerService: mockTimer,
+				}),
+			);
+
+			await waitFor(() => expect(result.current.isRecording).toBe(true));
+
+			// Camera switch: the video element now points at a different stream.
+			videoRef.current.srcObject = createMockStream();
+
+			act(() => {
+				mockTimer._triggerAllIntervals();
+			});
+
+			// The old block must be stopped and saved - the machine learns the
+			// video went away and releases the old clone's tracks.
+			await waitFor(() =>
+				expect(mockStorage.saveSessionWithBlob).toHaveBeenCalledTimes(1),
+			);
+
+			act(() => {
+				mockTimer._triggerAllIntervals();
+			});
+
+			// The next poll tick sees the new stream is ready and resumes.
+			await waitFor(() => expect(result.current.isRecording).toBe(true));
+		});
+	});
+
 	describe("refreshSessions", () => {
 		it("exposes refreshSessions function", () => {
 			const videoRef = createMockVideoRef(false);

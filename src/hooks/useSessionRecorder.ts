@@ -79,9 +79,6 @@ export function useSessionRecorder({
 	const durationTimerRef = useRef<number | null>(null);
 	const blockStartTimeRef = useRef<number>(0);
 
-	// Video readiness polling
-	const videoReadyIntervalRef = useRef<number | null>(null);
-
 	// Create machine with callbacks that use refs (so they're always current)
 	const machineRef = useRef<SessionRecorderMachine | null>(null);
 
@@ -207,38 +204,39 @@ export function useSessionRecorder({
 		}
 	}, [initFailed, isInitialized]);
 
-	// Video readiness detection effect
+	// Video readiness + stream-change detection (bidirectional, H4).
+	// The interval runs for the hook's lifetime: readiness can be lost (device
+	// unplugged) and srcObject can be swapped (camera/resolution switch).
+	const lastSrcObjectRef = useRef<MediaStream | null>(null);
 	useEffect(() => {
-		const checkVideoReady = () => {
+		const check = () => {
 			const video = videoRef.current;
-			const isReady = video && video.readyState >= 3;
+			const isReady = !!video && video.readyState >= 3;
+			const srcObject = (video?.srcObject as MediaStream | null) ?? null;
 
+			const streamChanged =
+				lastSrcObjectRef.current !== null &&
+				srcObject !== lastSrcObjectRef.current;
+			lastSrcObjectRef.current = srcObject;
+
+			if (streamChanged) {
+				// Stop + save the in-flight block; the old clone's tracks are
+				// released. The next tick reports the new stream's readiness and
+				// the machine resumes on its own.
+				machineRef.current?.videoNotReady();
+				return;
+			}
 			if (isReady) {
 				machineRef.current?.videoIsReady();
-				// Stop polling once video is ready to prevent memory leak
-				if (videoReadyIntervalRef.current) {
-					timerService.clearInterval(videoReadyIntervalRef.current);
-					videoReadyIntervalRef.current = null;
-				}
+			} else {
+				machineRef.current?.videoNotReady();
 			}
 		};
 
-		// Check immediately
-		checkVideoReady();
-
-		// Poll for readiness changes (only if not already ready)
-		if (!videoReadyIntervalRef.current) {
-			videoReadyIntervalRef.current = timerService.setInterval(
-				checkVideoReady,
-				100,
-			);
-		}
-
+		check();
+		const intervalId = timerService.setInterval(check, 250);
 		return () => {
-			if (videoReadyIntervalRef.current) {
-				timerService.clearInterval(videoReadyIntervalRef.current);
-				videoReadyIntervalRef.current = null;
-			}
+			timerService.clearInterval(intervalId);
 		};
 	}, [videoRef, timerService]);
 
