@@ -263,6 +263,20 @@ describe("SessionRecorderMachine", () => {
 			machine.videoIsReady();
 			expect(machine.getState().type).toBe("recording");
 		});
+
+		it("stop with disable:true does not restart and lands idle atomically", async () => {
+			machine.enable();
+			machine.storageInitialized();
+			machine.videoIsReady();
+
+			await machine.stopCurrentBlock({ disable: true });
+
+			expect(machine.getState()).toEqual({ type: "idle" });
+			expect(callbacks.onStartRecording).toHaveBeenCalledTimes(1); // no restart
+
+			machine.enable(); // returning to live resumes
+			expect(machine.getState().type).toBe("recording");
+		});
 	});
 
 	describe("blockTimerFired", () => {

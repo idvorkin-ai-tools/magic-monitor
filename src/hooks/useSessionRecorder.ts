@@ -52,7 +52,9 @@ export interface SessionRecorderControls {
 	savedSessions: PracticeSession[];
 
 	// Controls
-	stopCurrentBlock: () => Promise<PracticeSession | null>;
+	stopCurrentBlock: (options?: {
+		disable?: boolean;
+	}) => Promise<PracticeSession | null>;
 	refreshSessions: () => Promise<void>;
 }
 
@@ -270,11 +272,15 @@ export function useSessionRecorder({
 	}, []);
 
 	// Stop current block manually - returns the saved session directly from the machine
-	const stopCurrentBlock =
-		useCallback(async (): Promise<PracticeSession | null> => {
-			const session = await machineRef.current?.stopCurrentBlock();
+	const stopCurrentBlock = useCallback(
+		async (options?: {
+			disable?: boolean;
+		}): Promise<PracticeSession | null> => {
+			const session = await machineRef.current?.stopCurrentBlock(options);
 			return session ?? null;
-		}, []);
+		},
+		[],
+	);
 
 	// Combine errors from all hooks
 	const combinedError = blockRecorder.error || sessionList.error || null;

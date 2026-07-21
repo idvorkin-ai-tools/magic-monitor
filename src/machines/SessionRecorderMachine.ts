@@ -224,8 +224,14 @@ export class SessionRecorderMachine {
 	/**
 	 * Manually stop the current recording block.
 	 * Returns the saved session or null if not recording or save failed.
+	 *
+	 * disable: atomically stop AND disable - for callers about to leave live
+	 * mode, so the completing transition cannot restart recording before the
+	 * caller's disable() arrives.
 	 */
-	async stopCurrentBlock(): Promise<PracticeSession | null> {
+	async stopCurrentBlock(
+		options: { disable?: boolean } = {},
+	): Promise<PracticeSession | null> {
 		if (this.state.type !== "recording") return null;
 
 		const blockStart = this.state.blockStart;
@@ -251,6 +257,12 @@ export class SessionRecorderMachine {
 
 		if (savedSession !== null) {
 			this.consecutiveRecorderFailures = 0;
+		}
+
+		if (options.disable) {
+			// Disable atomically before the completing transition so it lands
+			// idle with no window for a restart.
+			this.enabled = false;
 		}
 
 		// Never park: re-run the transition ladder now that the stop is done (H2).

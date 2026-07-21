@@ -235,7 +235,7 @@ export function CameraStage() {
 	const handleOpenPicker = useCallback(async () => {
 		// Stop any active recording so it appears in the session list
 		if (isRecording) {
-			await stopCurrentBlock();
+			await stopCurrentBlock({ disable: true });
 		}
 		setAppState("picker");
 	}, [isRecording, stopCurrentBlock]);
@@ -277,7 +277,7 @@ export function CameraStage() {
 
 	const handleStopAndViewRecording = useCallback(async () => {
 		// Stop current recording and immediately view it
-		const session = await stopCurrentBlock();
+		const session = await stopCurrentBlock({ disable: true });
 		if (session) {
 			await loadSession(session.id);
 			setAppState("replay");
