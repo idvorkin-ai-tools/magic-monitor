@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import {
-	CardDetectorService,
-	type LoadingState,
-} from "../services/CardDetectorService";
+import { CardDetectorService } from "../services/CardDetectorService";
 import type { CardDetection } from "../types/cards";
+import { useModelLoadingState } from "./useModelLoadingState";
 
 interface CardDetectionConfig {
 	videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -16,12 +14,8 @@ export function useCardDetection({
 	enabled,
 	confidenceThreshold = 0.5,
 }: CardDetectionConfig) {
-	const [isModelLoading, setIsModelLoading] = useState(false);
-	const [loadingProgress, setLoadingProgress] = useState(0);
-	const [loadingPhase, setLoadingPhase] = useState<
-		"downloading" | "initializing"
-	>("downloading");
-	const [modelError, setModelError] = useState<string | null>(null);
+	const { isModelLoading, loadingProgress, loadingPhase, modelError } =
+		useModelLoadingState(CardDetectorService, { enabled });
 
 	// Frame-level detection errors (rejected detect() calls once the model is
 	// loaded and running) — a different failure class from modelError above,
@@ -41,32 +35,6 @@ export function useCardDetection({
 
 	// Throttle React state updates to ~10Hz (every 3 frames at 30fps)
 	const UI_UPDATE_INTERVAL = 3;
-
-	// Subscribe to service loading state
-	useEffect(() => {
-		const handleStateChange = (state: LoadingState) => {
-			setIsModelLoading(
-				state.phase === "downloading" || state.phase === "initializing",
-			);
-			setLoadingProgress(state.progress);
-			setLoadingPhase(
-				state.phase === "initializing" ? "initializing" : "downloading",
-			);
-			setModelError(
-				state.phase === "error"
-					? (state.error?.message ?? "Unknown error")
-					: null,
-			);
-		};
-
-		const unsubscribe = CardDetectorService.subscribe(handleStateChange);
-
-		if (enabled) {
-			CardDetectorService.load();
-		}
-
-		return unsubscribe;
-	}, [enabled]);
 
 	// Detection loop
 	// biome-ignore lint/correctness/useExhaustiveDependencies: isModelLoading triggers re-run when model loads
