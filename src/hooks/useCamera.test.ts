@@ -4,21 +4,27 @@ import * as CameraService from "../services/CameraService";
 import { DeviceService } from "../services/DeviceService";
 import { useCamera } from "./useCamera";
 
-// Mock CameraService
-vi.mock("../services/CameraService", () => ({
-	getVideoDevices: vi.fn(),
-	start: vi.fn(),
-	stop: vi.fn(),
-	addDeviceChangeListener: vi.fn(),
-	InsecureContextError: class InsecureContextError extends Error {
-		constructor() {
-			super(
-				"Camera requires HTTPS. Access this page via localhost or a secure connection.",
-			);
-			this.name = "InsecureContextError";
-		}
-	},
-}));
+// Mock CameraService (resolveCameraSelection is real - it's a pure policy
+// function and the effect under test depends on its actual behavior)
+vi.mock("../services/CameraService", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("../services/CameraService")>();
+	return {
+		getVideoDevices: vi.fn(),
+		start: vi.fn(),
+		stop: vi.fn(),
+		addDeviceChangeListener: vi.fn(),
+		resolveCameraSelection: actual.resolveCameraSelection,
+		InsecureContextError: class InsecureContextError extends Error {
+			constructor() {
+				super(
+					"Camera requires HTTPS. Access this page via localhost or a secure connection.",
+				);
+				this.name = "InsecureContextError";
+			}
+		},
+	};
+});
 
 // Mock DeviceService
 vi.mock("../services/DeviceService", () => ({
@@ -44,10 +50,7 @@ function createMockStream(deviceId = "device-1"): MediaStream {
 }
 
 // Helper to create mock device
-function createMockDevice(
-	id: string,
-	label: string,
-): MediaDeviceInfo {
+function createMockDevice(id: string, label: string): MediaDeviceInfo {
 	return {
 		deviceId: id,
 		kind: "videoinput",
@@ -97,7 +100,11 @@ describe("useCamera", () => {
 			renderHook(() => useCamera("initial-device"));
 
 			await waitFor(() => {
-				expect(CameraService.start).toHaveBeenCalledWith("initial-device", "4k", "landscape");
+				expect(CameraService.start).toHaveBeenCalledWith(
+					"initial-device",
+					"4k",
+					"landscape",
+				);
 			});
 		});
 
@@ -107,7 +114,11 @@ describe("useCamera", () => {
 			renderHook(() => useCamera());
 
 			await waitFor(() => {
-				expect(CameraService.start).toHaveBeenCalledWith("stored-device", "4k", "landscape");
+				expect(CameraService.start).toHaveBeenCalledWith(
+					"stored-device",
+					"4k",
+					"landscape",
+				);
 			});
 		});
 
@@ -117,7 +128,11 @@ describe("useCamera", () => {
 			renderHook(() => useCamera("initial-device"));
 
 			await waitFor(() => {
-				expect(CameraService.start).toHaveBeenCalledWith("initial-device", "4k", "landscape");
+				expect(CameraService.start).toHaveBeenCalledWith(
+					"initial-device",
+					"4k",
+					"landscape",
+				);
 			});
 		});
 	});
@@ -137,18 +152,64 @@ describe("useCamera", () => {
 			});
 		});
 
-		it("selects first device if none selected", async () => {
-			const devices = [
+		it("shows the first device for display but never persists an unchosen selection", async () => {
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue([
 				createMockDevice("device-1", "Camera 1"),
 				createMockDevice("device-2", "Camera 2"),
-			];
-			vi.mocked(CameraService.getVideoDevices).mockResolvedValue(devices);
+			]);
+			// Stream track reports NO deviceId (e.g. canvas/virtual source)
+			const anonymousTrack = {
+				kind: "video",
+				stop: vi.fn(),
+				getSettings: () => ({}),
+			};
+			vi.mocked(CameraService.start).mockResolvedValue({
+				getTracks: () => [anonymousTrack],
+				getVideoTracks: () => [anonymousTrack],
+				getAudioTracks: () => [],
+				active: true,
+			} as unknown as MediaStream);
 
 			const { result } = renderHook(() => useCamera());
 
 			await waitFor(() => {
 				expect(result.current.selectedDeviceId).toBe("device-1");
 			});
+			// Display-only fallback: nothing persisted (H1's poison was the persist)
+			expect(DeviceService.setStorageItem).not.toHaveBeenCalledWith(
+				"magic-monitor-camera-device-id",
+				expect.anything(),
+			);
+		});
+
+		it("a slow device enumeration cannot override the browser-chosen device (H1)", async () => {
+			// Enumeration is slow; the stream (OS-chosen device-os) resolves first
+			let resolveDevices!: (d: MediaDeviceInfo[]) => void;
+			vi.mocked(CameraService.getVideoDevices).mockReturnValue(
+				new Promise((r) => {
+					resolveDevices = r;
+				}),
+			);
+			vi.mocked(CameraService.start).mockResolvedValue(
+				createMockStream("device-os"),
+			);
+
+			const { result } = renderHook(() => useCamera());
+
+			// Let enumeration resolve LATE, listing a different device first
+			resolveDevices([
+				createMockDevice("device-virtual", "OBS Virtual"),
+				createMockDevice("device-os", "Built-in"),
+			]);
+
+			await waitFor(() => {
+				expect(result.current.selectedDeviceId).toBe("device-os");
+			});
+			// The stale enumeration must not have pinned the virtual camera
+			expect(DeviceService.setStorageItem).not.toHaveBeenCalledWith(
+				"magic-monitor-camera-device-id",
+				"device-virtual",
+			);
 		});
 
 		it("registers device change listener", async () => {
@@ -161,7 +222,9 @@ describe("useCamera", () => {
 
 		it("refreshes devices when device change event fires", async () => {
 			const initialDevices = [createMockDevice("device-1", "Camera 1")];
-			vi.mocked(CameraService.getVideoDevices).mockResolvedValue(initialDevices);
+			vi.mocked(CameraService.getVideoDevices).mockResolvedValue(
+				initialDevices,
+			);
 
 			const { result } = renderHook(() => useCamera("device-1"));
 

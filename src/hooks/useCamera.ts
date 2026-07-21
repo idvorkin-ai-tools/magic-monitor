@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as CameraService from "../services/CameraService";
-import { InsecureContextError, type Orientation, type Resolution } from "../services/CameraService";
+import {
+	InsecureContextError,
+	type Orientation,
+	type Resolution,
+	resolveCameraSelection,
+} from "../services/CameraService";
 import * as CameraSettingsService from "../services/CameraSettingsService";
 import { DeviceService } from "../services/DeviceService";
 
@@ -9,19 +14,35 @@ const DEVICE_ID_STORAGE_KEY = "magic-monitor-camera-device-id";
 export function useCamera(initialDeviceId?: string) {
 	const [stream, setStream] = useState<MediaStream | null>(null);
 	const streamRef = useRef<MediaStream | null>(null);
+	// What the live stream was opened for — lets an adoption-driven state
+	// update skip a needless (visible) stream restart.
+	const activeConfigRef = useRef<{
+		deviceId: string;
+		resolution: Resolution;
+		orientation: Orientation;
+		retryCount: number;
+	} | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>(
-		initialDeviceId || DeviceService.getStorageItem(DEVICE_ID_STORAGE_KEY) || "",
+		initialDeviceId ||
+			DeviceService.getStorageItem(DEVICE_ID_STORAGE_KEY) ||
+			"",
 	);
 
 	// Load settings for currently selected device
 	const [resolution, setResolution] = useState<Resolution>(() => {
-		const deviceId = initialDeviceId || DeviceService.getStorageItem(DEVICE_ID_STORAGE_KEY) || "";
+		const deviceId =
+			initialDeviceId ||
+			DeviceService.getStorageItem(DEVICE_ID_STORAGE_KEY) ||
+			"";
 		return CameraSettingsService.getSettingsForDevice(deviceId).resolution;
 	});
 	const [orientation, setOrientation] = useState<Orientation>(() => {
-		const deviceId = initialDeviceId || DeviceService.getStorageItem(DEVICE_ID_STORAGE_KEY) || "";
+		const deviceId =
+			initialDeviceId ||
+			DeviceService.getStorageItem(DEVICE_ID_STORAGE_KEY) ||
+			"";
 		return CameraSettingsService.getSettingsForDevice(deviceId).orientation;
 	});
 
@@ -30,19 +51,7 @@ export function useCamera(initialDeviceId?: string) {
 	const getDevices = useCallback(async () => {
 		const videoDevices = await CameraService.getVideoDevices();
 		setDevices(videoDevices);
-
-		// If we have devices but none selected, pick the first one and load its settings
-		if (videoDevices.length > 0 && !selectedDeviceId) {
-			const deviceId = videoDevices[0].deviceId;
-			setSelectedDeviceId(deviceId);
-			DeviceService.setStorageItem(DEVICE_ID_STORAGE_KEY, deviceId);
-
-			// Load settings for the auto-selected device
-			const settings = CameraSettingsService.getSettingsForDevice(deviceId);
-			setResolution(settings.resolution);
-			setOrientation(settings.orientation);
-		}
-	}, [selectedDeviceId]);
+	}, []);
 
 	// Handle device changes - syncs with external device enumeration
 	useEffect(() => {
@@ -62,14 +71,40 @@ export function useCamera(initialDeviceId?: string) {
 		let isActive = true;
 
 		async function setupCamera() {
+			// Skip if the live stream already satisfies this exact request
+			// (happens when adoption below writes selectedDeviceId for the
+			// stream we just opened).
+			const active = activeConfigRef.current;
+			if (
+				active &&
+				streamRef.current &&
+				active.deviceId === selectedDeviceId &&
+				active.resolution === resolution &&
+				active.orientation === orientation &&
+				active.retryCount === retryCount
+			) {
+				return;
+			}
+
 			try {
-				// Stop previous stream if any (use ref to avoid dependency)
 				if (streamRef.current) {
 					CameraService.stop(streamRef.current);
+					streamRef.current = null;
 				}
 
+				// Sequenced: enumerate -> resolve -> open. No fire-and-forget
+				// racing the selection (H1).
+				const preDevices = await CameraService.getVideoDevices();
+				if (!isActive) return;
+				setDevices(preDevices);
+
+				const resolved = resolveCameraSelection({
+					persistedId: selectedDeviceId,
+					devices: preDevices,
+				});
+
 				const newStream = await CameraService.start(
-					selectedDeviceId || undefined,
+					resolved.deviceId ?? undefined,
 					resolution,
 					orientation,
 				);
@@ -84,17 +119,35 @@ export function useCamera(initialDeviceId?: string) {
 				setError(null);
 
 				// Refresh device list to get labels after permission grant
-				getDevices();
+				const postDevices = await CameraService.getVideoDevices();
+				if (isActive) {
+					setDevices(postDevices);
+				}
 
-				// Update selected device ID if not set
-				if (!selectedDeviceId) {
-					const videoTrack = newStream.getVideoTracks()[0];
-					if (videoTrack) {
-						const settings = videoTrack.getSettings();
-						if (settings.deviceId) {
-							setSelectedDeviceId(settings.deviceId);
-							DeviceService.setStorageItem(DEVICE_ID_STORAGE_KEY, settings.deviceId);
-						}
+				// Adopt the device the stream actually serves. If the track is
+				// anonymous (no deviceId — virtual/canvas sources), fall back to
+				// the first enumerated device for DISPLAY ONLY: persisting an
+				// unchosen device was H1's root cause.
+				const track = newStream.getVideoTracks()[0];
+				const trackDeviceId = track?.getSettings().deviceId ?? null;
+				const displayId =
+					selectedDeviceId ||
+					trackDeviceId ||
+					postDevices.find((d) => d.deviceId)?.deviceId ||
+					"";
+
+				activeConfigRef.current = {
+					deviceId: displayId,
+					resolution,
+					orientation,
+					retryCount,
+				};
+
+				if (!selectedDeviceId && displayId && isActive) {
+					setSelectedDeviceId(displayId);
+					if (trackDeviceId) {
+						// Only a device the browser actually opened gets persisted
+						DeviceService.setStorageItem(DEVICE_ID_STORAGE_KEY, trackDeviceId);
 					}
 				}
 			} catch (err) {
@@ -114,12 +167,13 @@ export function useCamera(initialDeviceId?: string) {
 
 		return () => {
 			isActive = false;
+			activeConfigRef.current = null;
 			if (streamRef.current) {
 				CameraService.stop(streamRef.current);
 				streamRef.current = null;
 			}
 		};
-	}, [selectedDeviceId, resolution, orientation, getDevices, retryCount]); // Re-run when device/resolution/orientation changes
+	}, [selectedDeviceId, resolution, orientation, retryCount]); // Re-run when device/resolution/orientation changes
 
 	// Wrap setter to persist selection and load device-specific settings
 	const handleSetSelectedDeviceId = useCallback((deviceId: string) => {
@@ -136,7 +190,11 @@ export function useCamera(initialDeviceId?: string) {
 	const handleSetResolution = useCallback(
 		(res: Resolution) => {
 			setResolution(res);
-			CameraSettingsService.updateSettingForDevice(selectedDeviceId, "resolution", res);
+			CameraSettingsService.updateSettingForDevice(
+				selectedDeviceId,
+				"resolution",
+				res,
+			);
 		},
 		[selectedDeviceId],
 	);
@@ -145,7 +203,11 @@ export function useCamera(initialDeviceId?: string) {
 	const handleSetOrientation = useCallback(
 		(orient: Orientation) => {
 			setOrientation(orient);
-			CameraSettingsService.updateSettingForDevice(selectedDeviceId, "orientation", orient);
+			CameraSettingsService.updateSettingForDevice(
+				selectedDeviceId,
+				"orientation",
+				orient,
+			);
 		},
 		[selectedDeviceId],
 	);
