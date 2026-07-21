@@ -123,6 +123,11 @@ export function useCamera(initialDeviceId?: string) {
 						orientation,
 					);
 				} catch (err) {
+					// A cancelled run must not run recovery side effects: clearing
+					// storage here would clobber the choice the user just made
+					// (their setSelectedDeviceId is what cancelled this run), and
+					// opening a fallback camera would light a device for a dead run.
+					if (!isActive) return;
 					const isOverconstrained =
 						err instanceof Error && err.name === "OverconstrainedError";
 					if (!isOverconstrained || !resolved.deviceId) throw err;
@@ -135,10 +140,8 @@ export function useCamera(initialDeviceId?: string) {
 						resolution,
 						orientation,
 					);
-					if (!isActive) {
-						CameraService.stop(newStream);
-						return;
-					}
+					// Cancellation during the fallback await is handled by the
+					// isActive check just below the try/catch.
 				}
 
 				if (!isActive) {

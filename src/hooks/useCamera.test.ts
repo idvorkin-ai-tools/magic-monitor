@@ -416,6 +416,54 @@ describe("useCamera", () => {
 			});
 		});
 
+		it("a cancelled run's OverconstrainedError cannot clear the user's persisted choice", async () => {
+			// Run A opens the stale persisted id but its start() hangs (real
+			// window: Chrome shows the permission prompt before rejecting).
+			vi.mocked(DeviceService.getStorageItem).mockReturnValue("stale-id");
+			let rejectFirstStart!: (err: Error) => void;
+			vi.mocked(CameraService.start)
+				.mockImplementationOnce(
+					() =>
+						new Promise((_, reject) => {
+							rejectFirstStart = reject;
+						}),
+				)
+				.mockResolvedValue(createMockStream("cam-2"));
+
+			const { result } = renderHook(() => useCamera());
+			await waitFor(() => {
+				expect(CameraService.start).toHaveBeenCalledWith(
+					"stale-id",
+					"4k",
+					"landscape",
+				);
+			});
+
+			// User explicitly picks cam-2: persists it and cancels run A
+			act(() => {
+				result.current.setSelectedDeviceId("cam-2");
+			});
+			await waitFor(() => {
+				expect(result.current.stream).not.toBeNull();
+			});
+
+			// Run A's suspended start finally rejects
+			const overconstrained = new Error("device not found");
+			overconstrained.name = "OverconstrainedError";
+			await act(async () => {
+				rejectFirstStart(overconstrained);
+			});
+
+			// The dead run must not have clobbered the user's choice...
+			expect(DeviceService.setStorageItem).not.toHaveBeenCalledWith(
+				"magic-monitor-camera-device-id",
+				"",
+			);
+			// ...nor opened a fallback camera (no unconstrained start call)
+			const startCalls = vi.mocked(CameraService.start).mock.calls;
+			expect(startCalls.some((call) => call[0] === undefined)).toBe(false);
+		});
+
 		it("re-runs selection when the live track ends (unplug) instead of freezing (M3)", async () => {
 			let endedHandler: (() => void) | null = null;
 			const track = {
