@@ -473,5 +473,20 @@ describe("SessionRecorderMachine", () => {
 			await machine.recorderFailed(null);
 			expect(machine.getNotRecordingReason()).toBe("recorder-error");
 		});
+
+		it("keeps storage-error sticky when video becomes ready later", () => {
+			machine.enable();
+			machine.storageInitFailed();
+			machine.videoIsReady(); // walks state idle -> initializing
+			expect(machine.getNotRecordingReason()).toBe("storage-error");
+		});
+
+		it("keeps storage-error sticky across disable/enable (pause/resume)", async () => {
+			machine.enable();
+			machine.storageInitFailed();
+			await machine.disable();
+			machine.enable();
+			expect(machine.getNotRecordingReason()).toBe("storage-error");
+		});
 	});
 });

@@ -56,6 +56,10 @@ export class SessionRecorderMachine {
 	private enabled = false;
 	private videoReady = false;
 	private storageReady = false;
+	// Sticky: set by storageInitFailed(), cleared only by storageInitialized().
+	// NOT reset in enable() - unlike recorder failures, storage init happens
+	// exactly once (no retry path), so re-enabling can't fix it.
+	private storageFailed = false;
 	private consecutiveSaveFailures = 0;
 	private consecutiveRecorderFailures = 0;
 	private callbacks: SessionRecorderCallbacks;
@@ -87,12 +91,13 @@ export class SessionRecorderMachine {
 		if (this.state.type === "recording") return null;
 		if (!this.enabled) return null;
 		if (this.consecutiveRecorderFailures >= 3) return "recorder-error";
-		// `state.type === "idle"` (not merely `!storageReady`) is what actually
-		// distinguishes a genuine storageInitFailed() park from the ordinary
-		// "initializing"/"waitingForVideo" states enable() passes through on
-		// the way up - both leave storageReady false, but only the former
-		// means storage is broken rather than just not-yet-ready.
-		if (this.state.type === "idle" || this.consecutiveSaveFailures >= 2) {
+		// `storageFailed` (not merely `!storageReady`) distinguishes a genuine
+		// storageInitFailed() from the not-yet-initialized window after
+		// enable() - both leave storageReady false, but only the former means
+		// storage is broken rather than just not-yet-ready. It is sticky so
+		// later transitions (videoIsReady, disable/enable) can't launder a
+		// broken storage state into "starting".
+		if (this.storageFailed || this.consecutiveSaveFailures >= 2) {
 			return "storage-error";
 		}
 		return "starting";
@@ -131,6 +136,7 @@ export class SessionRecorderMachine {
 	 * Called when storage initialization completes.
 	 */
 	storageInitialized(): void {
+		this.storageFailed = false;
 		if (this.storageReady) return;
 		this.storageReady = true;
 		this.tryTransition();
@@ -141,6 +147,7 @@ export class SessionRecorderMachine {
 	 */
 	storageInitFailed(): void {
 		this.storageReady = false;
+		this.storageFailed = true;
 		this.setState({ type: "idle" });
 	}
 
