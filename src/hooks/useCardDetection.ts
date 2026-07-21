@@ -79,7 +79,13 @@ export function useCardDetection({
 			if (!running) return;
 
 			const video = videoRef.current;
-			if (!video || video.paused || video.ended) {
+			if (
+				!video ||
+				video.paused ||
+				video.ended ||
+				video.readyState < 2 ||
+				video.videoWidth === 0
+			) {
 				requestRef.current = requestAnimationFrame(() => {
 					detect();
 				});

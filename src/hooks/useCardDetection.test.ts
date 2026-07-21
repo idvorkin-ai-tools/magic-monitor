@@ -38,6 +38,17 @@ describe("useCardDetection", () => {
 			value: false,
 			configurable: true,
 		});
+		// HAVE_ENOUGH_DATA + non-zero width - matches a real post-loadedmetadata
+		// camera stream. The pre-metadata guard test below builds its own mock
+		// video with a lower readyState / zero width instead of overriding these.
+		Object.defineProperty(videoElement, "readyState", {
+			value: 4,
+			configurable: true,
+		});
+		Object.defineProperty(videoElement, "videoWidth", {
+			value: 1920,
+			configurable: true,
+		});
 		Object.defineProperty(videoElement, "currentTime", {
 			value: 0,
 			writable: true,
@@ -146,5 +157,65 @@ describe("useCardDetection", () => {
 		// Queue length keeps growing each drive — the loop never dies.
 		expect(rafSpy.mock.calls.length).toBeGreaterThan(rafCallsAfterFrame1);
 		expect(result.current.detectError).toBe("still broken");
+	});
+
+	it("should skip detection for dimensionless pre-metadata frames", async () => {
+		// A video before `loadedmetadata` reports videoWidth 0 and readyState
+		// HAVE_METADATA(1) or lower. Calling detect() on a 0x0 frame crashes the
+		// ONNX/MediaPipe WASM in production; here we assert CardDetectorService
+		// .detect is never called until dimensions are real. Uses its own mock
+		// (mutable getters) instead of the shared `videoElement`, whose
+		// videoWidth/readyState are fixed via the beforeEach above.
+		mockDetect.mockResolvedValue([]);
+
+		let mockWidth = 0;
+		let mockReadyState = 1; // HAVE_METADATA, no frame data yet
+		const preMetadataVideo = document.createElement("video");
+		Object.defineProperty(preMetadataVideo, "videoWidth", { get: () => mockWidth });
+		Object.defineProperty(preMetadataVideo, "readyState", { get: () => mockReadyState });
+		Object.defineProperty(preMetadataVideo, "paused", { value: false });
+		Object.defineProperty(preMetadataVideo, "ended", { value: false });
+		Object.defineProperty(preMetadataVideo, "currentTime", {
+			value: 0,
+			writable: true,
+		});
+		const preMetadataRefObj = { current: preMetadataVideo };
+
+		renderHook(() =>
+			useCardDetection({ videoRef: preMetadataRefObj, enabled: true }),
+		);
+
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		const advancePreMetadataFrame = async (timeDelta = 16) => {
+			const cb = frameCallback;
+			if (!cb) return;
+			preMetadataVideo.currentTime += timeDelta / 1000;
+			await act(async () => {
+				cb(performance.now());
+				await Promise.resolve();
+				await Promise.resolve();
+				await Promise.resolve();
+			});
+		};
+
+		// Drive several frames - frameCountRef increments on each, so this
+		// covers both odd (always-skip) and even (would-detect) frame parities.
+		for (let i = 0; i < 6; i++) {
+			await advancePreMetadataFrame();
+		}
+
+		expect(mockDetect).not.toHaveBeenCalled();
+
+		// loadedmetadata fires: real dimensions and enough data to decode a frame.
+		mockWidth = 1920;
+		mockReadyState = 4;
+
+		await advancePreMetadataFrame();
+		await advancePreMetadataFrame();
+
+		expect(mockDetect).toHaveBeenCalled();
 	});
 });
