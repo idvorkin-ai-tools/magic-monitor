@@ -60,9 +60,6 @@ function createMockMediaRecorder() {
 		isIOSSafari: vi.fn().mockReturnValue(false),
 		getBestCodec: vi.fn().mockReturnValue("video/webm"),
 		startRecording: vi.fn().mockReturnValue(mockSession),
-		createPlaybackElement: vi.fn().mockReturnValue(document.createElement("video")),
-		loadBlob: vi.fn().mockReturnValue("blob:test"),
-		revokeObjectUrl: vi.fn(),
 	};
 }
 

@@ -187,40 +187,6 @@ export const MediaRecorderService = {
 			getState: () => recorder.state,
 		};
 	},
-
-	/**
-	 * Create a video element for playback.
-	 */
-	createPlaybackElement(): HTMLVideoElement {
-		const video = document.createElement("video");
-		video.muted = true;
-		video.playsInline = true;
-		return video;
-	},
-
-	/**
-	 * Load a blob into a video element and return the blob URL.
-	 * Automatically revokes previous blob URL if present.
-	 */
-	loadBlob(video: HTMLVideoElement, blob: Blob): string {
-		// Revoke previous blob URL if any
-		if (video.src?.startsWith("blob:")) {
-			URL.revokeObjectURL(video.src);
-		}
-		const blobUrl = URL.createObjectURL(blob);
-		video.src = blobUrl;
-		video.load();
-		return blobUrl;
-	},
-
-	/**
-	 * Revoke a blob URL to free memory.
-	 */
-	revokeObjectUrl(url: string): void {
-		if (url.startsWith("blob:")) {
-			URL.revokeObjectURL(url);
-		}
-	},
 };
 
 export type MediaRecorderServiceType = typeof MediaRecorderService;
