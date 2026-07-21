@@ -233,4 +233,55 @@ describe("useBlockRecorder", () => {
 			"Recording may have been lost - please try again",
 		);
 	});
+
+	it("a stale stop does not clobber a newer recording session", async () => {
+		let resolveStopA!: (v: { blob: Blob; duration: number }) => void;
+		const sessionA = {
+			start: vi.fn(),
+			getState: vi.fn().mockReturnValue("recording"),
+			stop: vi.fn().mockReturnValue(
+				new Promise<{ blob: Blob; duration: number }>((r) => {
+					resolveStopA = r;
+				}),
+			),
+		};
+		const sessionB = {
+			start: vi.fn(),
+			getState: vi.fn().mockReturnValue("recording"),
+			stop: vi.fn().mockResolvedValue({
+				blob: new Blob(["b"], { type: "video/webm" }),
+				duration: 1000,
+			}),
+		};
+		mockRecorder.startRecording
+			.mockReturnValueOnce(sessionA)
+			.mockReturnValueOnce(sessionB);
+
+		const videoRef = createMockVideoRef();
+		const { result } = renderHook(() =>
+			useBlockRecorder({
+				videoRef,
+				mediaRecorderService: mockRecorder,
+				timerService: mockTimer,
+			}),
+		);
+
+		act(() => {
+			result.current.startRecording(); // block A
+		});
+		let stalePromise!: Promise<{ blob: Blob; duration: number } | null>;
+		act(() => {
+			stalePromise = result.current.stopRecording(); // A's stop, held open
+		});
+		act(() => {
+			result.current.startRecording(); // block B starts while A's stop is in flight
+		});
+		resolveStopA({ blob: new Blob(["a"], { type: "video/webm" }), duration: 500 });
+		await act(async () => {
+			await stalePromise;
+		});
+
+		// The stale stop must NOT null out B's session: getState reads the live ref.
+		expect(result.current.getState()).toBe("recording");
+	});
 });
