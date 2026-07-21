@@ -46,6 +46,7 @@ describe("useSmartZoom", () => {
 
 		// Mock fetch for model loading
 		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
 			headers: {
 				get: vi.fn().mockReturnValue("8192000"), // 8MB
 			},
@@ -310,6 +311,36 @@ describe("useSmartZoom", () => {
 		expect(result.current.pan.x).toBeLessThan(1);
 		expect(result.current.pan.y).toBeGreaterThan(-1);
 		expect(result.current.pan.y).toBeLessThan(1);
+	});
+
+	it("should surface a model error when the loader fails", async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 404,
+			headers: { get: vi.fn().mockReturnValue(null) },
+			body: {
+				getReader: vi.fn().mockReturnValue({
+					read: vi.fn().mockResolvedValueOnce({ done: true }),
+				}),
+			},
+		});
+
+		const { result } = renderHook(() =>
+			useSmartZoom({
+				videoRef: { current: videoElement },
+				enabled: true,
+			}),
+		);
+
+		expect(result.current.modelError).toBeNull();
+
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		expect(result.current.modelError).toBeTruthy();
+		expect(result.current.isModelLoading).toBe(false);
 	});
 
 	it("should skip detection for dimensionless pre-metadata frames", async () => {

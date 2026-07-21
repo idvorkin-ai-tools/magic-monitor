@@ -426,6 +426,7 @@ export function CameraStage() {
 				onMirrorChange={setIsMirror}
 				isSmartZoom={isSmartZoom}
 				isModelLoading={smartZoom.isModelLoading}
+				smartZoomModelError={smartZoom.modelError}
 				onSmartZoomChange={setIsSmartZoom}
 				smoothingPreset={smoothingPreset}
 				onSmoothingPresetChange={setSmoothingPreset}
@@ -654,6 +655,7 @@ export function CameraStage() {
 							isModelLoading={smartZoom.isModelLoading}
 							loadingProgress={smartZoom.loadingProgress}
 							loadingPhase={smartZoom.loadingPhase}
+							modelError={smartZoom.modelError}
 						/>
 
 						<StatusButton

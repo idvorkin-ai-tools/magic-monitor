@@ -138,6 +138,7 @@ export function useSmartZoom({
 	const [isModelLoading, setIsModelLoading] = useState(true);
 	const [loadingProgress, setLoadingProgress] = useState(0);
 	const [loadingPhase, setLoadingPhase] = useState<"downloading" | "initializing">("downloading");
+	const [modelError, setModelError] = useState<string | null>(null);
 	// Use ref instead of state for landmarks to avoid 60fps re-renders
 	// HandSkeleton reads from this ref directly in its own rAF loop
 	const debugLandmarksRef = useRef<HandLandmark[][]>([]);
@@ -202,6 +203,7 @@ export function useSmartZoom({
 			setIsModelLoading(state.phase === "downloading" || state.phase === "initializing");
 			setLoadingProgress(state.progress);
 			setLoadingPhase(state.phase === "initializing" ? "initializing" : "downloading");
+			setModelError(state.phase === "error" ? (state.error?.message ?? "Unknown error") : null);
 		};
 
 		const unsubscribe = HandLandmarkerService.subscribe(handleStateChange);
@@ -505,6 +507,7 @@ export function useSmartZoom({
 		isModelLoading,
 		loadingProgress,
 		loadingPhase,
+		modelError,
 		zoom,
 		pan,
 		clampedEdges,

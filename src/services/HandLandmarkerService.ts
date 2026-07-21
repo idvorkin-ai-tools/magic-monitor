@@ -90,6 +90,13 @@ class HandLandmarkerServiceImpl {
 
 			// Fetch model with progress tracking
 			const response = await fetch("/mediapipe/hand_landmarker.task");
+
+			if (!response.ok) {
+				throw new Error(
+					`Model download failed: HTTP ${response.status}`,
+				);
+			}
+
 			const contentLength = response.headers.get("Content-Length");
 			const total = contentLength ? parseInt(contentLength, 10) : 0;
 
