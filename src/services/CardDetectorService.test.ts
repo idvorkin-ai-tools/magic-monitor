@@ -1,4 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as ort from "onnxruntime-web/webgpu";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type Mock,
+	vi,
+} from "vitest";
 import type { CardDetection } from "../types/cards";
 import {
 	CardDetectorService,
@@ -165,6 +174,149 @@ describe("CardDetectorService loader", () => {
 		await CardDetectorService.load();
 		expect(CardDetectorService.isReady()).toBe(true);
 		await expect(CardDetectorService.detect(source)).resolves.toHaveLength(0);
+	});
+});
+
+describe("CardDetectorService input buffer reuse", () => {
+	const MODEL_INPUT_SIZE = 640;
+	const NUM_PIXELS = MODEL_INPUT_SIZE * MODEL_INPUT_SIZE;
+	const tensorMock = ort.Tensor as unknown as Mock;
+
+	/** The Float32Array handed to `new ort.Tensor(...)` on each detect call. */
+	function tensorBuffers(): Float32Array[] {
+		return tensorMock.mock.calls.map((args) => args[1] as Float32Array);
+	}
+
+	function solidSource(color: string): HTMLCanvasElement {
+		const canvas = document.createElement("canvas");
+		canvas.width = MODEL_INPUT_SIZE;
+		canvas.height = MODEL_INPUT_SIZE;
+		const ctx = canvas.getContext("2d");
+		if (!ctx) throw new Error("no 2d context in test environment");
+		ctx.fillStyle = color;
+		ctx.fillRect(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
+		return canvas;
+	}
+
+	function mockModelFetch(): void {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			headers: { get: vi.fn().mockReturnValue("8192") },
+			body: {
+				getReader: vi.fn().mockReturnValue({
+					read: vi
+						.fn()
+						.mockResolvedValueOnce({ done: false, value: new Uint8Array(1024) })
+						.mockResolvedValueOnce({ done: true }),
+				}),
+			},
+		});
+	}
+
+	beforeEach(async () => {
+		CardDetectorService._reset();
+		mockModelFetch();
+		await CardDetectorService.load();
+		tensorMock.mockClear();
+	});
+
+	afterEach(() => {
+		CardDetectorService._reset();
+		vi.clearAllMocks();
+	});
+
+	it("reuses one Float32Array across sequential detections", async () => {
+		const source = solidSource("rgb(255, 0, 0)");
+
+		await CardDetectorService.detect(source);
+		await CardDetectorService.detect(source);
+		await CardDetectorService.detect(source);
+
+		const buffers = tensorBuffers();
+		expect(buffers).toHaveLength(3);
+		expect(buffers[0]).toHaveLength(3 * NUM_PIXELS);
+		expect(buffers[1]).toBe(buffers[0]);
+		expect(buffers[2]).toBe(buffers[0]);
+	});
+
+	it("produces identical planar data for the same frame across two detections", async () => {
+		const source = solidSource("rgb(12, 34, 56)");
+
+		await CardDetectorService.detect(source);
+		const afterFirst = Float32Array.from(tensorBuffers()[0]);
+
+		await CardDetectorService.detect(source);
+
+		expect(Array.from(tensorBuffers()[1])).toEqual(Array.from(afterFirst));
+		// Planar layout: R plane, then G, then B, each normalized to [0, 1].
+		expect(afterFirst[0]).toBeCloseTo(12 / 255, 5);
+		expect(afterFirst[NUM_PIXELS]).toBeCloseTo(34 / 255, 5);
+		expect(afterFirst[2 * NUM_PIXELS]).toBeCloseTo(56 / 255, 5);
+	});
+
+	it("refills the shared buffer rather than leaving the previous frame behind", async () => {
+		await CardDetectorService.detect(solidSource("rgb(255, 0, 0)"));
+		const shared = tensorBuffers()[0];
+		expect(shared[0]).toBeCloseTo(1, 5);
+		expect(shared[2 * NUM_PIXELS]).toBeCloseTo(0, 5);
+
+		await CardDetectorService.detect(solidSource("rgb(0, 0, 255)"));
+
+		expect(tensorBuffers()[1]).toBe(shared);
+		expect(shared[0]).toBeCloseTo(0, 5);
+		expect(shared[NUM_PIXELS - 1]).toBeCloseTo(0, 5);
+		expect(shared[2 * NUM_PIXELS]).toBeCloseTo(1, 5);
+		expect(shared[3 * NUM_PIXELS - 1]).toBeCloseTo(1, 5);
+	});
+
+	it("gives an overlapping detection its own buffer, then reuses the shared one again", async () => {
+		const session = CardDetectorService.getSession() as unknown as {
+			run: (feeds: unknown) => Promise<unknown>;
+		};
+		const pending: Array<(value: unknown) => void> = [];
+		session.run = () =>
+			new Promise((resolve) => {
+				pending.push(resolve);
+			});
+
+		const red = solidSource("rgb(255, 0, 0)");
+		const blue = solidSource("rgb(0, 0, 255)");
+
+		// detect() runs synchronously up to `await session.run`, so by the time
+		// the second call starts, the first has filled the shared buffer and
+		// marked it busy.
+		const first = CardDetectorService.detect(red);
+		const second = CardDetectorService.detect(blue);
+
+		const [firstBuffer, secondBuffer] = tensorBuffers();
+		expect(secondBuffer).not.toBe(firstBuffer);
+		// The in-flight buffer still holds the first frame, not the second.
+		expect(firstBuffer[0]).toBeCloseTo(1, 5);
+		expect(secondBuffer[0]).toBeCloseTo(0, 5);
+		expect(secondBuffer[2 * NUM_PIXELS]).toBeCloseTo(1, 5);
+
+		const result = {
+			output: { data: new Float32Array(300 * 6), dims: [1, 300, 6] },
+		};
+		for (const resolve of pending) resolve(result);
+		await Promise.all([first, second]);
+
+		// Buffer released: the next detection reuses it.
+		session.run = () => Promise.resolve(result);
+		await CardDetectorService.detect(red);
+		expect(tensorBuffers()[2]).toBe(firstBuffer);
+	});
+
+	it("drops the shared buffer on reset", async () => {
+		await CardDetectorService.detect(solidSource("rgb(255, 0, 0)"));
+		const before = tensorBuffers()[0];
+
+		CardDetectorService._reset();
+		mockModelFetch();
+		await CardDetectorService.load();
+		await CardDetectorService.detect(solidSource("rgb(255, 0, 0)"));
+
+		expect(tensorBuffers()[1]).not.toBe(before);
 	});
 });
 

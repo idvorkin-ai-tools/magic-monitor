@@ -1,4 +1,12 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vitest";
 import { MediaRecorderService } from "./MediaRecorderService";
 
 // Mock MediaStream for tests
@@ -12,6 +20,8 @@ class MockMediaRecorder {
 	onerror: ((e?: Event) => void) | null;
 	stream: MediaStream;
 	options: MediaRecorderOptions;
+	/** Timeslice argument the service passed to start(), if any. */
+	timeslice: number | undefined;
 
 	constructor(stream: MediaStream, options: MediaRecorderOptions) {
 		this.stream = stream;
@@ -20,11 +30,22 @@ class MockMediaRecorder {
 		this.ondataavailable = null;
 		this.onstop = null;
 		this.onerror = null;
+		this.timeslice = undefined;
 		registerRecorderInstance(this);
 	}
 
-	start() {
+	start(timeslice?: number) {
+		this.timeslice = timeslice;
 		this.state = "recording";
+	}
+
+	/** Simulate a timeslice boundary firing ondataavailable mid-block. */
+	emitChunk(contents: string) {
+		this.ondataavailable?.({
+			data: new Blob([contents], {
+				type: this.options.mimeType || "video/webm",
+			}),
+		});
 	}
 
 	stop() {
@@ -444,6 +465,65 @@ describe("MediaRecorderService", () => {
 
 			expect(onFailure).toHaveBeenCalledTimes(1);
 			expect(onFailure).toHaveBeenCalledWith(null); // no chunks yet -> nothing to salvage
+		});
+
+		it("starts the recorder with a 1s timeslice by default", () => {
+			const mockStream = new MediaStream();
+			const session = MediaRecorderService.startRecording(mockStream);
+
+			session.start();
+
+			expect(recorderInstance?.timeslice).toBe(1000);
+		});
+
+		it("honors a custom timeslice", () => {
+			const mockStream = new MediaStream();
+			const session = MediaRecorderService.startRecording(mockStream, {
+				timesliceMs: 250,
+			});
+
+			session.start();
+
+			expect(recorderInstance?.timeslice).toBe(250);
+		});
+
+		it("concatenates timeslice chunks into one blob at stop", async () => {
+			const mockStream = new MediaStream();
+			const session = MediaRecorderService.startRecording(mockStream);
+			session.start();
+
+			// Three timeslice boundaries before the final chunk emitted by stop()
+			recorderInstance?.emitChunk("aaa");
+			recorderInstance?.emitChunk("bbbb");
+			recorderInstance?.emitChunk("cc");
+
+			const result = await session.stop();
+
+			// 3 + 4 + 2 mid-block bytes, plus "test video data" (15) from stop()
+			expect(result.blob.size).toBe(3 + 4 + 2 + 15);
+		});
+
+		it("salvages the chunks received so far when the recorder dies mid-block", () => {
+			const mockStream = new MediaStream();
+			const onFailure = vi.fn();
+			const session = MediaRecorderService.startRecording(mockStream, {
+				onFailure,
+			});
+			session.start();
+
+			recorderInstance?.emitChunk("first second");
+			recorderInstance?.emitChunk("second second");
+			recorderInstance?.onerror?.(new Event("error"));
+
+			expect(onFailure).toHaveBeenCalledTimes(1);
+			const salvaged = onFailure.mock.calls[0][0] as {
+				blob: Blob;
+				duration: number;
+			} | null;
+			expect(salvaged).not.toBeNull();
+			expect(salvaged?.blob.size).toBe(
+				"first second".length + "second second".length,
+			);
 		});
 
 		it("does NOT fire onFailure for a requested stop", async () => {
