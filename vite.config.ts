@@ -34,8 +34,12 @@ const inContainer = isRunningInContainer();
 const tailscaleHosts = getTailscaleHostnames();
 const devHost = inContainer && tailscaleHosts.length > 0 ? "0.0.0.0" : "localhost";
 
-// Enable HTTPS for Tailscale (camera APIs require secure context)
-const useSsl = inContainer && tailscaleHosts.length > 0;
+// Enable HTTPS for Tailscale (camera APIs require secure context).
+// Playwright pins its own dev server to plain HTTP so that CI - which has
+// neither a container nor Tailscale - and local runs agree on the scheme.
+// See the TEST_SERVER_URL comment in playwright.config.ts.
+const forcePlainHttp = process.env.VITE_DEV_SERVER_PLAIN_HTTP === "1";
+const useSsl = !forcePlainHttp && inContainer && tailscaleHosts.length > 0;
 
 if (useSsl) {
 	console.log(`\n🔗 Tailscale detected in container`);

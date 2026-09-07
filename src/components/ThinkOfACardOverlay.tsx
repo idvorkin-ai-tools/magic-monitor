@@ -1,17 +1,31 @@
 import clsx from "clsx";
+import { useState } from "react";
 import type { ThinkOfACardState } from "../machines/ThinkOfACardMachine";
 import type { PlayingCard, Suit } from "../types/cards";
 
 /**
- * Full-screen overlay for a think-of-a-card round: the countdown, then the
- * card the "spectator" thought of.
+ * Think-of-a-card countdown and reveal, in a small translucent panel tucked
+ * into the bottom-left corner.
  *
- * Sized to be read across a room — Igor is standing back from the camera with
- * a deck in his hands, not leaning into the screen.
+ * Deliberately NOT a full-screen overlay: the camera stage has to keep doing
+ * its job while Igor performs, so nothing covers the middle of the frame. The
+ * panel sits in the one corner nothing else uses — the minimap is top-right,
+ * the status readout bottom-right, the control bar along the bottom. It clears
+ * the control bar's height (bottom-28) so it works on the full-width mobile bar
+ * as well as the centred desktop one.
  */
 
-/** Card width drives every type size below via `em`, so the face scales as one unit. */
-const CARD_WIDTH = "min(50vh, 86vw)";
+/**
+ * Panel width: ~20% of the shorter viewport side, floored and capped so it
+ * stays legible on a phone without taking over a large monitor. Every type
+ * size inside is an `em` of the card's width, so the whole thing scales as one
+ * unit.
+ */
+const PANEL_WIDTH = "clamp(96px, 20vmin, 220px)";
+/** Panel padding, as a fraction of panel width. */
+const PANEL_PADDING = 0.05;
+/** Card fills the panel minus its padding; drives the `em` scale of the face. */
+const CARD_WIDTH = `calc(${PANEL_WIDTH} * ${1 - PANEL_PADDING * 2})`;
 
 const SUIT_COLORS: Record<Suit, string> = {
 	"♠": "#111827", // spades - near black
@@ -27,6 +41,8 @@ const SUIT_NAMES: Record<Suit, string> = {
 	"♦": "diamonds",
 };
 
+type ActiveState = Exclude<ThinkOfACardState, { type: "idle" }>;
+
 interface ThinkOfACardOverlayProps {
 	state: ThinkOfACardState;
 	onDismiss: () => void;
@@ -36,81 +52,88 @@ export function ThinkOfACardOverlay({
 	state,
 	onDismiss,
 }: ThinkOfACardOverlayProps) {
-	if (state.type === "idle") return null;
+	// Keep the last active content mounted through the fade-out, otherwise the
+	// panel would vanish instantly instead of easing away. Adjusted during
+	// render (React's documented pattern) rather than in an effect, which would
+	// paint an empty panel for a frame first.
+	const [content, setContent] = useState<ActiveState | null>(null);
+	const visible = state.type !== "idle";
+	if (state.type !== "idle" && content !== state) setContent(state);
 
+	// Rendered from mount (hidden) rather than mounted on demand, so the very
+	// first round fades in instead of snapping to full opacity.
 	return (
-		<div
+		<button
+			type="button"
 			data-testid="think-overlay"
-			className="absolute inset-0 z-[60] flex items-center justify-center"
+			onClick={onDismiss}
+			title="P · tap · Esc to clear"
+			aria-label="Dismiss think of a card"
+			className={clsx(
+				"absolute bottom-28 left-4 z-[60] rounded-2xl bg-black/75 ring-1 ring-white/10 backdrop-blur-sm",
+				// Visibility is transitioned alongside opacity so it flips only once
+				// the fade has finished - the panel is genuinely hidden when idle.
+				"transition-[opacity,visibility] duration-200 ease-out motion-reduce:transition-none",
+				// The whole panel - card face included - sits at 70%, so it reads as
+				// a translucent aside rather than something shouting over the stage.
+				// The backdrop is darker than that to keep the countdown numeral
+				// legible against a bright camera frame.
+				visible
+					? "visible opacity-[0.7]"
+					: "invisible opacity-0 pointer-events-none",
+			)}
+			style={{
+				width: PANEL_WIDTH,
+				padding: `calc(${PANEL_WIDTH} * ${PANEL_PADDING})`,
+			}}
 		>
-			{/* Scrim doubles as the tap target, so anywhere on screen dismisses. */}
-			<button
-				type="button"
-				onClick={onDismiss}
-				aria-label="Dismiss think of a card"
-				className="absolute inset-0 bg-black/85 backdrop-blur-sm cursor-pointer"
-			/>
-
-			<div className="relative pointer-events-none flex flex-col items-center gap-[3vh]">
-				{state.type === "countdown" ? (
-					<Countdown secondsLeft={state.secondsLeft} />
-				) : (
-					<Reveal card={state.card} label={state.label} />
+			<div className="flex aspect-[5/7] w-full items-center justify-center">
+				{content?.type === "countdown" && (
+					<Countdown secondsLeft={content.secondsLeft} />
+				)}
+				{content?.type === "reveal" && (
+					<CardFace card={content.card} label={content.label} />
 				)}
 			</div>
-		</div>
+		</button>
 	);
 }
 
 function Countdown({ secondsLeft }: { secondsLeft: number }) {
 	return (
-		<>
-			{/* key remounts the numeral each second so the pop animation replays */}
-			<span
-				key={secondsLeft}
-				data-testid="think-countdown"
-				aria-live="polite"
-				className="think-countdown-numeral font-mono font-bold text-white leading-none tabular-nums text-[38vh]"
-			>
-				{secondsLeft}
-			</span>
-			<span className="font-mono text-white/40 text-sm tracking-[0.4em] uppercase">
-				think of one… now
-			</span>
-		</>
+		<span
+			data-testid="think-countdown"
+			aria-live="polite"
+			className="font-mono font-bold text-white leading-none tabular-nums"
+			style={{ fontSize: `calc(${CARD_WIDTH} * 0.62)` }}
+		>
+			{secondsLeft}
+		</span>
 	);
 }
 
-function Reveal({ card, label }: { card: PlayingCard; label: string }) {
-	const color = SUIT_COLORS[card.suit];
-
+function CardFace({ card, label }: { card: PlayingCard; label: string }) {
 	return (
-		<>
-			<div
-				data-testid="think-card"
-				data-card={label}
-				role="img"
-				aria-live="assertive"
-				aria-label={`${card.rank} of ${SUIT_NAMES[card.suit]}`}
-				className="think-card-face relative aspect-[5/7] rounded-[0.05em] bg-white shadow-2xl"
-				style={{ width: CARD_WIDTH, fontSize: CARD_WIDTH, color }}
-			>
-				<CornerIndex card={card} className="top-[0.04em] left-[0.05em]" />
-				<CornerIndex
-					card={card}
-					className="bottom-[0.04em] right-[0.05em] rotate-180"
-				/>
+		<div
+			data-testid="think-card"
+			data-card={label}
+			role="img"
+			aria-live="assertive"
+			aria-label={`${card.rank} of ${SUIT_NAMES[card.suit]}`}
+			className="relative aspect-[5/7] w-full rounded-[0.05em] bg-white"
+			style={{ fontSize: CARD_WIDTH, color: SUIT_COLORS[card.suit] }}
+		>
+			<CornerIndex card={card} className="top-[0.04em] left-[0.05em]" />
+			<CornerIndex
+				card={card}
+				className="right-[0.05em] bottom-[0.04em] rotate-180"
+			/>
 
-				<div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-					<span className="font-bold text-[0.46em]">{card.rank}</span>
-					<span className="text-[0.34em]">{card.suit}</span>
-				</div>
+			<div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+				<span className="font-bold text-[0.46em]">{card.rank}</span>
+				<span className="text-[0.34em]">{card.suit}</span>
 			</div>
-
-			<span className="font-mono text-white/40 text-sm tracking-[0.3em] uppercase">
-				P · tap · esc to clear
-			</span>
-		</>
+		</div>
 	);
 }
 

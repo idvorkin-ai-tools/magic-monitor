@@ -722,6 +722,19 @@ test.describe("Magic Monitor E2E", () => {
 		);
 		await expect(countdown).toBeHidden();
 
+		// It stays a small corner panel - the camera stage must keep working
+		// while Igor performs, so nothing covers the middle of the frame.
+		const viewport = page.viewportSize();
+		const panel = await page.getByTestId("think-overlay").boundingBox();
+		expect(viewport).not.toBeNull();
+		expect(panel).not.toBeNull();
+		if (viewport && panel) {
+			expect(panel.x + panel.width).toBeLessThan(viewport.width / 2);
+			expect(panel.y).toBeGreaterThan(viewport.height / 2);
+			const shorterSide = Math.min(viewport.width, viewport.height);
+			expect(panel.width).toBeLessThan(shorterSide * 0.3);
+		}
+
 		// Escape clears it and returns to idle.
 		await page.keyboard.press("Escape");
 		await expect(page.getByTestId("think-overlay")).toBeHidden();
@@ -732,7 +745,7 @@ test.describe("Magic Monitor E2E", () => {
 	}) => {
 		await expect(page.getByTestId("main-video")).toBeVisible();
 
-		await page.getByTitle(/Think of a card/).click();
+		await page.getByTestId("think-button").click();
 		await expect(page.getByTestId("think-countdown")).toBeVisible();
 
 		// Tapping anywhere on the overlay cancels - the phone/tablet path.

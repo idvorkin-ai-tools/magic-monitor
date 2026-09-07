@@ -10,6 +10,7 @@ interface StatusButtonProps {
 	color?: StatusColor;
 	title?: string;
 	warning?: boolean;
+	"data-testid"?: string;
 }
 
 const activeColorClasses: Record<StatusColor, string> = {
@@ -28,6 +29,7 @@ export function StatusButton({
 	color = "blue",
 	title,
 	warning = false,
+	"data-testid": testId,
 }: StatusButtonProps) {
 	return (
 		<button
@@ -35,6 +37,7 @@ export function StatusButton({
 			onClick={onClick}
 			disabled={disabled}
 			title={title}
+			data-testid={testId}
 			className={clsx(
 				"px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
 				active && activeColorClasses[color],

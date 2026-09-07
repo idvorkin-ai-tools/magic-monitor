@@ -528,8 +528,8 @@ export function CameraStage() {
 			{/* Status Bar */}
 			<div className="absolute bottom-8 right-8 z-40 text-white/50 font-mono text-xs pointer-events-none flex flex-col items-end gap-1">
 				{appState === "live" && (
-					<span className="text-white/40">
-						{isSmartZoom ? "✌ or P" : "P"} · think of a card
+					<span className="text-white/40" title="Think of a card">
+						{isSmartZoom ? "✌ or P" : "P"}
 					</span>
 				)}
 				{smartZoom.isModelLoading && (
@@ -705,6 +705,7 @@ export function CameraStage() {
 						</StatusButton>
 
 						<StatusButton
+							data-testid="think-button"
 							onClick={() => toggleThinkOfACard("button")}
 							active={thinkOfACard.isActive}
 							color="green"
