@@ -8,12 +8,26 @@ export interface RecordingChunk {
 	duration: number;
 }
 
+/**
+ * Chunk interval handed to MediaRecorder.start().
+ *
+ * Without a timeslice the browser buffers the entire block (5 min x 5 Mbps is
+ * roughly 190 MB) and emits it as one Blob at stop. With one, ondataavailable
+ * fires every second, the in-flight buffer stays bounded, and mid-block salvage
+ * has something to recover. The chunks are concatenated back into a single Blob
+ * at stop, so downstream (VideoFixService, IndexedDB, replay) sees exactly the
+ * same bytes as before.
+ */
+const DEFAULT_TIMESLICE_MS = 1000;
+
 export interface MediaRecorderConfig {
 	videoBitsPerSecond?: number;
+	/** ms per ondataavailable chunk. Defaults to DEFAULT_TIMESLICE_MS. */
+	timesliceMs?: number;
 	/**
 	 * Fires when the recorder dies mid-block (error event, or a stop that was
-	 * never requested). Salvage is best-effort and usually null - without a
-	 * timeslice no chunks exist until stop.
+	 * never requested). Salvage returns every chunk received up to the last
+	 * timeslice boundary, so at most `timesliceMs` of video is lost.
 	 */
 	onFailure?: (salvaged: RecordingChunk | null) => void;
 }
@@ -145,7 +159,7 @@ export const MediaRecorderService = {
 				recorder.onstop = handleMidBlockDeath;
 
 				try {
-					recorder.start();
+					recorder.start(config.timesliceMs ?? DEFAULT_TIMESLICE_MS);
 				} catch (err) {
 					// Provide a meaningful error message when MediaRecorder.start() fails
 					// Common causes: unsupported codec, invalid stream state, no active tracks
