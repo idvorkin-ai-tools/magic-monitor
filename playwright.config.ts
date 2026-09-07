@@ -44,12 +44,19 @@ export default defineConfig({
 		},
 	],
 	webServer: {
-		command: "npx vite --port 5273 --strictPort",
+		// src/generated_version.ts is gitignored and only written by
+		// scripts/generate-version.sh, which until now ran solely from the build
+		// script. A checkout that has never been built - every CI runner - served
+		// index.html fine (so the health check passed) but 500ed on
+		// /src/version.ts, so the app never mounted and every test timed out
+		// hunting for elements. The test server generates it itself.
+		command:
+			"bash scripts/generate-version.sh && npx vite --port 5273 --strictPort",
 		url: TEST_SERVER_URL,
 		env: { VITE_DEV_SERVER_PLAIN_HTTP: "1" },
 		reuseExistingServer: !process.env.CI, // Reuse existing server in dev, start fresh in CI
 		timeout: 120 * 1000,
-		stdout: "ignore",
+		stdout: "pipe",
 		stderr: "pipe",
 	},
 });
