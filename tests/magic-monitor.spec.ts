@@ -698,6 +698,47 @@ test.describe("Magic Monitor E2E", () => {
 		await expect(landscapeButton).toHaveClass(/bg-blue-600/);
 		await expect(portraitButton).not.toHaveClass(/bg-blue-600/);
 	});
+
+	// Think of a Card runs entirely off the key/button path - no camera frames,
+	// no model, no media decoding - so it is safe in headless Chromium.
+	test("Think of a Card: P key counts down then shows a card", async ({
+		page,
+	}) => {
+		await expect(page.getByTestId("main-video")).toBeVisible();
+
+		await page.keyboard.press("p");
+
+		// Countdown is up, showing one numeral between 5 and 1.
+		const countdown = page.getByTestId("think-countdown");
+		await expect(countdown).toBeVisible();
+		await expect(countdown).toHaveText(/^[1-5]$/);
+
+		// Then the card the "spectator" thought of.
+		const card = page.getByTestId("think-card");
+		await expect(card).toBeVisible({ timeout: 10000 });
+		await expect(card).toHaveAttribute(
+			"data-card",
+			/^(A|[2-9]|10|J|Q|K)[\u2660\u2665\u2666\u2663]$/,
+		);
+		await expect(countdown).toBeHidden();
+
+		// Escape clears it and returns to idle.
+		await page.keyboard.press("Escape");
+		await expect(page.getByTestId("think-overlay")).toBeHidden();
+	});
+
+	test("Think of a Card: button starts a round, tapping clears it", async ({
+		page,
+	}) => {
+		await expect(page.getByTestId("main-video")).toBeVisible();
+
+		await page.getByTitle(/Think of a card/).click();
+		await expect(page.getByTestId("think-countdown")).toBeVisible();
+
+		// Tapping anywhere on the overlay cancels - the phone/tablet path.
+		await page.getByRole("button", { name: "Dismiss think of a card" }).click();
+		await expect(page.getByTestId("think-overlay")).toBeHidden();
+	});
 });
 
 test.describe("Bug Report", () => {

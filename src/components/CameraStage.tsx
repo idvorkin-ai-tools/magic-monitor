@@ -13,6 +13,7 @@ import { useSessionRecorder } from "../hooks/useSessionRecorder";
 import { useSettings } from "../hooks/useSettings";
 import { useShakeDetector } from "../hooks/useShakeDetector";
 import { useSmartZoom } from "../hooks/useSmartZoom";
+import { useThinkOfACard } from "../hooks/useThinkOfACard";
 import { useVersionCheck } from "../hooks/useVersionCheck";
 import { useZoomPan } from "../hooks/useZoomPan";
 import { CardDetectorService } from "../services/CardDetectorService";
@@ -31,6 +32,23 @@ import { SessionPicker } from "./SessionPicker";
 import { SettingsModal } from "./SettingsModal";
 import { SmartZoomToggle } from "./SmartZoomToggle";
 import { StatusButton } from "./StatusButton";
+import { ThinkOfACardOverlay } from "./ThinkOfACardOverlay";
+
+/**
+ * True when the keystroke belongs to a text field, so single-letter shortcuts
+ * don't fire while the user is typing in the bug report or settings.
+ */
+function isTypingTarget(target: EventTarget | null): boolean {
+	const el = target as HTMLElement | null;
+	if (!el?.tagName) return false;
+	const tag = el.tagName;
+	return (
+		tag === "INPUT" ||
+		tag === "TEXTAREA" ||
+		tag === "SELECT" ||
+		el.isContentEditable
+	);
+}
 
 export function CameraStage() {
 	const videoRef = useRef<HTMLVideoElement>(null);
@@ -128,6 +146,16 @@ export function CameraStage() {
 		confidenceThreshold: cardConfidenceThreshold,
 	});
 
+	// Think of a Card: countdown then a random card, standing in for a spectator
+	// naming one. The V-sign trigger rides on the hand landmarks smart zoom is
+	// already computing, so it needs smart zoom on; P and the button always work.
+	const thinkOfACard = useThinkOfACard({
+		landmarksRef: smartZoom.debugLandmarksRef,
+		gestureEnabled: isSmartZoom && appState === "live",
+	});
+	const { toggle: toggleThinkOfACard, dismiss: dismissThinkOfACard } =
+		thinkOfACard;
+
 	// Compute effective zoom/pan: use smartZoom values when enabled, else local state
 	const effectiveZoom = isSmartZoom ? smartZoom.zoom : zoom;
 	const effectivePan = isSmartZoom ? smartZoom.pan : pan;
@@ -214,16 +242,27 @@ export function CameraStage() {
 				e.preventDefault();
 				bugReporter.open();
 			}
+
+			// Bare-letter shortcuts below: never while typing into a field.
+			if (isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) {
+				return;
+			}
+
 			// Z: card detection debug snapshot
-			if (e.key === "z" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+			if (e.key === "z") {
 				if (CardDetectorService.isReady()) {
 					CardDetectorService.debugSnapshot();
 				}
 			}
+			// P: think of a card - starts a round, or clears the one on screen
+			if (e.key === "p" && appState === "live") {
+				e.preventDefault();
+				toggleThinkOfACard("key");
+			}
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [bugReporter]);
+	}, [bugReporter, appState, toggleThinkOfACard]);
 
 	// Sync stream to video element
 	useEffect(() => {
@@ -292,6 +331,8 @@ export function CameraStage() {
 
 	// Escape key handler
 	useEscapeKey({
+		isThinkingOfACard: thinkOfACard.isActive,
+		onDismissThinkOfACard: dismissThinkOfACard,
 		isSettingsOpen,
 		isPickingColor,
 		isReplaying: appState === "replay",
@@ -486,6 +527,11 @@ export function CameraStage() {
 
 			{/* Status Bar */}
 			<div className="absolute bottom-8 right-8 z-40 text-white/50 font-mono text-xs pointer-events-none flex flex-col items-end gap-1">
+				{appState === "live" && (
+					<span className="text-white/40">
+						{isSmartZoom ? "✌ or P" : "P"} · think of a card
+					</span>
+				)}
 				{smartZoom.isModelLoading && (
 					<span className="text-blue-400 animate-pulse">
 						Loading AI model...
@@ -659,6 +705,15 @@ export function CameraStage() {
 						</StatusButton>
 
 						<StatusButton
+							onClick={() => toggleThinkOfACard("button")}
+							active={thinkOfACard.isActive}
+							color="green"
+							title="Think of a card — 5s countdown, then a card appears (P, or hold a V sign)"
+						>
+							{thinkOfACard.isActive ? "✌ Thinking…" : "✌ Think"}
+						</StatusButton>
+
+						<StatusButton
 							onClick={() => setFlashEnabled(!flashEnabled)}
 							active={flashEnabled}
 							color="red"
@@ -708,6 +763,12 @@ export function CameraStage() {
 					</div>
 				</div>
 			)}
+
+			{/* Think of a Card: countdown, then the card the "spectator" thought of */}
+			<ThinkOfACardOverlay
+				state={thinkOfACard.state}
+				onDismiss={dismissThinkOfACard}
+			/>
 		</div>
 	);
 }
