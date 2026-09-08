@@ -87,10 +87,13 @@ export function useSessionList({
 			if (blob.size === 0) return null;
 
 			try {
-				// Fix WebM metadata for seekability
+				// Fix WebM metadata for seekability. `duration` is milliseconds,
+				// which is what fixDuration expects - without it the header keeps
+				// no Duration at all and the replay scrubber has nothing to scale
+				// positions against.
 				let fixedBlob = blob;
 				if (videoFixService.needsFix(blob)) {
-					const fixResult = await videoFixService.fixDuration(blob);
+					const fixResult = await videoFixService.fixDuration(blob, duration);
 					fixedBlob = fixResult.blob;
 					if (!fixResult.wasFixed) {
 						console.warn(

@@ -287,6 +287,11 @@ export function useReplayPlayer({
 
 	const seek = useCallback(
 		(time: number) => {
+			// A non-finite request means the caller scaled against an unknown
+			// duration. Clamping it would silently land on the last frame for
+			// every scrubber position, so refuse it instead.
+			if (!Number.isFinite(time)) return;
+
 			if (videoElement && isReady && Number.isFinite(videoElement.duration)) {
 				const clampedTime = Math.max(0, Math.min(time, videoElement.duration));
 				videoElement.currentTime = clampedTime;
@@ -411,10 +416,23 @@ export function useReplayPlayer({
 	useEffect(() => {
 		if (!videoElement) return;
 
+		// A WebM whose header carries no Duration (or a zero one) reports
+		// `Infinity` at loadedmetadata; the browser only settles on the real
+		// value later, via durationchange. Latching the first reading left the
+		// timeline scaling positions against Infinity, so every click and drag
+		// resolved to the same instant. Take finite readings only, whenever
+		// they arrive.
+		const applyDuration = () => {
+			const reported = videoElement.duration;
+			if (Number.isFinite(reported) && reported > 0) {
+				setDuration(reported);
+			}
+		};
+
 		// Event handlers
 		const handleLoadedMetadata = () => {
 			clearLoadTimeout();
-			setDuration(videoElement.duration);
+			applyDuration();
 			setIsLoading(false);
 			setIsReady(true);
 
@@ -475,6 +493,7 @@ export function useReplayPlayer({
 
 		// Attach all listeners
 		videoElement.addEventListener("loadedmetadata", handleLoadedMetadata);
+		videoElement.addEventListener("durationchange", applyDuration);
 		videoElement.addEventListener("timeupdate", handleTimeUpdate);
 		videoElement.addEventListener("ended", handleEnded);
 		videoElement.addEventListener("play", handlePlay);
@@ -494,6 +513,7 @@ export function useReplayPlayer({
 
 		return () => {
 			videoElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
+			videoElement.removeEventListener("durationchange", applyDuration);
 			videoElement.removeEventListener("timeupdate", handleTimeUpdate);
 			videoElement.removeEventListener("ended", handleEnded);
 			videoElement.removeEventListener("play", handlePlay);

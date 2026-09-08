@@ -25,17 +25,28 @@ describe("VideoFixService", () => {
 			expect(result.wasFixed).toBe(true);
 		});
 
-		it("passes 0 for duration when not provided (library calculates it)", async () => {
+		// fix-webm-duration writes the number it is handed and never derives
+		// one, so a 0 stamps "Duration: 0" into the header. That is worse than
+		// leaving the header alone: ffprobe then reports no duration at all and
+		// the browser still says Infinity.
+		it.each([
+			["undefined", undefined],
+			["zero", 0],
+			["negative", -1],
+			["Infinity", Number.POSITIVE_INFINITY],
+			["NaN", Number.NaN],
+		])("leaves the blob untouched when the duration is %s", async (_label, durationMs) => {
 			const fixWebmDuration = (await import("fix-webm-duration")).default;
 			const inputBlob = new Blob(["test data"], { type: "video/webm" });
-			const fixedBlob = new Blob(["fixed"], { type: "video/webm" });
-			vi.mocked(fixWebmDuration).mockResolvedValue(fixedBlob);
+			const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-			const result = await VideoFixService.fixDuration(inputBlob);
+			const result = await VideoFixService.fixDuration(inputBlob, durationMs);
 
-			expect(fixWebmDuration).toHaveBeenCalledWith(inputBlob, 0);
-			expect(result.blob).toBe(fixedBlob);
-			expect(result.wasFixed).toBe(true);
+			expect(fixWebmDuration).not.toHaveBeenCalled();
+			expect(result.blob).toBe(inputBlob);
+			expect(result.wasFixed).toBe(false);
+
+			warnSpy.mockRestore();
 		});
 
 		it("returns original blob with wasFixed=false on error", async () => {

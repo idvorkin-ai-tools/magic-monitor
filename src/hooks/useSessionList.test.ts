@@ -187,7 +187,10 @@ describe("useSessionList", () => {
 			Date.now(),
 		);
 
-		expect(mockVideoFix.fixDuration).toHaveBeenCalledWith(blob);
+		// The block duration (ms) has to reach the fixer: it is the only source
+		// for the WebM Duration header, and without it replay cannot scale
+		// scrubber positions.
+		expect(mockVideoFix.fixDuration).toHaveBeenCalledWith(blob, 5000);
 		expect(mockStorage.saveSessionWithBlob).toHaveBeenCalled();
 		expect(session).not.toBeNull();
 		expect(session?.id).toBe("test-id");

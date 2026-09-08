@@ -7,8 +7,15 @@
 export const VideoFixService = {
 	/**
 	 * Fix WebM metadata for seeking support.
-	 * MediaRecorder-produced WebM files often lack proper duration metadata,
-	 * making them non-seekable. This fixes that issue.
+	 * MediaRecorder-produced WebM files carry no Duration in their Info section,
+	 * so browsers report `video.duration === Infinity` until the whole file has
+	 * been demuxed. This writes the real duration into the header.
+	 *
+	 * `durationMs` is required in practice: fix-webm-duration writes whatever
+	 * number it is handed and never derives one. Handing it 0 stamps
+	 * `Duration: 0` into the file - a lie that ffprobe and every other player
+	 * honour, and which still leaves the browser reporting Infinity. So an
+	 * unknown duration means "don't touch the blob", not "pass 0".
 	 *
 	 * Note: Only applies to WebM files. MP4 files (used on iOS) don't need this fix.
 	 *
@@ -24,13 +31,16 @@ export const VideoFixService = {
 			return { blob, wasFixed: false };
 		}
 
+		if (!durationMs || !Number.isFinite(durationMs) || durationMs <= 0) {
+			console.warn(
+				"fixDuration called without a usable duration - leaving the blob unfixed",
+			);
+			return { blob, wasFixed: false };
+		}
+
 		try {
 			const fixWebmDuration = (await import("fix-webm-duration")).default;
-			// fix-webm-duration infers duration from WebM when not provided
-			// Pass duration if known, otherwise let library calculate it
-			const fixed = durationMs
-				? await fixWebmDuration(blob, durationMs)
-				: await fixWebmDuration(blob, 0); // Library calculates duration when 0
+			const fixed = await fixWebmDuration(blob, durationMs);
 			return { blob: fixed, wasFixed: true };
 		} catch (err) {
 			console.warn("fix-webm-duration failed, returning original blob:", err);
