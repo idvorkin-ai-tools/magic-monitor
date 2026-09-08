@@ -187,6 +187,20 @@ describe("CardDetectorService input buffer reuse", () => {
 		return tensorMock.mock.calls.map((args) => args[1] as Float32Array);
 	}
 
+	/**
+	 * Reference identity, compared as a boolean.
+	 *
+	 * `expect(a).not.toBe(b)` cannot be used here: when Object.is fails - which
+	 * is exactly the case a passing `.not.toBe` asserts - vitest runs a full
+	 * deep equality over both values so it can suggest toEqual/toStrictEqual in
+	 * the failure message it will never print. On two 1.2M-element Float32Arrays
+	 * holding identical pixels that scan takes ~1.8s, which blew the 5s test
+	 * timeout on CI roughly half the time. Handing expect a boolean skips it.
+	 */
+	function sameBuffer(a: Float32Array, b: Float32Array): boolean {
+		return a === b;
+	}
+
 	function solidSource(color: string): HTMLCanvasElement {
 		const canvas = document.createElement("canvas");
 		canvas.width = MODEL_INPUT_SIZE;
@@ -289,7 +303,8 @@ describe("CardDetectorService input buffer reuse", () => {
 		const second = CardDetectorService.detect(blue);
 
 		const [firstBuffer, secondBuffer] = tensorBuffers();
-		expect(secondBuffer).not.toBe(firstBuffer);
+		// Identity only - see the note on `sameBuffer` below.
+		expect(sameBuffer(secondBuffer, firstBuffer)).toBe(false);
 		// The in-flight buffer still holds the first frame, not the second.
 		expect(firstBuffer[0]).toBeCloseTo(1, 5);
 		expect(secondBuffer[0]).toBeCloseTo(0, 5);
@@ -316,7 +331,7 @@ describe("CardDetectorService input buffer reuse", () => {
 		await CardDetectorService.load();
 		await CardDetectorService.detect(solidSource("rgb(255, 0, 0)"));
 
-		expect(tensorBuffers()[1]).not.toBe(before);
+		expect(sameBuffer(tensorBuffers()[1], before)).toBe(false);
 	});
 });
 
