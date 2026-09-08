@@ -511,4 +511,138 @@ describe("useReplayPlayer", () => {
 			expect(result.current.isExporting).toBe(false);
 		});
 	});
+
+	// MediaRecorder WebM carries no Duration in its header, so Chromium reports
+	// Infinity at loadedmetadata and only settles on the real value later via
+	// durationchange. Latching the first reading scaled the timeline against
+	// Infinity, and every scrubber position then clamped to the last frame.
+	describe("duration resolution", () => {
+		function mountVideo(
+			result: { current: ReturnType<typeof useReplayPlayer> },
+			duration: number,
+		) {
+			const video = document.createElement("video");
+			Object.defineProperty(video, "readyState", { value: 1, writable: true });
+			Object.defineProperty(video, "duration", {
+				value: duration,
+				writable: true,
+			});
+			Object.defineProperty(video, "currentTime", {
+				value: 0,
+				writable: true,
+			});
+			act(() => {
+				result.current.videoRef(video);
+			});
+			return video;
+		}
+
+		it("does not latch an Infinite duration reported at loadedmetadata", () => {
+			const { result } = renderHook(() =>
+				useReplayPlayer({
+					sessionStorageService: mockStorage,
+					shareService: mockShare,
+				}),
+			);
+
+			const video = mountVideo(result, Number.POSITIVE_INFINITY);
+			act(() => {
+				video.dispatchEvent(new Event("loadedmetadata"));
+			});
+
+			expect(result.current.isReady).toBe(true);
+			expect(result.current.duration).toBe(0);
+		});
+
+		it("adopts the real duration when durationchange settles it", () => {
+			const { result } = renderHook(() =>
+				useReplayPlayer({
+					sessionStorageService: mockStorage,
+					shareService: mockShare,
+				}),
+			);
+
+			const video = mountVideo(result, Number.POSITIVE_INFINITY);
+			act(() => {
+				video.dispatchEvent(new Event("loadedmetadata"));
+			});
+
+			Object.defineProperty(video, "duration", {
+				value: 12.5,
+				writable: true,
+			});
+			act(() => {
+				video.dispatchEvent(new Event("durationchange"));
+			});
+
+			expect(result.current.duration).toBe(12.5);
+		});
+
+		it("keeps the last finite duration when the media goes non-finite again", () => {
+			const { result } = renderHook(() =>
+				useReplayPlayer({
+					sessionStorageService: mockStorage,
+					shareService: mockShare,
+				}),
+			);
+
+			const video = mountVideo(result, 8);
+			act(() => {
+				video.dispatchEvent(new Event("loadedmetadata"));
+			});
+			expect(result.current.duration).toBe(8);
+
+			Object.defineProperty(video, "duration", {
+				value: Number.NaN,
+				writable: true,
+			});
+			act(() => {
+				video.dispatchEvent(new Event("durationchange"));
+			});
+
+			expect(result.current.duration).toBe(8);
+		});
+
+		it("refuses a non-finite seek instead of clamping it to the last frame", () => {
+			const { result } = renderHook(() =>
+				useReplayPlayer({
+					sessionStorageService: mockStorage,
+					shareService: mockShare,
+				}),
+			);
+
+			const video = mountVideo(result, 10);
+			act(() => {
+				video.dispatchEvent(new Event("loadedmetadata"));
+			});
+
+			act(() => {
+				result.current.seek(Number.POSITIVE_INFINITY);
+			});
+
+			expect(video.currentTime).toBe(0);
+			expect(result.current.currentTime).toBe(0);
+		});
+
+		it("still seeks to a finite position", () => {
+			const { result } = renderHook(() =>
+				useReplayPlayer({
+					sessionStorageService: mockStorage,
+					shareService: mockShare,
+				}),
+			);
+
+			const video = mountVideo(result, 10);
+			act(() => {
+				video.dispatchEvent(new Event("loadedmetadata"));
+			});
+
+			act(() => {
+				result.current.seek(9);
+			});
+
+			expect(video.currentTime).toBe(9);
+			expect(result.current.currentTime).toBe(9);
+		});
+	});
 });

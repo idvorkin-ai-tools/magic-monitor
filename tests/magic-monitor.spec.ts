@@ -552,17 +552,33 @@ test.describe("Magic Monitor E2E", () => {
 		const video = page.getByTestId("main-video");
 		await expect(video).toBeVisible();
 
+		// The counter only ticks once the recorder is actually running - before
+		// that the same readout reads "◌ starting…0s | 0 sessions" and sits there.
+		// Sampling then turned the assertion below into a race against camera and
+		// storage startup rather than a test of the counter, which is how this
+		// test failed on CI (Expected: not "◌ starting…0s | 0 sessions").
+		await expect(page.getByText("● REC")).toBeVisible({ timeout: 15000 });
+
 		// Status bar shows "<seconds>s | <n> sessions" while live
 		// (.first() — the regex also matches ancestor spans; match innermost deterministically)
 		const statusReadout = page.getByText(/\d+s \|/).first();
-		await expect(statusReadout).toBeVisible({ timeout: 10000 });
+		await expect(statusReadout).toBeVisible();
 
-		const initialText = await statusReadout.textContent();
+		// Read the elapsed seconds, not the whole string: the session count also
+		// changes as blocks are saved, which would satisfy a plain inequality
+		// without the counter ever moving.
+		const readElapsedSeconds = async () => {
+			const text = await statusReadout.textContent();
+			const match = text?.match(/(\d+)s \|/);
+			expect(match, `no elapsed seconds in status readout: ${text}`).not.toBeNull();
+			return Number(match?.[1]);
+		};
 
-		// Wait for the block duration to tick up
+		const initialSeconds = await readElapsedSeconds();
+
+		// The counter ticks once a second, so a few seconds is plenty
 		await expect(async () => {
-			const newText = await statusReadout.textContent();
-			expect(newText).not.toBe(initialText);
+			expect(await readElapsedSeconds()).toBeGreaterThan(initialSeconds);
 		}).toPass({ timeout: 5000 });
 	});
 

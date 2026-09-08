@@ -3,6 +3,11 @@ import {
 	seedSessionBuffer,
 	waitForSessionsLoaded,
 } from "./helpers/seedSessionBuffer";
+import {
+	parseTimeReadout,
+	TIME_READOUT_PATTERN,
+	timeReadout,
+} from "./helpers/timeReadout";
 
 /**
  * Session Recorder E2E Tests
@@ -423,10 +428,17 @@ test.describe("Session Recorder with Counter Video", () => {
 		// Wait for app to load
 		await page.waitForSelector('[data-testid="main-video"]', { state: "visible", timeout: 30000 });
 
-		// Enter replay mode
+		// Enter replay mode on the SEEDED session, not `.first()`. The app keeps
+		// recording the live feed while these tests run, so the newest-first list
+		// is headed by whatever block it happened to save - a clip of
+		// unpredictable, sub-second length. The seeded fixture is a fixed 2s clip,
+		// which is what makes the 10%/90% assertions below meaningful.
 		await page.getByRole("button", { name: "Sessions" }).click();
-		const sessionThumbnails = page.locator('[data-testid="session-thumbnail"]');
-		await sessionThumbnails.first().click();
+		const seededSession = page.locator(
+			'[data-testid="session-thumbnail"][aria-label="Session - 1:00"]',
+		);
+		await expect(seededSession).toBeVisible({ timeout: 5000 });
+		await seededSession.click();
 		const timelineThumbs = page.locator('img[alt^="Frame at"]');
 		await expect(timelineThumbs.first()).toBeVisible({ timeout: 5000 });
 		await timelineThumbs.first().click();
@@ -437,9 +449,7 @@ test.describe("Session Recorder with Counter Video", () => {
 		await expect(timelineTrack).toBeVisible();
 
 		// Get the time display to monitor position changes.
-		// `.font-mono` alone is ambiguous (also matches the empty status-bar div and
-		// the "REPLAY MODE" banner), so scope to the element with the actual time text.
-		const timeDisplay = page.locator(".font-mono", { hasText: /^\d+:\d{2}\.\d/ });
+		const timeDisplay = timeReadout(page);
 		await expect(timeDisplay).toBeVisible();
 
 		// Get initial time
@@ -485,10 +495,20 @@ test.describe("Session Recorder with Counter Video", () => {
 		// Get time after drag
 		const timeAfterDrag = await timeDisplay.textContent();
 
-		// The time should have changed from click to drag
-		// If drag works, the final time should be near end (90%)
-		// If drag doesn't work, it would stay at click position (10%)
-		expect(timeAfterDrag).not.toBe(initialTime);
+		// The scrubber has to map track position to playback position. The old
+		// assertions only compared the three readouts as strings, which passed
+		// for years while every position actually seeked to the last frame -
+		// consecutive samples differed because the browser was still revising the
+		// clip's duration, not because the drag did anything.
+		const initial = parseTimeReadout(initialTime);
+		const afterClick = parseTimeReadout(timeAfterClick);
+		const afterDrag = parseTimeReadout(timeAfterDrag);
+
+		expect(initial.total).toBeGreaterThan(1);
+		// Clicking at 10% lands near the start, dragging to 90% near the end.
+		// The bounds are loose enough for the player to snap to a keyframe.
+		expect(afterClick.current).toBeLessThan(afterClick.total * 0.35);
+		expect(afterDrag.current).toBeGreaterThan(afterDrag.total * 0.6);
 		expect(timeAfterDrag).not.toBe(timeAfterClick);
 
 		// Exit replay
@@ -557,4 +577,40 @@ test.describe("Session Recorder with Counter Video", () => {
 		// Exit replay
 		await page.locator("button", { hasText: "✕" }).click();
 	});
+
+	test("Recording: A real recorded block replays with a resolved duration", async ({
+		page,
+	}) => {
+		// MediaRecorder writes no Duration into the WebM header, so the app has to
+		// stamp the block's own duration in on save. When it doesn't, the browser
+		// reports Infinity, the readout renders "Infinity:NaN.NaN", and every
+		// scrubber position scales against Infinity and clamps to the last frame.
+		// Only a real recorded block exercises that path - every other replay test
+		// seeds IndexedDB with an already-well-formed fixture. This spec is the one
+		// that runs the real MediaRecorder (magic-monitor.spec.ts always installs a
+		// mock that emits placeholder bytes, which no decoder can open).
+		await page.goto("/");
+		await expect(page.getByTestId("main-video")).toBeVisible();
+		await expect(page.getByText("● REC")).toBeVisible({ timeout: 10000 });
+		await page.waitForTimeout(2500);
+
+		// Opening the picker stops and saves the current block
+		await page.getByRole("button", { name: "Sessions" }).click();
+		await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+
+		// Newest first, so the block just saved is the first thumbnail
+		await page.locator('[data-testid="session-thumbnail"]').first().click();
+		const timelineThumbs = page.locator('img[alt^="Frame at"]');
+		await expect(timelineThumbs.first()).toBeVisible({ timeout: 5000 });
+		await timelineThumbs.first().click();
+		await expect(page.getByText("REPLAY MODE")).toBeVisible();
+
+		const timeDisplay = timeReadout(page);
+		await expect(timeDisplay).toHaveText(TIME_READOUT_PATTERN, {
+			timeout: 10000,
+		});
+		const { total } = parseTimeReadout(await timeDisplay.textContent());
+		expect(total).toBeGreaterThan(0);
+	});
+
 });

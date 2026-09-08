@@ -54,7 +54,12 @@ export function Timeline({
 	// Calculate time from click position (uses trackRef for accurate positioning)
 	const getTimeFromPosition = useCallback(
 		(clientX: number): number => {
-			if (!trackRef.current || duration <= 0) return 0;
+			// A non-finite duration (unfixed WebM header) would turn every
+			// position into Infinity or NaN, which downstream clamps to the last
+			// frame. Treat it as "no timeline yet".
+			if (!trackRef.current || !Number.isFinite(duration) || duration <= 0) {
+				return 0;
+			}
 
 			const rect = trackRef.current.getBoundingClientRect();
 			const x = clientX - rect.left;

@@ -25,6 +25,10 @@ interface ReplayControlsProps {
 // ===== Helper =====
 
 function formatTime(seconds: number): string {
+	// Guards the readout against a media duration the browser has not resolved
+	// yet, which would otherwise render as "Infinity:NaN.NaN".
+	if (!Number.isFinite(seconds) || seconds < 0) return "0:00.0";
+
 	const mins = Math.floor(seconds / 60);
 	const secs = Math.floor(seconds % 60);
 	const tenths = Math.floor((seconds % 1) * 10);
