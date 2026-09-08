@@ -94,6 +94,33 @@ describe("useThinkOfACard gesture watcher", () => {
 		expect(result.current.isActive).toBe(false);
 	});
 
+	it("still fires when a frame or two drops the hand", () => {
+		const { landmarksRef, result } = render([V_SIGN]);
+
+		// Two frames (66ms, inside the grace window) where MediaPipe found nothing.
+		holdFor(300);
+		landmarksRef.current = [];
+		tick();
+		tick();
+		landmarksRef.current = [V_SIGN];
+		holdFor(V_GESTURE_CONFIG.HOLD_MS - 400);
+
+		expect(result.current.isActive).toBe(true);
+	});
+
+	it("restarts the hold when the hand is away longer than the grace window", () => {
+		const { landmarksRef, result } = render([V_SIGN]);
+
+		holdFor(500);
+		landmarksRef.current = [];
+		holdFor(V_GESTURE_CONFIG.GRACE_MS + 100);
+		landmarksRef.current = [V_SIGN];
+		// The 500ms already banked is gone, so this alone is not enough.
+		holdFor(V_GESTURE_CONFIG.HOLD_MS - 200);
+
+		expect(result.current.isActive).toBe(false);
+	});
+
 	it("leaves the key and button triggers working with no landmarks at all", () => {
 		const { result } = renderHook(() => useThinkOfACard());
 
