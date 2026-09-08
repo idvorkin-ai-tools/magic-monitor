@@ -29,7 +29,8 @@ export const V_GESTURE_CONFIG = {
 
 interface UseThinkOfACardOptions {
 	/**
-	 * Live MediaPipe hand landmarks, written at frame rate by useSmartZoom.
+	 * Live MediaPipe hand landmarks, written at frame rate by useHandLandmarks
+	 * (directly, or through useSmartZoom when auto-framing is on).
 	 * Omit (or leave empty) and only the key/button triggers work.
 	 */
 	landmarksRef?: React.RefObject<HandLandmark[][]>;
